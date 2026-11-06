@@ -128,9 +128,9 @@ export function registerConfigModelCommand(model: Command, t: Messages): void {
       // A new entry stores a client_type / base_url only when one is given: left out, it
       // follows its group's [providers.<id>] (effectiveConnection), so a later change to the
       // group reaches it too, and with no group value it gets the client's default — the
-      // catalog is not asked. The one default still written is openai-chat, for a custom /
-      // user-defined entry whose group sets no protocol, which would otherwise be routed by
-      // its id (the id says nothing about a custom endpoint). An entry already stored gets no
+      // catalog supplies only a native group's declared transport, never a request endpoint.
+      // A custom group without a protocol defaults to openai-chat; its id cannot select one.
+      // An entry already stored gets no
       // default either way: updating it never overrides its config. --clear-client-type asks
       // for no protocol of its own, so it gets no default either. (An explicit --client-type /
       // --base-url always passes through; core's addModel normalizes the deprecated bare
@@ -138,8 +138,12 @@ export function registerConfigModelCommand(model: Command, t: Messages): void {
       const pInfo = providerInfo(provider);
       const customLike = provider === "custom" || pInfo === undefined;
       const defaultClientType =
-        customLike && effectiveConnection({ provider, modelId }, group).clientType === undefined
-          ? "openai-chat"
+        effectiveConnection({ provider, modelId }, group).clientType === undefined
+          ? pInfo?.localAuth
+            ? pInfo.clientType
+            : customLike
+              ? "openai-chat"
+              : undefined
           : undefined;
       const clientType: string | null | undefined =
         patch.client_type !== undefined

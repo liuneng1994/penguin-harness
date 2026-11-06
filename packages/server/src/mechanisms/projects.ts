@@ -184,6 +184,7 @@ export abstract class ProjectConfigStore {
   ): Promise<ProviderConnectionResponse>;
   /** "Add new models" (`add`) or "Restore defaults" (`restore`) against the built-in catalog. */
   abstract syncPresets(projectId: string, mode: PresetSyncMode): Promise<PresetSyncResponse>;
+  abstract syncTraeModels(projectId: string): Promise<ModelsResponse>;
   /**
    * Writes the group key; resolves to how many of the group's rows use it (none of their own),
    * and the connect default the group's first key offers as the default model.

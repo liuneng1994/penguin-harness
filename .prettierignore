@@ -1,5 +1,6 @@
 # build output and dependencies
 node_modules/
+.pnpm-store/
 dist/
 pnpm-lock.yaml
 # the assembled app directory some branches stage before packing (packages/desktop/.gitignore

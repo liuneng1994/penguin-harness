@@ -114,6 +114,10 @@ const GLYPHS: Record<string, Glyph> = {
       </>
     ),
   },
+  trae: {
+    // Monochrome T monogram for the native TRAE group.
+    path: <path d="M3 3h18v5h-6v13H9V8H3Z" />,
+  },
   tokendance: {
     // The official TokenDance mark, taken from the brand SVG with its black rounded-square
     // backdrop dropped: the ribbon is a plain fill, while the two motion ticks keep the round

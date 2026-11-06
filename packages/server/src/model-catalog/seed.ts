@@ -45,7 +45,7 @@ export function catalogGroupConnection(
   providerId: string,
 ): { base_url?: string; client_type?: string } | undefined {
   const info = providerInfo(providerId);
-  if (info === undefined || info.id === "custom") return undefined;
+  if (info === undefined || info.id === "custom" || info.localAuth) return undefined;
   const rows = MODEL_CATALOG.filter((m) => m.provider === providerId);
   const baseUrl =
     info.gatewayBaseUrl ??

@@ -5,6 +5,36 @@ description: Every PenguinHarness setting with its default and constraints, from
 
 PenguinHarness configuration has three layers: environment variables shape the deployment, the Project config manages models and credentials, and the agent config defines one agent's behavior. Each agent also keeps state files for its [Memory](#memory), [Vault](#vault) and [Schedules](#schedules).
 
+
+## TRAE Configuration
+
+TRAE uses the native raw-chat service and reuses the local `traecli` login. This currently supports CN TRAE login only. No API key, base URL, or proxy is required. The token is never written to Project config or sent to the browser.
+
+Optional environment variables:
+
+- `TRAECLI_HOME` (default `~/.trae/cli`)
+- `TRAE_HOME` (default `~/.trae`)
+- `TRAE_AUTH_FILE` overrides auth path (default `~/.trae/cli/auth.json`)
+- `TRAECLI_BIN` overrides the executable (default `traecli`)
+
+### SDK
+
+Import the package below to register the native transport without starting an HTTP server:
+
+```ts
+import "@prismshadow/penguin-server/trae";
+```
+
+```toml
+[providers.trae]
+client_type = "trae"
+
+[[models]]
+provider = "trae"
+model_id = "Seed-2.1-Turbo"
+vision = false
+```
+
 ## Environment variables
 
 The CLI and the server load a `.env` file from the working directory on startup.

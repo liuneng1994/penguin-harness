@@ -15,11 +15,14 @@
  * - Given the mmsp client with a base URL and no key, the open MMSP server is listed keyless,
  *   even with MMSP_API_KEY set.
  * - Given any other construction failure, it passes through unchanged.
+ * - Given a registered host transport, model listing uses it; removing an older registration
+ *   does not remove its replacement, and removing the active one restores MMSP routing.
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { AutoLLMClient } from "@prismshadow/mmsp";
 import { GenerativeModel } from "../src/llm/generative-model.js";
 import { listEndpointModels } from "../src/llm/list-models.js";
-import { ModelCredentialError } from "../src/llm/model-client.js";
+import { ModelCredentialError, registerModelClient } from "../src/llm/model-client.js";
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -83,6 +86,28 @@ describe("building a model's client: MMSP decides what a missing key means", () 
 });
 
 describe("listEndpointModels on the wire: the key and base URL go to MMSP as given", () => {
+  it("a host transport lists models, and only its active registration can remove it", async () => {
+    const removeOld = registerModelClient("host-fixture", () => {
+      throw new Error("superseded");
+    });
+    const removeCurrent = registerModelClient(
+      "host-fixture",
+      (options) => new AutoLLMClient({ ...options, clientType: "openai-chat", apiKey: "host-key" }),
+    );
+    try {
+      removeOld();
+      const fake = stubListingFetch();
+      expect(await listEndpointModels({ clientType: "host-fixture" })).toEqual(["m-1"]);
+      expect(fake).toHaveBeenCalledOnce();
+      removeCurrent();
+      await expect(listEndpointModels({ clientType: "host-fixture" })).rejects.toThrow(
+        /Unknown client type/,
+      );
+    } finally {
+      removeOld();
+      removeCurrent();
+    }
+  });
   it("a keyless listing of the client's default endpoint goes out with the environment's key", async () => {
     vi.stubEnv("OPENAI_API_KEY", "sk-openai-env");
     const fetchMock = stubListingFetch();

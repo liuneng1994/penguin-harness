@@ -10,6 +10,8 @@
  * single hidden .project_config.toml (mode 0600, credentials inline, provider and
  * model_id as separate columns); list displays provider and model_id as separate
  * columns.
+ * Given a native-login group without a connection table, adding a model selects its native
+ * transport and default without storing an API key or endpoint.
  */
 import fs from "node:fs/promises";
 import os from "node:os";
@@ -83,6 +85,29 @@ async function runModel(args: string[]): Promise<{ out: string; err: string; cod
 }
 
 describe("penguin config model add/list (--root plus provider / model_id stored as separate fields)", () => {
+  it("a native-login model stores its transport and can be the default without an API key", async () => {
+    const result = await runModel([
+      "add",
+      "--provider",
+      "trae",
+      "--model-id",
+      "Seed-2.1-Turbo",
+      "--set-default",
+      "--root",
+      tmpRoot,
+    ]);
+    expect(result.code, result.err).toBe(0);
+    const config = parseToml(
+      await fs.readFile(projectConfigPath(tmpRoot, DEFAULT_PROJECT_ID), "utf8"),
+    ) as unknown as { models: Record<string, unknown>[]; default_model: TomlModelRef };
+    const model = config.models.find(
+      (row) => row.provider === "trae" && row.model_id === "Seed-2.1-Turbo",
+    )!;
+    expect(model.client_type).toBe("trae");
+    expect(model.api_key).toBeUndefined();
+    expect(model.base_url).toBeUndefined();
+    expect(config.default_model).toEqual({ provider: "trae", model_id: "Seed-2.1-Turbo" });
+  });
   it("--root beats PENGUIN_HOME: written to the hidden .project_config.toml under the given root (0600)", async () => {
     const add = await runModel([
       "add",
