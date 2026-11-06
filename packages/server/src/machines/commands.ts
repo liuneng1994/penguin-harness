@@ -142,15 +142,20 @@ function connectionOptions(target: RemoteTarget): string[] {
  * there, it is a different sentence. `%USERPROFILE%` is what install.ps1 defaults to.
  */
 export function remotePenguin(platform: RemotePlatform, layout: RemoteLayout): string {
+  // Shipped HMR bootstraps compare import.meta.url with argv[1] to recognize their main
+  // entry. A symlinked home makes Node resolve only the former, so they exit silently.
+  // NODE_OPTIONS carries this into the CLI supervisor's children and restart launches,
+  // which do not forward execArgv. Keep the remote's existing options and leave dependency
+  // resolution normal.
   if (platform === "win32") {
     const dir = layout.programDir.win;
-    return `set "PENGUIN_HOME=${layout.dataRoot.win}" & set "PENGUIN_PROFILE=${layout.profile}" & "${dir}\\node\\node.exe" "${dir}\\lib\\dist\\penguin-hmr.js"`;
+    return `set "PENGUIN_HOME=${layout.dataRoot.win}" & set "PENGUIN_PROFILE=${layout.profile}" & set "NODE_OPTIONS=%NODE_OPTIONS% --preserve-symlinks-main" & "${dir}\\node\\node.exe" "${dir}\\lib\\dist\\penguin-hmr.js"`;
   }
   const dir = layout.programDir.posix;
   // `env`, not a bare `VAR=value` prefix: startServerCommand puts `nohup` in front of this,
   // and nohup takes the first word as the program — a bare assignment there is "no such
   // command", and the server never starts.
-  return `env PENGUIN_HOME="${layout.dataRoot.posix}" PENGUIN_PROFILE=${layout.profile} "${dir}/node/bin/node" "${dir}/lib/dist/penguin-hmr.js"`;
+  return `env PENGUIN_HOME="${layout.dataRoot.posix}" PENGUIN_PROFILE=${layout.profile} NODE_OPTIONS="\${NODE_OPTIONS:+$NODE_OPTIONS }--preserve-symlinks-main" "${dir}/node/bin/node" "${dir}/lib/dist/penguin-hmr.js"`;
 }
 
 /** `ssh <options> <alias> <remote command>`. */
