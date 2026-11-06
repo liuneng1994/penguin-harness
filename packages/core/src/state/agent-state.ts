@@ -532,6 +532,7 @@ export async function installSkill(
 export async function replaceSkillDirectory(
   dir: string,
   files: Iterable<[string, string | Uint8Array]>,
+  options?: { beforeReplace?: () => Promise<void> },
 ): Promise<void> {
   const staging = `${path.join(path.dirname(dir), `.${path.basename(dir)}`)}.incoming`;
   await fs.rm(staging, { recursive: true, force: true });
@@ -544,6 +545,9 @@ export async function replaceSkillDirectory(
         await fs.writeFile(file, data);
       }),
     );
+    // Sync callers verify the destination after staging is complete, so an edit during
+    // file copying refuses the replacement while the original directory is still intact.
+    await options?.beforeReplace?.();
     // rename(2) refuses to replace a non-empty directory, so the old one goes first. The window
     // between the two is the one case this cannot make atomic; it is bounded by a single rm and
     // leaves the Skill absent rather than corrupt.

@@ -1664,6 +1664,21 @@ export const zh = {
     /** The model default shares its source with the Models page (the same default_model); this is just another entry point. */
     chatDefaultsModelHint: "与模型页的默认模型同步",
     /** Settings dialog tab rail. */
+    skillSyncTitle: "General Agent 技能同步",
+    skillSyncInfo:
+      "点击按钮后，将此 Project 的 General Agent 技能同步到本服务端的其他 Agent。新增技能会被安装，没有本地改动的同步副本会被更新。同名本地技能和副本中的本地修改会保留，并显示冲突。每个 Agent 的技能开关和使用历史保持独立。查看预览、新建 Agent 或开启对话不会同步；源技能移除后也会保留已安装的副本。",
+    skillSyncNow: "同步 General Agent 技能",
+    skillSyncPreview: (items: number, agents: number, conflicts: number): string =>
+      `待同步 ${items} 项，${agents} 个 Agent，${conflicts} 项冲突`,
+    skillSyncConflicts: "技能同步冲突",
+    skillSyncSummary: (items: number, agents: number, conflicts: number): string =>
+      `已同步 ${items} 项，${agents} 个 Agent，${conflicts} 项冲突`,
+    skillSyncReasons: {
+      local_skill: "已有同名本地技能，已保留",
+      local_edits: "同步副本有本地修改，已保留",
+      source_removed: "源技能已移除，副本已保留",
+      unreadable: "无法读取或同步技能文件",
+    },
     settingsTabGeneral: "通用",
     settingsTabMembers: "成员",
     settingsTabDefaults: "默认值",

@@ -28,6 +28,7 @@ import type {
   AgentSchedulesConfigDto,
   AgentSkillsConfigDto,
   AgentSkillsResponse,
+  SkillSyncResponse,
   AgentsResponse,
   AgentVaultConfigDto,
   BackgroundImagePutResponse,
@@ -3037,4 +3038,11 @@ export const clearBuiltinBrowserData = (
     method: "POST",
     body: { storages, ...scope },
     server: null,
+  });
+
+export const getProjectSkillSync = (projectId: string) =>
+  apiFetch<SkillSyncResponse>(`/api/projects/${encodeURIComponent(projectId)}/skill-sync`);
+export const syncProjectSkills = (projectId: string) =>
+  apiFetch<SkillSyncResponse>(`/api/projects/${encodeURIComponent(projectId)}/skill-sync`, {
+    method: "POST",
   });

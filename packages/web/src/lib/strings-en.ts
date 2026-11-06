@@ -1544,6 +1544,21 @@ export const en: Strings = {
     /** The model default is single-sourced with the Models page (the same default_model); this is just another entry point. */
     chatDefaultsModelHint: "Same default model as the Models page",
     /** Settings dialog tab rail. */
+    skillSyncTitle: "General Agent skill sync",
+    skillSyncInfo:
+      "Click the button to sync this Project's General Agent skills to its other agents on this server. Missing skills are installed and unedited synced copies are updated. Local skills with the same name and local edits are preserved and listed as conflicts. Each agent keeps its own skill switches and activity history. Previewing, creating an agent or opening a conversation does not sync files. Removing a source keeps installed copies in place.",
+    skillSyncNow: "Sync General Agent skills",
+    skillSyncPreview: (items: number, agents: number, conflicts: number): string =>
+      `${items} to sync, ${agents} ${agents === 1 ? "agent" : "agents"}, ${conflicts} ${conflicts === 1 ? "conflict" : "conflicts"}`,
+    skillSyncConflicts: "Skill sync conflicts",
+    skillSyncSummary: (items: number, agents: number, conflicts: number): string =>
+      `${items} synced, ${agents} ${agents === 1 ? "agent" : "agents"}, ${conflicts} ${conflicts === 1 ? "conflict" : "conflicts"}`,
+    skillSyncReasons: {
+      local_skill: "Local skill with the same name preserved",
+      local_edits: "Local edits to the synced copy preserved",
+      source_removed: "Source removed; installed copy preserved",
+      unreadable: "Could not read or sync skill files",
+    },
     settingsTabGeneral: "General",
     settingsTabMembers: "Members",
     settingsTabDefaults: "Defaults",

@@ -4979,6 +4979,18 @@ export interface BenchmarkArchiveImportResponse {
 // Plugin library, and an Agent's installed skills and hooks
 // ---------------------------------------------------------------------------
 
+/** Preview or result of explicitly sharing this Project's General Agent skills. */
+export interface SkillSyncResponse {
+  sourceAgentId: string;
+  targets: number;
+  entries: Array<{
+    agentId: string;
+    name: string;
+    status: "pending" | "synced" | "current" | "conflict";
+    reason?: "local_skill" | "local_edits" | "source_removed" | "unreadable";
+  }>;
+}
+
 /** Activity within an Agent's retained Trace history. */
 export interface SkillUsage {
   /** User messages explicitly selecting the skill, counted once per message. */
