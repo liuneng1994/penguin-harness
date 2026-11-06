@@ -22,6 +22,10 @@
       "types": "./dist/model-catalog.d.ts",
       "import": "./dist/model-catalog.js"
     },
+    "./trae": {
+      "types": "./dist/trae.d.ts",
+      "import": "./dist/trae.js"
+    },
     "./machine-status": {
       "types": "./dist/machine-status.d.ts",
       "import": "./dist/machine-status.js"

@@ -36,6 +36,8 @@
  * - A model with no key anywhere names the variable its client reads when the server reports it
  *   set, and otherwise asks for a key; the key field is never left without a placeholder.
  * - The price fields say a model left without prices is not costed.
+ * - Opening a native TRAE model renders the CLI login hint without editable API key or
+ *   endpoint fields; adding one before sync still writes its native protocol.
  */
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { createElement as h } from "react";
@@ -314,6 +316,39 @@ describe("the model config dialog", () => {
   afterEach(async () => {
     await unmountAll();
     localStorage.clear();
+  });
+
+  it("opens a native TRAE model with its login hint and no editable key or endpoint", async () => {
+    await openModelsPage([
+      ATLAS,
+      model({
+        provider: "trae",
+        modelId: "Seed-2.1-Turbo",
+        displayName: "TRAE Seed",
+        clientType: "trae",
+        localAuthAvailable: true,
+        vision: false,
+      }),
+    ]);
+    await click(card("TRAE Seed")!);
+    await waitFor(() => dialogs().length === 1);
+    const dialog = dialogs()[0]!;
+    expect(dialog.textContent).toContain(en.models.traeLoginHint);
+    expect(dialog.querySelector(`input[aria-label="${en.models.apiKey}"]`)).toBeNull();
+    expect(dialog.querySelector(`input[aria-label="${en.models.baseUrl}"]`)).toBeNull();
+  });
+
+  it("adds a native TRAE model before sync with its declared transport and no key", async () => {
+    const server = await openModelsPage();
+    await type(searchBox(), "");
+    await click(button(`${en.models.addToGroup} TRAE`));
+    await type(field(en.models.modelId), "Seed-2.1-Turbo");
+    await click(button(en.models.addAction));
+    await waitFor(() => server.puts.length === 1);
+    const native = server.puts[0]!.models.find((m) => m.provider === "trae")!;
+    expect(native.clientType).toBe("trae");
+    expect(native.apiKey).toBeUndefined();
+    expect(native.baseUrl).toBeUndefined();
   });
 
   it("keeps the dialog open with the draft when the save is refused, and the list as it was", async () => {

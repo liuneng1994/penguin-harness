@@ -345,6 +345,10 @@ describe("envHintFor (the dialog promises only what MMSP's routed client reads)"
 });
 
 describe("protocolForPersist (an entry's own protocol, never an unstartable empty one)", () => {
+  it("a native-login entry declares its transport before the group has a connection", () => {
+    expect(protocolForPersist("trae", "")).toBe("trae");
+    expect(protocolForPersist("trae", "", { clientType: "trae" })).toBe("");
+  });
   it("falls back to openai-chat for a custom-like entry that still has none and follows none", () => {
     // AutoLLMClient routes an entry with no client type by the vendor family its id begins
     // with and THROWS for an id of no known family, so persisting "" would save a model that

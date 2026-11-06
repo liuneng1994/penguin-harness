@@ -34,7 +34,7 @@ export const HEADER_TEXT = "flex h-7 shrink-0 items-center px-1.5 text-xs";
 export const HEADER_LABEL = "hidden text-xs @3xl:inline";
 
 export type GroupHeaderAction =
-  "balance" | "connect" | "addModel" | "deleteGroup" | "speedTest" | "settings";
+  "balance" | "connect" | "localAuth" | "addModel" | "deleteGroup" | "speedTest" | "settings";
 
 /** What the "Connected" menu holds, in order. */
 export type ConnectedMenuItem = "syncModels" | "reconnect" | "disconnect";
@@ -99,6 +99,7 @@ export function groupHeaderActions(
   { isOwner, keyStored, keyFromEnv = false, balancePinned }: GroupHeaderFacts,
 ): GroupHeaderAction[] {
   const actions: GroupHeaderAction[] = [];
+  if (provider.localAuth) actions.push("localAuth");
   // Without a key, stored or from the environment, there is nothing to ask the vendor with.
   if (provider.balance !== undefined && (keyStored || keyFromEnv || balancePinned)) {
     actions.push("balance");

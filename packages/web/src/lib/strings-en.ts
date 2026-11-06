@@ -2017,6 +2017,10 @@ export const en: Strings = {
   },
 
   models: {
+    traeLoginHint:
+      "Run traecli login on the machine running the PenguinHarness server, then sync models. Credentials come from TRAE CLI; leave the API key and base URL empty.",
+    nativeLogin: "CLI signed in",
+    nativeLoginMissing: "CLI not signed in",
     title: "Models",
     addCustom: "Add custom model",
     addToGroup: "Add model",

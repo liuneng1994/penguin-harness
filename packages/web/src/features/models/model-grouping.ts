@@ -113,6 +113,7 @@ export function groupModelRows<T extends ModelRowLike>(
   rows: T[],
   query: string,
   groupOrder: readonly string[] = [],
+  options: { includeEmptyLocalAuth?: boolean } = {},
 ): ProviderGroup<T>[] {
   const searching = query.trim() !== "";
   const filtered = rows.filter((r) => matchesQuery(r, query));
@@ -125,7 +126,12 @@ export function groupModelRows<T extends ModelRowLike>(
     rows: filtered.filter((r) => r.provider === id),
   }));
   const ordered = orderModelGroups([...builtin, ...extras], (g) => g.provider.id, groupOrder);
-  return ordered.filter((g) => g.rows.length > 0 || (!searching && g.provider.id === "custom"));
+  return ordered.filter(
+    (g) =>
+      g.rows.length > 0 ||
+      (!searching &&
+        (g.provider.id === "custom" || (options.includeEmptyLocalAuth && g.provider.localAuth))),
+  );
 }
 
 /**
@@ -148,6 +154,7 @@ export function orderModelsLikeLibrary<T extends ModelRowLike>(
  * superset).
  */
 export interface ModelCredentialRowLike extends ModelRowLike {
+  localAuthAvailable?: boolean;
   credential?: { apiKeyMasked?: string };
   /**
    * Masked preview of the env-fallback value: the server emits it only for a variable that
@@ -168,6 +175,7 @@ export interface ModelCredentialRowLike extends ModelRowLike {
  */
 export function hasConfiguredKey(m: ModelCredentialRowLike): boolean {
   return (
+    m.localAuthAvailable === true ||
     !!m.credential?.apiKeyMasked ||
     !!m.envKeyMasked ||
     (m.effective !== undefined && m.effective.apiKeySource !== "none")

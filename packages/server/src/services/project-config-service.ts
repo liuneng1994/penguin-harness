@@ -124,6 +124,7 @@ import type {
 import { detectModelProtocol } from "./protocol-detect.js";
 import { migratePenguinGoRoutes } from "./project-config-migrations.js";
 import { presetProjectConfig } from "./project-config-seed.js";
+import { listTraeModels, traeAuthStatus } from "../models/trae/index.js";
 import {
   VISION_PROBE_IMAGE,
   VISION_PROBE_MAX_TOKENS,
@@ -307,7 +308,7 @@ function protocolFixed(
   const group = providerInfo(provider)?.label ?? provider;
   return new HttpError(
     400,
-    "penguin_go_protocol_fixed",
+    provider === "trae" ? "trae_protocol_fixed" : "penguin_go_protocol_fixed",
     `${what}: the ${group} group's protocol is fixed to ${fixedClientType(provider)}.`,
     undefined,
     entry,
@@ -1542,6 +1543,7 @@ export class ProjectConfigService implements ProjectConfigStore {
     const defaultRef = optRef(raw.default_model);
     const visionRef = optRef(raw.vision_model);
     const providers = providerTableOf(raw);
+    const nativeAuth = traeAuthStatus();
     const discounts = new Map(
       (this.promotions?.list(projectId) ?? []).map((p) => [
         refKey(p.provider, p.modelId),
@@ -1618,6 +1620,9 @@ export class ProjectConfigService implements ProjectConfigStore {
         const info: ModelInfo = {
           provider,
           modelId,
+          ...(eff.clientType === "trae"
+            ? { localAuthAvailable: nativeAuth.available && !eff.apiKey && !eff.baseUrl }
+            : {}),
           ...(displayName !== undefined ? { displayName } : {}),
           isDefault:
             defaultRef !== undefined &&
@@ -1651,8 +1656,20 @@ export class ProjectConfigService implements ProjectConfigStore {
       provider: ref.provider,
       modelId: ref.model_id,
     });
-    const updatedAt = await this.configUpdatedAt(projectId);
+    const configUpdatedAt = await this.configUpdatedAt(projectId);
+    const updatedAt =
+      models.some((m) => m.localAuthAvailable) &&
+      nativeAuth.updatedAt &&
+      (!configUpdatedAt || nativeAuth.updatedAt > configUpdatedAt)
+        ? nativeAuth.updatedAt
+        : configUpdatedAt;
     return {
+      localAuth: {
+        trae: {
+          available: nativeAuth.available,
+          ...(nativeAuth.expiresAt ? { expiresAt: nativeAuth.expiresAt } : {}),
+        },
+      },
       ...(defaultRef !== undefined ? { defaultModel: toDto(defaultRef) } : {}),
       ...(visionRef !== undefined ? { visionModel: toDto(visionRef) } : {}),
       ...(updatedAt !== undefined ? { updatedAt } : {}),
@@ -2321,6 +2338,40 @@ export class ProjectConfigService implements ProjectConfigStore {
     return this.withProviderCredentialLock(projectId, MODELSCOPE_PROVIDER_ID, () =>
       mode === "add" ? this.addPresets(projectId) : this.restorePresets(projectId),
     );
+  }
+
+  /** Explicit native catalog sync; keeps existing rows, edits and the default model. */
+  async syncTraeModels(projectId: string): Promise<ModelsResponse> {
+    const catalog = await listTraeModels(true);
+    return this.withProviderCredentialLock(projectId, "trae", async () => {
+      const raw = await this.readRaw(projectId);
+      const providers = providerTableOf(raw);
+      const group = providers.trae;
+      if (group?.base_url || group?.api_key) {
+        throw badRequest(
+          "TRAE uses the server machine's CLI login. Clear the TRAE group API key and base URL before syncing.",
+        );
+      }
+      const models = [...asArray(raw.models)];
+      const existing = new Set(models.filter((m) => m.provider === "trae").map((m) => m.model_id));
+      for (const model of catalog) {
+        if (existing.has(model.modelId)) continue;
+        models.push({
+          provider: "trae",
+          model_id: model.modelId,
+          display_name: model.displayName,
+          client_type: "trae",
+          vision: false,
+          ...(model.contextWindow !== undefined ? { context_window: model.contextWindow } : {}),
+        });
+      }
+      await this.writeRaw(projectId, {
+        ...raw,
+        models,
+        providers: { ...providers, trae: { ...group, client_type: "trae" } },
+      });
+      return this.getModels(projectId);
+    });
   }
 
   private async addPresets(projectId: string): Promise<PresetSyncResponse> {

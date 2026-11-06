@@ -5,6 +5,36 @@ description: PenguinHarness 的每一项设置及其默认值与限制，从环�
 
 PenguinHarness 的配置分三层：环境变量决定部署形态，Project 配置管理模型和凭证，Agent 配置定义单个 Agent 的行为。每个 Agent 还有自己的[记忆](#记忆)、[Vault](#vault) 和[定时任务](#定时任务)状态文件。
 
+
+## TRAE 配置
+
+TRAE 接入原生 raw-chat 服务，复用本机 `traecli` 登录，目前仅支持中国区 TRAE 登录。无需 API Key、Base URL 或代理。Token 不会写入项目配置，也不会发送到浏览器。
+
+可选环境变量：
+
+- `TRAECLI_HOME`（默认 `~/.trae/cli`）
+- `TRAE_HOME`（默认 `~/.trae`）
+- `TRAE_AUTH_FILE` 覆盖鉴权文件路径（默认 `~/.trae/cli/auth.json`）
+- `TRAECLI_BIN` 覆盖可执行文件（默认 `traecli`）
+
+### SDK
+
+导入以下包即可注册原生传输层，无需启动 HTTP 服务：
+
+```ts
+import "@prismshadow/penguin-server/trae";
+```
+
+```toml
+[providers.trae]
+client_type = "trae"
+
+[[models]]
+provider = "trae"
+model_id = "Seed-2.1-Turbo"
+vision = false
+```
+
 ## 环境变量
 
 CLI 和服务器启动时会从工作目录加载 `.env` 文件。

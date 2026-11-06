@@ -34,7 +34,6 @@
  */
 import { ThinkingLevel, UnsupportedParameterError } from "@prismshadow/mmsp";
 import type {
-  AutoLLMClient,
   ContentItem,
   TextDoneItem,
   ThinkingDoneItem,
@@ -76,7 +75,7 @@ import { markInterruptedToolCall } from "../interfaces/llm.js";
 import { userAgent } from "../index.js";
 import { attributionHeaders } from "./app-attribution.js";
 import { newAutoLLMClient } from "./model-client.js";
-import type { AutoLLMClientOptions } from "./model-client.js";
+import type { AutoLLMClientOptions, ModelClient } from "./model-client.js";
 import { ToolCallIdAllocator, stripToolCallIdSuffix } from "./tool-call-ids.js";
 import {
   approximateMessagesTokens,
@@ -669,7 +668,7 @@ export function isFatalProviderRejection(error: unknown): boolean {
  * `context_engine`.
  */
 export class GenerativeModel implements LLMInterface {
-  private client: AutoLLMClient;
+  private client: ModelClient;
   private readonly clientOptions: Omit<AutoLLMClientOptions, "apiKey">;
   private currentApiKey: string | undefined;
   private readonly resolveApiKey: (() => Promise<string | undefined>) | undefined;

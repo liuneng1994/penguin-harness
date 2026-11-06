@@ -100,6 +100,7 @@ describe("model-catalog", () => {
       "penguin-go",
       "opencode-go",
       "deepseek",
+      "trae",
       "openrouter",
       "fireworks",
       "google",
@@ -155,6 +156,9 @@ describe("model-catalog", () => {
       if (p.id === "custom") {
         expect(p.apiKeyUrl).toBeUndefined();
         expect(p.modelsUrl).toBeUndefined();
+      } else if (p.localAuth) {
+        expect(p.apiKeyUrl).toBeUndefined();
+        expect(p.modelsUrl).toMatch(/^https:\/\//);
       } else if (p.id === "vllm") {
         expect(p.apiKeyUrl).toBeUndefined();
         expect(p.modelsUrl).toBe("https://recipes.vllm.ai/");
@@ -165,7 +169,7 @@ describe("model-catalog", () => {
     }
     // Provider ids are also unique, and each provider has an API key / base URL env var name.
     expect(new Set([...providerIds]).size).toBe(MODEL_PROVIDERS.length);
-    for (const p of MODEL_PROVIDERS) {
+    for (const p of MODEL_PROVIDERS.filter((p) => !p.localAuth)) {
       expect(p.envKey).toMatch(/_API_KEY$/);
       expect(p.envBaseUrlKey).toMatch(/_BASE_URL$/);
     }
@@ -526,7 +530,9 @@ describe("model-catalog", () => {
     // Project every built-in group that takes such models — custom aside, which leaves the
     // protocol to detection — resolves one for an id its catalog does not list, and on an
     // endpoint: the gateway's, or for vLLM the address a local `vllm serve` answers on.
-    for (const group of MODEL_PROVIDERS.filter((p) => p.addable && p.id !== "custom")) {
+    for (const group of MODEL_PROVIDERS.filter(
+      (p) => p.addable && p.id !== "custom" && !p.localAuth,
+    )) {
       const added = storedConnection({ provider: group.id, model_id: "someone/added-by-hand" });
       expect(added.clientType, group.id).toBe(providerClientType(group.id));
       expect(added.clientType, group.id).toBeDefined();
@@ -1879,6 +1885,7 @@ describe("MMSP's clients as the catalog reads them", () => {
 
   it("isAddableGroup: custom, vLLM, OpenRouter, TokenDance, SiliconFlow, Atlas Cloud, Runcrate and user-defined groups take hand-added models, no other built-in group does", () => {
     const open = [
+      "trae",
       "custom",
       "vllm",
       "openrouter",

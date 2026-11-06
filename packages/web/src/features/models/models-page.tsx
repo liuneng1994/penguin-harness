@@ -77,6 +77,7 @@ import {
   ConfirmModal,
   EmptyState,
   FieldError,
+  FieldHint,
   FieldLabel,
   GlyphIcon,
   ICONS,
@@ -384,6 +385,7 @@ interface DetectOutcome {
 
 /** Local edit state for one model row (string-typed for form use; parsed uniformly on save). */
 export interface RowState {
+  localAuthAvailable?: boolean;
   /**
    * Vendor id (entry field, i.e. group membership): a value not in the catalog list is a
    * user-defined group, kept **verbatim** — an operation that only edits the key,
@@ -571,6 +573,7 @@ export function hasKey(row: RowState, group?: ProviderConnectionDto): boolean {
  * (keyStatusNote), not this line's.
  */
 export function keyStatusText(row: RowState, group?: ProviderConnectionDto): string {
+  if (row.localAuthAvailable) return S.models.nativeLogin;
   const key = rowKey(row, group);
   if (key.source === "none") return S.models.noKey;
   return key.masked ?? S.models.keyConfigured;
@@ -582,6 +585,7 @@ export function keyStatusText(row: RowState, group?: ProviderConnectionDto): str
  * needs no explaining.
  */
 export function keyStatusNote(row: RowState, group?: ProviderConnectionDto): string | undefined {
+  if (row.localAuthAvailable) return S.models.traeLoginHint;
   const { source } = rowKey(row, group);
   if (source === "provider") return S.models.keyFromGroup;
   if (source === "env") return S.models.readFromEnv;
@@ -674,6 +678,7 @@ export function toRow(m: ModelsResponse["models"][number]): RowState {
     clearApiKey: false,
   };
   if (m.displayName !== undefined) row.displayName = m.displayName;
+  if (m.localAuthAvailable !== undefined) row.localAuthAvailable = m.localAuthAvailable;
   if (m.envKey !== undefined) row.envKey = m.envKey;
   if (m.envKeyMasked !== undefined) row.envKeyMasked = m.envKeyMasked;
   if (m.credential) row.credential = m.credential;
@@ -918,6 +923,7 @@ export function ModelsPage() {
   const pinnedBalance = usePinnedBalance();
 
   const [rows, setRows] = useState<RowState[] | null>(null);
+  const [localAuth, setLocalAuth] = useState<ModelsResponse["localAuth"]>({});
   /** Every group's stored connection (`[providers.<id>]`), off the same responses as `rows`. */
   const [providers, setProviders] = useState<ProviderConnections>({});
   const [defaultModel, setDefaultModel] = useState<ModelRefDto | undefined>(undefined);
@@ -1026,6 +1032,7 @@ export function ModelsPage() {
   /** Takes in a table the server answered with: the rows, the groups' connections, the two refs. */
   const adopt = useCallback((res: ModelsResponse) => {
     setRows(res.models.map(toRow));
+    setLocalAuth(res.localAuth ?? {});
     setProviders(res.providers ?? {});
     setDefaultModel(res.defaultModel);
     setVisionModel(res.visionModel);
@@ -1118,7 +1125,12 @@ export function ModelsPage() {
   const groups = useMemo(
     () =>
       rows
-        ? sortModelGroups(groupModelRows(rows, query, groupOrder), groupSorts, new Date(), locale)
+        ? sortModelGroups(
+            groupModelRows(rows, query, groupOrder, { includeEmptyLocalAuth: true }),
+            groupSorts,
+            new Date(),
+            locale,
+          )
         : [],
     [rows, query, groupOrder, groupSorts, locale, hourTick],
   );
@@ -1161,6 +1173,20 @@ export function ModelsPage() {
       } else {
         toastApiError(error);
       }
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const syncTraeModels = async () => {
+    if (!projectId) return;
+    setBusy(true);
+    try {
+      adopt(await api.syncTraeModels(projectId));
+      refreshProjectTodos(projectId);
+      toastSuccess(S.common.saved);
+    } catch (error) {
+      toastApiError(error);
     } finally {
       setBusy(false);
     }
@@ -1408,6 +1434,31 @@ export function ModelsPage() {
   ): ReactNode => {
     const { provider } = group;
     switch (action) {
+      case "localAuth":
+        return (
+          <div className="flex items-center gap-2">
+            <span data-tooltip={S.models.traeLoginHint}>
+              <Pill tone={localAuth?.[provider.id]?.available ? "success" : "neutral"}>
+                {localAuth?.[provider.id]?.available
+                  ? S.models.nativeLogin
+                  : S.models.nativeLoginMissing}
+              </Pill>
+            </span>
+            {isOwner && (
+              <Button
+                size="icon"
+                variant="ghost"
+                className={HEADER_SQUARE}
+                disabled={busy}
+                aria-label={`${S.models.syncModels} ${provider.label}`}
+                title={S.models.syncModels}
+                onClick={() => void syncTraeModels()}
+              >
+                <GlyphIcon d={ICONS.refresh} size={ICON_SIZE.groupHeaderAction} />
+              </Button>
+            )}
+          </div>
+        );
       case "balance":
         return <GroupBalance projectId={projectId} provider={provider} />;
       case "connect":
@@ -3970,6 +4021,10 @@ function ModelDialog({
       </div>
     ),
   };
+  if (dialogProvider?.localAuth) {
+    slots.apiKey = <FieldHint>{S.models.traeLoginHint}</FieldHint>;
+    slots.baseUrl = null;
+  }
   const folded = foldedSlots(isNew);
   /** The blocks in view (`false`) or in the fold (`true`), in the dialog's order; absent ones skipped. */
   const slotNodes = (inFold: boolean) =>

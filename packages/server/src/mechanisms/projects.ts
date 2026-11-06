@@ -173,6 +173,7 @@ export abstract class ProjectConfigStore {
   ): Promise<ModelsResponse>;
   /** "Add new models" (`add`) or "Restore defaults" (`restore`) against the built-in catalog. */
   abstract syncPresets(projectId: string, mode: PresetSyncMode): Promise<PresetSyncResponse>;
+  abstract syncTraeModels(projectId: string): Promise<ModelsResponse>;
   /** Writes the group key; resolves to how many of the group's rows use it (none of their own). */
   abstract setGroupApiKey(projectId: string, provider: string, apiKey: string): Promise<number>;
   abstract setGroupApiKeyWithProviderAuthToken(

@@ -348,6 +348,14 @@ export function modelsRoutes(deps: ModelsRouteDeps): Hono<AppEnv> {
     return c.json(res);
   });
 
+  app.post("/trae/sync", async (c) => {
+    const projectId = requireValidId(c, "projectId");
+    deps.access.requireProjectOwner(c.var.user.userId, projectId);
+    const res = await deps.projectConfigService.syncTraeModels(projectId);
+    modelConfigChanged(deps, projectId);
+    return c.json(res);
+  });
+
   // A group's account balance (any member, like the table itself): the server asks the
   // vendor with the group's key (never a row's own), so the key never reaches the browser. A
   // balance that cannot be read is an answer (`ok: false` with a code), as a failed

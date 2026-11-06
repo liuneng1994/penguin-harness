@@ -53,6 +53,7 @@ import {
  * value.
  */
 export function protocolPathForModel(provider: string, clientType: string, modelId = ""): string {
+  if (clientType.trim() === "trae") return "/api/ide/v2/llm_raw_chat";
   const client =
     routedClientType(modelId.trim(), clientType.trim() || null) ?? vendorClientType(provider);
   return (client !== undefined ? CLIENT_PROTOCOLS[client]?.path : undefined) ?? "/chat/completions";

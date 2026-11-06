@@ -600,6 +600,12 @@ export const platformAuthEndpoints = keyAuth("platform-auth", "platform_auth_flo
 /** ModelScope's, run through the harness's own authorization bridge. */
 export const modelScopeAuthEndpoints = keyAuth("modelscope-auth", "modelscope_auth_flow_not_found");
 
+export const syncTraeModels = (projectId: string) =>
+  apiFetch<ModelsResponse>(`/api/projects/${encodeURIComponent(projectId)}/models/trae/sync`, {
+    method: "POST",
+    body: {},
+  });
+
 export const syncPlatformModels = (projectId: string) =>
   apiFetch<PlatformModelSyncResponse>(
     `/api/projects/${encodeURIComponent(projectId)}/platform-auth/sync`,

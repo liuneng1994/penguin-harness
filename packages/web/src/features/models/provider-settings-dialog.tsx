@@ -74,6 +74,7 @@ import {
 import type { ProtocolClientType } from "./protocol-types";
 import type { RowState } from "./models-page";
 import { toastApiError } from "../../lib/toast-api-error";
+import { NativeProviderSettings } from "./native-provider-settings";
 
 /** A group's row as this dialog reads it: what it stores of its own. */
 type GroupRow = Pick<RowState, "clientType" | "originalBaseUrl">;
@@ -298,7 +299,14 @@ export function groupEnvKey(
   return envKey !== undefined && detected.has(envKey) ? envKey : undefined;
 }
 
-export function ProviderSettingsDialog({
+export function ProviderSettingsDialog(props: Parameters<typeof ConnectionProviderSettings>[0]) {
+  if (props.provider.localAuth) {
+    return <NativeProviderSettings label={props.provider.label} onClose={props.onClose} />;
+  }
+  return <ConnectionProviderSettings {...props} />;
+}
+
+function ConnectionProviderSettings({
   projectId,
   provider,
   group,

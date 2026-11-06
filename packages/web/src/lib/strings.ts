@@ -2153,6 +2153,10 @@ export const zh = {
   },
 
   models: {
+    traeLoginHint:
+      "在运行 PenguinHarness 服务的机器上执行 traecli login，然后同步模型。凭据读取自 TRAE CLI，无需填写 API key 或 base URL。",
+    nativeLogin: "CLI 已登录",
+    nativeLoginMissing: "CLI 未登录",
     title: "模型配置",
     addCustom: "添加自定义模型",
     addToGroup: "添加模型",

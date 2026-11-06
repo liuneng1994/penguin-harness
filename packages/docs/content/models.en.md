@@ -12,6 +12,17 @@ Each Project has its own model table: the models its conversations can use, grou
 - To tune requests, see [Thinking levels](#thinking-levels) and [Fast mode](#fast-mode).
 - For the full list of built-in providers and the file format, see [Built-in provider groups](#built-in-provider-groups) and [The per-Project model table](#the-per-project-model-table).
 
+
+## Using TRAE Models
+
+> **Note:** This currently supports **CN TRAE login** only.
+
+1. Ensure `traecli login` has been run on the machine running the PenguinHarness server.
+2. On the **Models** page, open the **TRAE** group and click **Sync models** (icon). It reads `traecli models --json` with cache fallback, importing only **Standard** and **Max** models available to your account.
+3. Pick a model and click **Set as default model**, then start a conversation.
+
+Sync adds missing models while preserving your edits and the default. Expired logins require running `traecli login` again. Model pricing is unknown; vision is disabled by default.
+
 ## The Models page
 
 In the sidebar, select **Models**. Models are listed in groups, one per provider.

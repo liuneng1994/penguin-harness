@@ -72,6 +72,15 @@ describe("matchesQuery", () => {
 });
 
 describe("groupModelRows", () => {
+  it("shows the empty native group for the library setup flow and filters it from searches", () => {
+    expect(
+      groupModelRows([], "", [], { includeEmptyLocalAuth: true }).some(
+        (g) => g.provider.id === "trae",
+      ),
+    ).toBe(true);
+    expect(groupModelRows([], "unknown", [], { includeEmptyLocalAuth: true })).toEqual([]);
+    expect(groupModelRows([], "").some((g) => g.provider.id === "trae")).toBe(false);
+  });
   it("groups by the row's provider (order follows MODEL_PROVIDERS), custom last, custom-built groups appended after", () => {
     const groups = groupModelRows(rows, "");
     expect(groups.map((g) => g.provider.id)).toEqual([
@@ -98,6 +107,7 @@ describe("groupModelRows", () => {
       "penguin-go",
       "opencode-go",
       "deepseek",
+      "trae",
       "openrouter",
       "fireworks",
       "google",
@@ -225,6 +235,18 @@ describe("visibleChatModels", () => {
       "claude-sonnet-4-6",
       "kimi-k2.6",
     ]);
+  });
+
+  it("offers a native model while its CLI login is valid and hides it after expiry", () => {
+    const native: ModelCredentialRowLike = {
+      provider: "trae",
+      modelId: "Native-Model",
+      localAuthAvailable: true,
+    };
+    const choices = (model: ModelCredentialRowLike) =>
+      visibleChatModels([...pool, model], { showAll: false, query: "" }).map((m) => m.modelId);
+    expect(choices(native)).toContain("Native-Model");
+    expect(choices({ ...native, localAuthAvailable: false })).not.toContain("Native-Model");
   });
 
   it("an env-backed model is listed like a stored-key one, not hidden behind show-all", () => {

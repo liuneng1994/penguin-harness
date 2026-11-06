@@ -32,6 +32,8 @@ export default defineConfig({
     // component gallery and the CLI bundle the same rows, groups and helpers the server seeds a
     // Project with.
     "model-catalog": "src/model-catalog/index.ts",
+    // SDK embedders can register the native client without starting a server.
+    trae: "src/models/trae/index.ts",
     "initial-password": "src/initial-password.ts",
     "reset-admin-password": "src/reset-admin-password.ts",
     "auth-token": "src/auth-token.ts",

@@ -14,6 +14,30 @@ import { ApiKeyRequiredError, AutoLLMClient } from "@prismshadow/mmsp";
 /** What AutoLLMClient is built with. */
 export type AutoLLMClientOptions = ConstructorParameters<typeof AutoLLMClient>[0];
 
+/** The stateful MMSP surface used by the harness; a host may supply another transport. */
+export type ModelClient = Pick<
+  AutoLLMClient,
+  "streamingResponseStateful" | "getHistory" | "setHistory" | "listModels"
+>;
+
+export type ModelClientFactory = (options: AutoLLMClientOptions) => ModelClient;
+// A host and an embedded Agent can load different workspace snapshots of core. Their
+// transports belong to the process, so registration must work across those module copies.
+const registryKey = Symbol.for("penguin.model-client.factories");
+const processRegistries = globalThis as unknown as Record<
+  symbol,
+  Map<string, ModelClientFactory> | undefined
+>;
+const hostClients = (processRegistries[registryKey] ??= new Map<string, ModelClientFactory>());
+
+/** Register a host-owned protocol without teaching core about a provider or its credentials. */
+export function registerModelClient(clientType: string, factory: ModelClientFactory): () => void {
+  hostClients.set(clientType, factory);
+  return () => {
+    if (hostClients.get(clientType) === factory) hostClients.delete(clientType);
+  };
+}
+
 /**
  * A model that cannot be given to its MMSP client as configured: no key in the Project config,
  * and a base URL MMSP will not send the environment's key to. The message names the base URL and
@@ -44,8 +68,10 @@ function refusalMessage(err: ApiKeyRequiredError, model: string | undefined): st
  * anything else the constructor throws, a provider SDK's own missing credential included,
  * passes through unchanged.
  */
-export function newAutoLLMClient(options: AutoLLMClientOptions, model?: string): AutoLLMClient {
+export function newAutoLLMClient(options: AutoLLMClientOptions, model?: string): ModelClient {
   try {
+    const factory = hostClients.get(options.clientType ?? "");
+    if (factory !== undefined) return factory(options);
     return new AutoLLMClient(options);
   } catch (err) {
     if (err instanceof ApiKeyRequiredError) {

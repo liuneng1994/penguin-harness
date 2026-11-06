@@ -691,6 +691,8 @@ export interface CredentialInfo {
 }
 
 export interface ModelInfo {
+  /** This row uses a currently valid native CLI login on the server machine. */
+  localAuthAvailable?: boolean;
   /** Provider group id (anthropic / openai / …, see core's MODEL_PROVIDERS; custom models use `custom`). */
   provider: string;
   /** Upstream model id (the request id actually sent to MMSP); paired with `provider` forms the entry's unique key. */
@@ -755,6 +757,8 @@ export interface ModelInfo {
 }
 
 export interface ModelsResponse {
+  /** Native CLI login status on this server, separate from stored provider connections. */
+  localAuth?: Record<string, { available: boolean; expiresAt?: string }>;
   /** Paired reference to the default Model. */
   defaultModel?: ModelRefDto;
   /** Vision model used as a proxy reader for read_file (describes images when the session model has vision=false). */

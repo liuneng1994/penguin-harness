@@ -167,6 +167,8 @@ export interface ModelProviderBalance {
 
 export interface ModelProviderInfo {
   id: string;
+  /** Authenticates with a CLI login on the server machine, rather than a Project API key. */
+  localAuth?: boolean;
   /** Display name (brand name, shared by Chinese and English UI). */
   label: string;
   /**
@@ -362,6 +364,7 @@ export const PENGUIN_GO_PROVIDER_ID = "penguin-go";
  * the CLI refuse any other value (fixedClientTypeRefuses).
  */
 export function fixedClientType(providerId: string): string | undefined {
+  if (providerId === "trae") return "trae";
   return providerId === PENGUIN_GO_PROVIDER_ID ? "mmsp" : undefined;
 }
 
@@ -485,6 +488,16 @@ export const MODEL_PROVIDERS: ModelProviderInfo[] = [
     modelsUrl: "https://api-docs.deepseek.com/quick_start/pricing",
     // https://api-docs.deepseek.com/api/get-user-balance
     balance: { url: `${DEEPSEEK_BASE_URL}/user/balance`, format: "deepseek" },
+  },
+  {
+    id: "trae",
+    label: "TRAE",
+    envKey: "",
+    envBaseUrlKey: "",
+    modelsUrl: "https://www.trae.cn/",
+    clientType: "trae",
+    localAuth: true,
+    addable: true,
   },
   {
     id: "openrouter",

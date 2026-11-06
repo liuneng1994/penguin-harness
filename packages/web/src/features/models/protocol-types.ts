@@ -156,6 +156,8 @@ export function protocolForPersist(
   const t = clientType.trim();
   if (t !== "") return t;
   if (inherited.clientType?.trim()) return "";
+  const info = providerInfo(provider);
+  if (info?.localAuth) return info.clientType ?? "";
   return isCustomLikeGroup(provider) ? DEFAULT_CUSTOM_CLIENT_TYPE : "";
 }
 

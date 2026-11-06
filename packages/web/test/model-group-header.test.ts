@@ -147,6 +147,7 @@ describe("the group header's actions, in order, by group kind", () => {
       "runcrate",
       "siliconflow",
       "tokendance",
+      "trae",
       "vllm",
     ]);
   });
