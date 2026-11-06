@@ -38,6 +38,11 @@ import type {
 } from "@prismshadow/amsp/records";
 import type { ModelRef } from "./state/project-config.js";
 import { sameModelRef } from "./state/project-config.js";
+import {
+  assertSkillInvocationsEnabled,
+  installedSkillRead,
+  skillEnabled,
+} from "./state/skill-settings.js";
 import { imagesToScratchpadPaths } from "./internal/session-support.js";
 import { runStopHooks } from "./hooks/stop-hook.js";
 import type { HookSubagentSpawner, SessionHooks, StopHook } from "./hooks/stop-hook.js";
@@ -618,6 +623,7 @@ export class Session {
     newMessages: AmspRecord[],
     opts?: SessionRunOptions,
   ): AsyncGenerator<AmspRecord, RunCutoff | null> {
+    await assertSkillInvocationsEnabled(this.meta.payload.agent_state, newMessages);
     // The sandbox command policy is applied here, at the Human boundary itself: the
     // injected callback is wrapped so a vetoed command is refused before the host is ever
     // asked, which is what makes the policy outrank every approval mode — no host, and no
@@ -640,9 +646,33 @@ export class Session {
       opts = {
         ...opts,
         preToolUse: async (tc) => {
+          const p = tc.payload;
+          if (p.name === "read_file") {
+            let args: Record<string, unknown> = {};
+            try {
+              args = JSON.parse(p.arguments) as Record<string, unknown>;
+            } catch {
+              /* Tool validation reports malformed arguments. */
+            }
+            const name =
+              typeof args?.file_path === "string"
+                ? installedSkillRead(
+                    this.meta.payload.agent_state,
+                    this.workspaceDir,
+                    args.file_path,
+                  )
+                : null;
+            if (name !== null && !(await skillEnabled(this.meta.payload.agent_state, name))) {
+              return {
+                events: [],
+                decision: "deny",
+                name: "skill-settings",
+                reason: `Skill ${name} is disabled. Enable it in the Agent's Skills settings before reading it.`,
+              };
+            }
+          }
           const hooks = this.preToolUseHooks;
           if (hooks.length === 0) return null;
-          const p = tc.payload;
           const tracePath = this.trace?.currentPath?.();
           const outcome = await runPreToolUseHooks(hooks, {
             sessionId: this.sessionId,

@@ -19,6 +19,7 @@ import { Hono } from "hono";
 import {
   listInstalledSkills,
   removeSkill,
+  setSkillEnabled,
   replaceSkillDirectory,
   skillsDir,
   parseSkillFrontmatter,
@@ -33,10 +34,14 @@ export interface SkillsRouteDeps {
   agentConfigService: AgentConfig;
   config: ServerConfig;
   access: Access;
+  traceIndex: TraceIndex;
+  traceStore: TraceIndexStore;
 }
 import { HttpError } from "../errors.js";
 import { badRequest, readJson, requireString, requireValidId } from "../validate.js";
 import { toSkillItem } from "../../services/plugin-library.js";
+import { SkillUsageReader, emptySkillUsage } from "../../services/skill-usage.js";
+import type { TraceIndex, TraceIndexStore } from "../../mechanisms/traces.js";
 import {
   MAX_ARCHIVE_BYTES,
   MAX_ARCHIVE_FILES,
@@ -165,6 +170,7 @@ function explicitSkillVersion(skillMd: string): string | null {
 /** /api/projects/:p/agents/:a/skills: read, import/export and uninstall are all Project-member operations. */
 export function agentSkillsRoutes(deps: SkillsRouteDeps): Hono<AppEnv> {
   const app = new Hono<AppEnv>();
+  const usageReader = new SkillUsageReader(deps.config.root, deps.traceIndex, deps.traceStore);
 
   const listResponse = async (
     projectId: string,
@@ -179,7 +185,33 @@ export function agentSkillsRoutes(deps: SkillsRouteDeps): Hono<AppEnv> {
     const agentId = requireValidId(c, "agentId");
     deps.access.requireProjectAccess(c.var.user.userId, projectId);
     await deps.agentConfigService.requireExists(projectId, agentId);
-    return c.json(await listResponse(projectId, agentId));
+    const response = await listResponse(projectId, agentId);
+    if (c.req.query("usage") === "true") {
+      const usage = await usageReader.read(projectId, agentId);
+      response.skills = response.skills.map((skill) => ({
+        ...skill,
+        usage: usage.get(skill.name) ?? emptySkillUsage(),
+      }));
+    }
+    return c.json(response);
+  });
+
+  app.patch("/:name", async (c) => {
+    const projectId = requireValidId(c, "projectId");
+    const agentId = requireValidId(c, "agentId");
+    const name = requireValidId(c, "name");
+    deps.access.requireProjectAccess(c.var.user.userId, projectId);
+    await deps.agentConfigService.requireExists(projectId, agentId);
+    const body = await readJson(c);
+    if (typeof body.enabled !== "boolean") throw badRequest("enabled must be a boolean.");
+    try {
+      await setSkillEnabled(deps.config.root, projectId, agentId, name, body.enabled);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT")
+        throw new HttpError(404, "not_found", `Skill is not installed: ${name}`);
+      throw error;
+    }
+    return c.json({ enabled: body.enabled });
   });
 
   // Insert (or migrate a legacy hardcoded # Skills section to) the {{SKILLS}} placeholder —

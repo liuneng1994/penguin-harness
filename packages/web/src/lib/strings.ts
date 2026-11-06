@@ -3330,7 +3330,18 @@ export const zh = {
       `确定从 ${agent} 卸载 ${skill} 吗？已安装的技能文件（含本地改动）将被删除。`,
     /** Agent settings "Skills" tab (installed list + import modal). */
     agentTabDesc:
-      "该 Agent 已安装的技能（agent_state/skills/，文件即事实来源）：元数据注入系统提示词，正文由模型按需读取；卸载会删除整个技能目录。",
+      "每个技能可以单独启用或禁用。禁用保留文件，停止自动发现、手动选择和新的技能读取；已进入上下文的内容会保留到压缩后。统计来自保留的对话记录：指定次数是用户选择技能的消息数，读取次数是通过 read_file 成功读取 SKILL.md 的次数，读取失败单独计数。最近使用取最后一次指定或成功读取的时间。卸载会删除技能文件，启停状态在重装后保留。",
+    disabled: "已禁用",
+    enableSkill: (name: string): string => `启用 ${name}`,
+    disableSkill: (name: string): string => `禁用 ${name}`,
+    switchSaved: (name: string, enabled: boolean): string =>
+      `${name} 已${enabled ? "启用" : "禁用"}`,
+    invocations: (n: number): string => `指定 ${n} 次`,
+    reads: (n: number): string => `读取 ${n} 次`,
+    failedReads: (n: number): string => `读取失败 ${n} 次`,
+    sessions: (n: number): string => `${n} 个对话`,
+    lastUsed: (time: string): string => `最近使用：${time}`,
+    neverUsed: "尚未使用",
     agentTabEmpty: "尚未安装任何技能",
     exportSkill: "打包导出",
     importSkill: "导入技能",

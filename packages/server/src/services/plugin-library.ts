@@ -46,9 +46,12 @@ export function resolveLibraryPlugins(
 }
 
 /** A skill as the API describes it — the library side, the installed side and the directory side all carry these fields. `icon` travels when the caller passes one: installed lists do, the library listing does not (see toPluginItem). */
-export function toSkillItem(skill: SkillMetadata & { icon?: string }): SkillMetadataItem {
+export function toSkillItem(
+  skill: SkillMetadata & { icon?: string; enabled?: boolean },
+): SkillMetadataItem {
   return {
     name: skill.name,
+    ...(skill.enabled !== undefined ? { enabled: skill.enabled } : {}),
     description: skill.description,
     ...(skill.shortDescription !== undefined ? { shortDescription: skill.shortDescription } : {}),
     ...(skill.shortDescriptionZh !== undefined

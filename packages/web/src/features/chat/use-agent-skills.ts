@@ -30,7 +30,7 @@ export function useAgentSkills(
     api
       .getAgentSkills(projectId, agentId, machineId)
       .then((res) => {
-        if (!cancelled) setSkills(res.skills);
+        if (!cancelled) setSkills(res.skills.filter((skill) => skill.enabled !== false));
       })
       .catch(() => undefined)
       .finally(() => {

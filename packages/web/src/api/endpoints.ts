@@ -1935,10 +1935,28 @@ export const getLanguages = () => apiFetch<LanguageIndexResponse>("/api/language
 export const getPluginReadme = (name: string) =>
   apiFetch<PluginReadmeResponse>(`/api/plugins/registry/readme?name=${encodeURIComponent(name)}`);
 
-export const getAgentSkills = (projectId: string, agentId: string, machineId: string | null) =>
+export const getAgentSkills = (
+  projectId: string,
+  agentId: string,
+  machineId: string | null,
+  includeUsage = false,
+) =>
   apiFetch<AgentSkillsResponse>(
-    `/api/projects/${encodeURIComponent(projectId)}/agents/${encodeURIComponent(agentId)}/skills`,
+    `/api/projects/${encodeURIComponent(projectId)}/agents/${encodeURIComponent(agentId)}/skills${includeUsage ? "?usage=true" : ""}`,
     { server: machineId },
+  );
+
+/** Toggle one installed skill; content is preserved. */
+export const setAgentSkillEnabled = (
+  projectId: string,
+  agentId: string,
+  name: string,
+  enabled: boolean,
+  machineId: string | null,
+) =>
+  apiFetch<{ enabled: boolean }>(
+    `/api/projects/${encodeURIComponent(projectId)}/agents/${encodeURIComponent(agentId)}/skills/${encodeURIComponent(name)}`,
+    { method: "PATCH", body: { enabled }, server: machineId },
   );
 
 export const getAgentHooks = (projectId: string, agentId: string, machineId: string | null) =>

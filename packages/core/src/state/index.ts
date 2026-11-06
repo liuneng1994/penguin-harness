@@ -15,6 +15,7 @@ export * from "./model-connection.js";
 export * from "./command-policy-defaults.js";
 export * from "./project-config.js";
 export * from "./agent-state.js";
+export * from "./skill-settings.js";
 export * from "./agent-vault.js";
 export * from "./memory.js";
 export * from "./benchmark-manifest.js";

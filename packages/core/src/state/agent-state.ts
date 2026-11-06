@@ -34,6 +34,7 @@ import {
   installPluginWorkbenches,
 } from "./plugin-workbenches.js";
 import { loadAgentVault } from "./agent-vault.js";
+import { skillEnabled } from "./skill-settings.js";
 import {
   AGENT_ID_PLACEHOLDER,
   AGENTS_MD_PLACEHOLDER,
@@ -92,21 +93,9 @@ import {
   toolsDir,
 } from "./paths.js";
 
-/** project_id / agent_id / skill_name only allow letters, digits, underscore `_`, and hyphen `-` (prevents path traversal). */
-const ID_PATTERN = /^[A-Za-z0-9_-]+$/;
-export type IdKind = "project_id" | "agent_id" | "skill_name";
-
-export function isValidId(id: string): boolean {
-  return ID_PATTERN.test(id);
-}
-
-export function assertValidId(kind: IdKind, id: string): void {
-  if (!ID_PATTERN.test(id)) {
-    throw new Error(
-      `Invalid ${kind} ${JSON.stringify(id)}: only letters, digits, "_" and "-" are allowed.`,
-    );
-  }
-}
+import { assertValidId } from "./ids.js";
+export { assertValidId, isValidId } from "./ids.js";
+export type { IdKind } from "./ids.js";
 
 /** A loaded Agent State handle. */
 export interface AgentState {
@@ -584,6 +573,8 @@ export async function removeSkill(
 
 /** An installed Skill entry: frontmatter metadata (including an optional short description) + the optional icon.svg content in the directory. */
 export interface InstalledSkill extends SkillMetadata {
+  /** Absent means enabled; disabled copies stay installed and manageable. */
+  enabled?: boolean;
   /** The raw content of `skills/<name>/icon.svg` — the plugin's icon for a library install, a custom one for a user-authored skill — copied alongside SKILL.md at install time; the field is omitted when missing (the frontend then draws the book glyph). */
   icon?: string;
 }
@@ -636,9 +627,11 @@ export async function listInstalledSkills(
     // directory name always wins — otherwise the model would read a nonexistent path using the
     // injected name, and the API couldn't uninstall it either.
     const parsed = parseSkillFrontmatter(raw);
+    const enabled = await skillEnabled(agentStateDir(root, projectId, agentId), entry.name);
     skills.push({
       ...(parsed ?? { description: "", version: "" }),
       name: entry.name,
+      ...(!enabled ? { enabled: false } : {}),
       ...(icon !== undefined ? { icon } : {}),
     });
   }
@@ -1048,8 +1041,9 @@ export async function listInstalledHooks(
  * the form `- \`name\` — description` (just the name when description is empty); an empty array
  * returns an empty string. The full body is read by the model on demand via shell.
  */
-export function skillMetadataSection(skills: SkillMetadata[]): string {
+export function skillMetadataSection(skills: (SkillMetadata & { enabled?: boolean })[]): string {
   return skills
+    .filter((s) => s.enabled !== false)
     .map((s) => (s.description ? `- \`${s.name}\` — ${s.description}` : `- \`${s.name}\``))
     .join("\n");
 }

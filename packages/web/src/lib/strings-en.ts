@@ -3151,7 +3151,18 @@ export const en: Strings = {
       `Uninstall ${skill} from ${agent}? Its installed files (local edits included) will be deleted.`,
     /** Agent settings "Skills" tab (installed list + import modal). */
     agentTabDesc:
-      "Skills installed on this agent (agent_state/skills/ — the files are the source of truth): metadata is injected into the system prompt and the body is read by the model on demand; uninstalling deletes the whole skill directory.",
+      "Enable or disable each skill independently. Disabling preserves its files and stops discovery, manual selection and new skill reads; content already in context stays until compaction. Activity comes from retained conversations: selections count user messages that name the skill, reads count completed read_file calls for SKILL.md, and failed reads are counted separately. Last used is the latest selection or completed read. Uninstalling deletes the skill files; its switch survives reinstallation.",
+    disabled: "Disabled",
+    enableSkill: (name: string): string => `Enable ${name}`,
+    disableSkill: (name: string): string => `Disable ${name}`,
+    switchSaved: (name: string, enabled: boolean): string =>
+      `${name} ${enabled ? "enabled" : "disabled"}`,
+    invocations: (n: number): string => `Selected ${n} ${n === 1 ? "time" : "times"}`,
+    reads: (n: number): string => `Read ${n} ${n === 1 ? "time" : "times"}`,
+    failedReads: (n: number): string => `${n} failed ${n === 1 ? "read" : "reads"}`,
+    sessions: (n: number): string => `${n} ${n === 1 ? "conversation" : "conversations"}`,
+    lastUsed: (time: string): string => `Last used: ${time}`,
+    neverUsed: "Never",
     agentTabEmpty: "No skills installed yet",
     exportSkill: "Export",
     importSkill: "Import skill",

@@ -31,18 +31,12 @@ import {
   ConfirmModal,
   CopiedStatus,
   CopyCheckGlyph,
-  DownloadIcon,
-  GlyphIcon,
   HelpFold,
   HiddenFileInput,
-  ICONS,
-  IconButton,
   Input,
   Modal,
   SettingsEmpty,
   SettingsList,
-  ListRow,
-  ICON_SIZE,
   SkeletonList,
   Textarea,
   buttonClass,
@@ -56,12 +50,10 @@ import * as api from "../../api/endpoints";
 import { ApiError } from "../../api/client";
 import { S } from "../../lib/strings";
 import { apiErrorText } from "../../lib/api-error";
-import { useLocale } from "../../state/locale";
 import { agentDisplayName, useProject } from "../../state/project";
 import { useAgentLocation } from "../../lib/agent-location";
 import { useAgentsOn } from "../../lib/machine-agent-lists";
-import { SkillTile } from "../skills/skill-icon-view";
-import { localizedShortText } from "../chat/skill-use";
+import { InstalledSkillRow } from "./installed-skill-row";
 import { useAiBridge } from "../ai-create";
 import { downloadArchive } from "./archive-download";
 import { buildImportPrompt } from "./skill-import-source";
@@ -85,7 +77,6 @@ export function SkillsTab({
   /** Config writes (toggle / prompt / placeholder insert) happen here directly, so the settings page must refetch its own copy — otherwise a later Prompt-tab save from stale data would silently revert them. */
   onConfigChanged?: () => void;
 }) {
-  const { locale } = useLocale();
   const { currentProject, reloadAgents } = useProject();
   const projectId = currentProject?.projectId ?? null;
   /** The machine the Agent lives on (null: this server), and the Agents that server runs. */
@@ -117,7 +108,7 @@ export function SkillsTab({
     try {
       // The injection controls' state loads in parallel with the tab's own list.
       const [res, configView] = await Promise.all([
-        api.getAgentSkills(projectId, agentId, machineId),
+        api.getAgentSkills(projectId, agentId, machineId, true),
         api.getAgentConfig(projectId, agentId, machineId),
       ]);
       setSkills(res.skills);
@@ -172,9 +163,6 @@ export function SkillsTab({
     if (machineId === null) void reloadAgents();
   };
 
-  /** Metadata: the installed copy's version (`YYYY.MM.DD.N`, or the legacy `YYYY-MM-DD.N` on a copy installed before that spelling; empty when the frontmatter carries none), shown bare like the library card. */
-  const metaLine = (skill: SkillMetadataItem): string => skill.version;
-
   if (!projectId) return null;
 
   return (
@@ -207,46 +195,28 @@ export function SkillsTab({
       ) : (
         <SettingsList label={S.agent.tabSkills}>
           {skills.map((skill) => (
-            <ListRow
+            <InstalledSkillRow
               key={skill.name}
-              as="li"
-              leading={<SkillTile icon={skill.icon} name={skill.name} />}
-              title={
-                <span className="font-mono text-[length:var(--ui-text-code-size)] font-semibold">
-                  {skill.name}
-                </span>
-              }
-              description={
-                <span
-                  data-tooltip={skill.description}
-                  data-tooltip-content="text"
-                  data-tooltip-extra={skill.description !== localizedShortText(locale, skill)}
-                >
-                  {localizedShortText(locale, skill)}
-                </span>
-              }
-              meta={metaLine(skill) || undefined}
-              trailing={
-                <>
-                  <IconButton
-                    label={`${S.skills.exportSkill} ${skill.name}`}
-                    title={S.skills.exportSkill}
-                    disabled={busy}
-                    onClick={() => void exportSkill(skill.name)}
-                  >
-                    <DownloadIcon size={ICON_SIZE.iconButton} />
-                  </IconButton>
-                  <IconButton
-                    variant="danger"
-                    label={`${S.skills.uninstall} ${skill.name}`}
-                    title={S.skills.uninstall}
-                    disabled={busy}
-                    onClick={() => setRemoving(skill.name)}
-                  >
-                    <GlyphIcon d={ICONS.trash} size={ICON_SIZE.iconButton} />
-                  </IconButton>
-                </>
-              }
+              skill={skill}
+              busy={busy}
+              onEnabledChange={async (enabled) => {
+                const response = await api.setAgentSkillEnabled(
+                  projectId,
+                  agentId,
+                  skill.name,
+                  enabled,
+                  machineId,
+                );
+                setSkills(
+                  (current) =>
+                    current?.map((item) =>
+                      item.name === skill.name ? { ...item, enabled: response.enabled } : item,
+                    ) ?? null,
+                );
+                toastSuccess(S.skills.switchSaved(skill.name, response.enabled));
+              }}
+              onExport={() => void exportSkill(skill.name)}
+              onRemove={() => setRemoving(skill.name)}
             />
           ))}
         </SettingsList>

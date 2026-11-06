@@ -4979,7 +4979,25 @@ export interface BenchmarkArchiveImportResponse {
 // Plugin library, and an Agent's installed skills and hooks
 // ---------------------------------------------------------------------------
 
+/** Activity within an Agent's retained Trace history. */
+export interface SkillUsage {
+  /** User messages explicitly selecting the skill, counted once per message. */
+  invocations: number;
+  /** Completed read_file calls for the installed SKILL.md. */
+  reads: number;
+  /** Non-completed read_file calls for that entry file. */
+  failedReads: number;
+  /** Distinct native sessions with a selection or read attempt. */
+  sessions: number;
+  /** Latest explicit selection or completed read (UTC); null if neither exists. */
+  lastUsedAt: string | null;
+}
+
 export interface SkillMetadataItem {
+  /** Installed-copy switch; absent means enabled. */
+  enabled?: boolean;
+  /** Only requested by skill management, not on composer/library reads. */
+  usage?: SkillUsage;
   /** Skill directory name (the identity key for install / uninstall / Prompt addressing). */
   name: string;
   description: string;

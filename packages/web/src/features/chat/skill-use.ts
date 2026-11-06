@@ -59,9 +59,10 @@ export function filterSkills<T extends SkillMetadataItem>(
   query: string,
 ): T[] {
   const q = query.trim().toLowerCase();
-  if (!q) return skills;
+  const enabled = skills.filter((skill) => skill.enabled !== false);
+  if (!q) return enabled;
   // Match target matches what's displayed: name + localized short text (zh can match the Chinese short description, en is always English).
-  return skills.filter(
+  return enabled.filter(
     (s) =>
       s.name.toLowerCase().includes(q) || localizedShortText(locale, s).toLowerCase().includes(q),
   );
@@ -82,9 +83,11 @@ export function skillSlashItems(
   skills: SkillMetadataItem[],
   locale: "zh" | "en",
 ): SkillSlashItem[] {
-  return skills.map((s) => ({
-    name: s.name,
-    cmd: `/${s.name}`,
-    desc: localizedShortText(locale, s),
-  }));
+  return skills
+    .filter((s) => s.enabled !== false)
+    .map((s) => ({
+      name: s.name,
+      cmd: `/${s.name}`,
+      desc: localizedShortText(locale, s),
+    }));
 }
