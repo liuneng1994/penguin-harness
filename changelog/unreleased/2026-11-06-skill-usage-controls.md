@@ -3,6 +3,7 @@
 - **Date:** 2026-11-06
 - **Type:** feature
 - **Scope:** core, server, web
+- **PR:** https://github.com/liuneng1994/penguin-harness/pull/1
 
 [中文版](2026-11-06-skill-usage-controls.zh.md)
 
