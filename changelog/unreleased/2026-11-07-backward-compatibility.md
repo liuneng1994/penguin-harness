@@ -36,3 +36,14 @@ The server maintainers keep this code until the next major release (1.0) and rem
 ## Compatibility
 
 No action is required on upgrade. After a downgrade, an older build ignores the `author` key. It keeps the key when it edits a config in place, but its **Restore default configuration** drops it. An employee that lost its key that way is stamped again on the next upgrade, and any other Agent reads as `user`.
+
+
+## Existing skill files on upgrade
+
+General's existing skill directory became the shared source by default after upgrade. No files were moved, deleted or copied. This directory remained the permanent source; no migration reader or temporary layout was introduced.
+
+## Existing Agent state
+
+Each Agent's installed skills continued to take precedence over General's same-name skills. Existing manual-sync copies remained independent files. Removing an installed version restored access to the shared version, using that Agent's current switch. Missing switches continued to mean enabled.
+
+General's switches applied to General's own sessions. Other Agents used their own switches, including for shared skills. Retained Trace history remained readable, and shared entry reads were attributed to the consuming Agent. Skills were discovered when a model context opened; an already open context retained its catalog until the next context.

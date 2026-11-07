@@ -22,6 +22,7 @@ import { readInstalledIcon } from "../plugin/icon.js";
 import type { IconImage } from "../plugin/icon.js";
 import { iconFileName, isIconFileName } from "../plugin/icon-format.js";
 import { parseSkillFrontmatter } from "../plugin/skill-frontmatter.js";
+import { serializeSkillWrite } from "../internal/skill-write.js";
 import type { SkillMetadata } from "../plugin/skill-frontmatter.js";
 import type { MCPServerConfig, ToolConfig, ToolDefinitionConfig } from "../interfaces/index.js";
 import {
@@ -95,21 +96,9 @@ import {
   toolsDir,
 } from "./paths.js";
 
-/** project_id / agent_id / skill_name only allow letters, digits, underscore `_`, and hyphen `-` (prevents path traversal). */
-const ID_PATTERN = /^[A-Za-z0-9_-]+$/;
-export type IdKind = "project_id" | "agent_id" | "skill_name";
-
-export function isValidId(id: string): boolean {
-  return ID_PATTERN.test(id);
-}
-
-export function assertValidId(kind: IdKind, id: string): void {
-  if (!ID_PATTERN.test(id)) {
-    throw new Error(
-      `Invalid ${kind} ${JSON.stringify(id)}: only letters, digits, "_" and "-" are allowed.`,
-    );
-  }
-}
+import { assertValidId } from "./ids.js";
+export { assertValidId, isValidId } from "./ids.js";
+export type { IdKind } from "./ids.js";
 
 /** A loaded Agent State handle. */
 export interface AgentState {
@@ -554,27 +543,33 @@ export async function installSkill(
 export async function replaceSkillDirectory(
   dir: string,
   files: Iterable<[string, string | Uint8Array]>,
+  options?: { beforeReplace?: () => Promise<void> },
 ): Promise<void> {
   const staging = `${path.join(path.dirname(dir), `.${path.basename(dir)}`)}.incoming`;
-  await fs.rm(staging, { recursive: true, force: true });
-  await fs.mkdir(staging, { recursive: true });
-  try {
-    await Promise.all(
-      [...files].map(async ([rel, data]) => {
-        const file = path.join(staging, rel);
-        await fs.mkdir(path.dirname(file), { recursive: true });
-        await fs.writeFile(file, data);
-      }),
-    );
-    // rename(2) refuses to replace a non-empty directory, so the old one goes first. The window
-    // between the two is the one case this cannot make atomic; it is bounded by a single rm and
-    // leaves the Skill absent rather than corrupt.
-    await fs.rm(dir, { recursive: true, force: true });
-    await fs.rename(staging, dir);
-  } catch (err) {
-    await fs.rm(staging, { recursive: true, force: true }).catch(() => undefined);
-    throw err;
-  }
+  return serializeSkillWrite(dir, async () => {
+    await fs.rm(staging, { recursive: true, force: true });
+    await fs.mkdir(staging, { recursive: true });
+    try {
+      await Promise.all(
+        [...files].map(async ([rel, data]) => {
+          const file = path.join(staging, rel);
+          await fs.mkdir(path.dirname(file), { recursive: true });
+          await fs.writeFile(file, data);
+        }),
+      );
+      // Sync callers verify the destination after staging is complete, so an edit during
+      // file copying refuses the replacement while the original directory is still intact.
+      await options?.beforeReplace?.();
+      // rename(2) refuses to replace a non-empty directory, so the old one goes first. The window
+      // between the two is the one case this cannot make atomic; it is bounded by a single rm and
+      // leaves the Skill absent rather than corrupt.
+      await fs.rm(dir, { recursive: true, force: true });
+      await fs.rename(staging, dir);
+    } catch (err) {
+      await fs.rm(staging, { recursive: true, force: true }).catch(() => undefined);
+      throw err;
+    }
+  });
 }
 
 /** Uninstalls a Skill: deletes the entire `skills/<name>/` directory; idempotent, no error if it doesn't exist. */
@@ -593,63 +588,8 @@ export async function removeSkill(
   });
 }
 
-/** An installed Skill entry: frontmatter metadata (including an optional short description) + the icon in its directory, if any. */
-export interface InstalledSkill extends SkillMetadata {
-  /** `skills/<name>/icon.<ext>` (readInstalledIcon) — the plugin's icon for a library install, a custom one for a user-authored skill; omitted when there is none that reads clean (the frontend then draws the book glyph). */
-  icon?: IconImage;
-}
-
-/**
- * Lists the metadata of Skills installed on the target Agent: scans `skills/<name>/SKILL.md` and
- * parses its frontmatter (optional fields like short_description(_zh) pass through as parsed),
- * also reading the icon in the directory (readInstalledIcon). Tolerant: a directory whose
- * frontmatter fails to parse or is missing `name` falls back to
- * `{ name: <directory name>, description: "", version: 1, updated: "" }`; a directory with no
- * SKILL.md doesn't count as a Skill; returns [] if skills/ doesn't exist. Results are sorted by
- * name (a stable order for both Prompt injection and API responses).
- * Docs: /docs/skills § "Installation and storage".
- */
-export async function listInstalledSkills(
-  root: string,
-  projectId: string,
-  agentId: string,
-): Promise<InstalledSkill[]> {
-  assertValidId("project_id", projectId);
-  assertValidId("agent_id", agentId);
-  const dir = skillsDir(root, projectId, agentId);
-  let entries;
-  try {
-    entries = await fs.readdir(dir, { withFileTypes: true });
-  } catch {
-    return [];
-  }
-  const skills: InstalledSkill[] = [];
-  for (const entry of entries) {
-    if (!entry.isDirectory()) continue;
-    // A Skill name never starts with a dot (assertValidId), so a dot-prefixed directory is
-    // this Agent's staging directory, mid-install or left behind by an interrupted one.
-    if (entry.name.startsWith(".")) continue;
-    let raw: string;
-    try {
-      raw = await fs.readFile(path.join(dir, entry.name, "SKILL.md"), "utf8");
-    } catch {
-      continue;
-    }
-    const icon = await readInstalledIcon(path.join(dir, entry.name));
-    // The directory name is the Skill's identity (install / uninstall / Prompt read guidance all
-    // address by directory name): frontmatter only supplies display fields like description; when
-    // its `name` doesn't match the directory name (a hand-written or network-sourced Skill), the
-    // directory name always wins — otherwise the model would read a nonexistent path using the
-    // injected name, and the API couldn't uninstall it either.
-    const parsed = parseSkillFrontmatter(raw);
-    skills.push({
-      ...(parsed ?? { description: "", version: "" }),
-      name: entry.name,
-      ...(icon !== undefined ? { icon } : {}),
-    });
-  }
-  return skills.sort((a, b) => a.name.localeCompare(b.name));
-}
+export { listInstalledSkills } from "./skill-catalog.js";
+export type { InstalledSkill } from "./skill-catalog.js";
 
 /**
  * Installs one library plugin: every skill it ships through `installSkill`, its hook package
@@ -1079,9 +1019,18 @@ export async function listInstalledHooks(
  * the form `- \`name\` — description` (just the name when description is empty); an empty array
  * returns an empty string. The full body is read by the model on demand via shell.
  */
-export function skillMetadataSection(skills: SkillMetadata[]): string {
+export function skillMetadataSection(
+  skills: (SkillMetadata & { enabled?: boolean; pathToSkillMd?: string })[],
+): string {
   return skills
-    .map((s) => (s.description ? `- \`${s.name}\` — ${s.description}` : `- \`${s.name}\``))
+    .filter((s) => s.enabled !== false)
+    .map((s) => {
+      const description = s.description ? ` — ${s.description}` : "";
+      const entry = s.pathToSkillMd
+        ? ` (shared entry: ${JSON.stringify(s.pathToSkillMd)}; read this path; create an Agent-local copy before editing)`
+        : "";
+      return `- \`${s.name}\`${description}${entry}`;
+    })
     .join("\n");
 }
 

@@ -166,18 +166,19 @@ export function PluginsTab({
     if (!projectId) return;
     const mine = ++asked.current;
     try {
-      const [installed, workbenches, config, library] = await Promise.all([
+      const [installed, workbenches, config, library, skills] = await Promise.all([
         api.getAgentPlugins(projectId, agentId, machineId),
         api.getWorkbenches(projectId, agentId, machineId),
         api.getAgentConfig(projectId, agentId, machineId),
         api.getPluginLibrary(machineId),
+        api.getAgentSkills(projectId, agentId, machineId, true),
       ]);
       if (asked.current !== mine) return;
       applySkills(config.config);
       applyHooks(config.config);
       agentInstalls.accept(installsKey(projectId, machineId, agentId), installed);
       setLists({
-        installed,
+        installed: { ...installed, skills: skills.skills },
         workbenches,
         library: library.groups.flatMap((group) => group.plugins),
       });
@@ -446,7 +447,9 @@ export function PluginsTab({
     <div className="space-y-4">
       {/* Tab-level description: no title in the panel to anchor a "?" to (see help-fold.tsx). */}
       <HelpFold label={S.agent.tabPlugins}>
-        {S.agentPlugins.tabDesc}
+        <p>{S.agentPlugins.tabDesc}</p>
+        <p>{S.skills.agentTabDesc}</p>
+        <p>{agentId === "default_agent" ? S.skills.generalSharingInfo : S.skills.sharedSkillInfo}</p>
         {!isOwner && <span className="mt-1.5 block">{S.agentPlugins.readOnlyHint}</span>}
       </HelpFold>
 

@@ -23,6 +23,7 @@ import type {
   AgentSchedulesConfigDto,
   AgentSkillsConfigDto,
   AgentSkillsResponse,
+  SkillSyncResponse,
   AgentsResponse,
   AgentVaultConfigDto,
   AppCenterLayout,
@@ -2009,11 +2010,41 @@ export const themePackFileUrl = (id: string, file: string, v: string): string =>
 export const getPluginReadme = (name: string) =>
   apiFetch<PluginReadmeResponse>(`/api/plugins/registry/readme?name=${encodeURIComponent(name)}`);
 
-export const getAgentSkills = (projectId: string, agentId: string, machineId: string | null) =>
+export const getAgentSkills = (
+  projectId: string,
+  agentId: string,
+  machineId: string | null,
+  includeUsage = false,
+) =>
   apiFetch<AgentSkillsResponse>(
-    `/api/projects/${encodeURIComponent(projectId)}/agents/${encodeURIComponent(agentId)}/skills`,
+    `/api/projects/${encodeURIComponent(projectId)}/agents/${encodeURIComponent(agentId)}/skills${includeUsage ? "?usage=true" : ""}`,
     { server: machineId },
   ).then((r) => ({ ...r, skills: iconsOn(r.skills, machineId) }));
+
+/** Toggle one installed skill; content is preserved. */
+export const setAgentSkillEnabled = (
+  projectId: string,
+  agentId: string,
+  name: string,
+  enabled: boolean,
+  machineId: string | null,
+) =>
+  apiFetch<{ enabled: boolean }>(
+    `/api/projects/${encodeURIComponent(projectId)}/agents/${encodeURIComponent(agentId)}/skills/${encodeURIComponent(name)}`,
+    { method: "PATCH", body: { enabled }, server: machineId },
+  );
+
+/** Make an independent, editable copy of General's shared skill; preserve the Agent's switch. */
+export const copySharedSkill = (
+  projectId: string,
+  agentId: string,
+  name: string,
+  machineId: string | null,
+) =>
+  apiFetch<AgentSkillsResponse>(
+    `/api/projects/${encodeURIComponent(projectId)}/agents/${encodeURIComponent(agentId)}/skills/${encodeURIComponent(name)}/local-copy`,
+    { method: "POST", server: machineId },
+  );
 
 export const getAgentHooks = (projectId: string, agentId: string, machineId: string | null) =>
   apiFetch<AgentHooksResponse>(
@@ -3276,3 +3307,9 @@ export const clearBuiltinBrowserData = (
 
 /** The existing server contributions route, read by the single frame provider. */
 export const getContributions = () => apiFetch<ContributionsResponse>("/api/contributions");
+export const getProjectSkillSync = (projectId: string) =>
+  apiFetch<SkillSyncResponse>(`/api/projects/${encodeURIComponent(projectId)}/skill-sync`);
+export const syncProjectSkills = (projectId: string) =>
+  apiFetch<SkillSyncResponse>(`/api/projects/${encodeURIComponent(projectId)}/skill-sync`, {
+    method: "POST",
+  });

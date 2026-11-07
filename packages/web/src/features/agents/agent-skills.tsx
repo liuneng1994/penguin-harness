@@ -22,21 +22,13 @@ import type { ReactNode } from "react";
 import type { SkillMetadataItem } from "@prismshadow/penguin-server/api";
 import {
   ConfirmModal,
-  DownloadIcon,
-  GlyphIcon,
-  ICONS,
-  IconButton,
-  ListRow,
-  ICON_SIZE,
   toastSuccess,
 } from "@prismshadow/penguin-ui";
 import * as api from "../../api/endpoints";
 import { S } from "../../lib/strings";
-import { useLocale } from "../../state/locale";
 import { useProject } from "../../state/project";
 import { useAgentLocation } from "../../lib/agent-location";
-import { SkillTile } from "../skills";
-import { localizedShortText } from "../../lib/skill-use";
+import { InstalledSkillRow } from "./installed-skill-row";
 import { downloadArchive } from "./archive-download";
 import { ChatOrZipImportDialog } from "./chat-or-zip-import-dialog";
 import { buildImportPrompt } from "./skill-import-source";
@@ -56,14 +48,13 @@ export function useSkillRows({
   agentName: string;
   onChanged: () => Promise<void>;
 }): { row: (skill: SkillMetadataItem) => ReactNode; modals: ReactNode } {
-  const { locale } = useLocale();
   const { currentProject } = useProject();
   const projectId = currentProject?.projectId ?? null;
   /** The machine the Agent lives on (null: this server). */
   const machineId = useAgentLocation();
   const [busy, setBusy] = useState(false);
   // Skill name pending uninstall confirmation (non-null shows the confirm modal).
-  const [removing, setRemoving] = useState<string | null>(null);
+  const [removing, setRemoving] = useState<SkillMetadataItem | null>(null);
 
   /** "Export as zip": the shared archive download (archive-download.ts); a failure surfaces as a toast. */
   const exportSkill = async (name: string) => {
@@ -80,8 +71,8 @@ export function useSkillRows({
     if (!projectId || removing === null) return;
     setBusy(true);
     try {
-      await api.removeAgentSkill(projectId, agentId, removing, machineId);
-      toastSuccess(`${S.skills.uninstalledToast(removing, agentName)}${S.agent.takesEffectSuffix}`);
+      await api.removeAgentSkill(projectId, agentId, removing.name, machineId);
+      toastSuccess(`${S.skills.uninstalledToast(removing.name, agentName)}${S.agent.takesEffectSuffix}`);
       await onChanged();
     } catch (e) {
       toastApiError(e);
@@ -91,50 +82,34 @@ export function useSkillRows({
     }
   };
 
+  const makeLocal = async (name: string) => {
+    if (!projectId || busy) return;
+    setBusy(true);
+    try {
+      await api.copySharedSkill(projectId, agentId, name, machineId);
+      toastSuccess(S.skills.localCopyCreated(name));
+      await onChanged();
+    } catch (error) {
+      toastApiError(error);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const row = (skill: SkillMetadataItem) => (
-    <ListRow
+    <InstalledSkillRow
       key={`skill:${skill.name}`}
-      as="li"
-      leading={<SkillTile icon={skill.icon} name={skill.name} />}
-      title={
-        <span className="font-mono text-[length:var(--ui-text-code-size)] font-semibold">
-          {skill.name}
-        </span>
-      }
-      description={
-        <span
-          data-tooltip={skill.description}
-          data-tooltip-content="text"
-          data-tooltip-extra={skill.description !== localizedShortText(locale, skill)}
-        >
-          {localizedShortText(locale, skill)}
-        </span>
-      }
-      // The installed copy's version (`YYYY.MM.DD.N`, or the legacy `YYYY-MM-DD.N` on a copy
-      // installed before that spelling; empty when the frontmatter carries none), bare like the
-      // library card's.
-      meta={skill.version || undefined}
-      trailing={
-        <>
-          <IconButton
-            label={`${S.skills.exportSkill} ${skill.name}`}
-            title={S.skills.exportSkill}
-            disabled={busy}
-            onClick={() => void exportSkill(skill.name)}
-          >
-            <DownloadIcon size={ICON_SIZE.iconButton} />
-          </IconButton>
-          <IconButton
-            variant="danger"
-            label={`${S.skills.uninstall} ${skill.name}`}
-            title={S.skills.uninstall}
-            disabled={busy}
-            onClick={() => setRemoving(skill.name)}
-          >
-            <GlyphIcon d={ICONS.trash} size={ICON_SIZE.iconButton} />
-          </IconButton>
-        </>
-      }
+      skill={skill}
+      busy={busy}
+      onEnabledChange={async (enabled) => {
+        if (!projectId) return;
+        const result = await api.setAgentSkillEnabled(projectId, agentId, skill.name, enabled, machineId);
+        toastSuccess(S.skills.switchSaved(skill.name, result.enabled));
+        await onChanged();
+      }}
+      onExport={() => void exportSkill(skill.name)}
+      onMakeLocal={skill.sourceAgentId !== undefined ? () => void makeLocal(skill.name) : undefined}
+      onRemove={skill.sourceAgentId === undefined ? () => setRemoving(skill) : undefined}
     />
   );
 
@@ -142,7 +117,7 @@ export function useSkillRows({
   const modals = (
     <ConfirmModal
       open={removing !== null}
-      title={removing !== null ? S.skills.uninstallConfirmTitle(removing) : ""}
+      title={removing !== null ? S.skills.uninstallConfirmTitle(removing.name) : ""}
       busy={busy}
       onClose={() => setRemoving(null)}
       onConfirm={() => void confirmRemove()}
@@ -150,7 +125,7 @@ export function useSkillRows({
       cancelLabel={S.common.cancel}
     >
       <p className="text-sm text-gray-600 dark:text-gray-300">
-        {removing !== null ? S.skills.uninstallConfirmBody(removing, agentName) : ""}
+        {removing === null ? "" : agentId === "default_agent" ? S.skills.uninstallSharedConfirmBody(removing.name) : removing.overridesShared ? S.skills.uninstallPrivateConfirmBody(removing.name, agentName) : S.skills.uninstallConfirmBody(removing.name, agentName)}
       </p>
     </ConfirmModal>
   );

@@ -91,6 +91,8 @@ import { ErrorRecorder } from "./runtime/error-recorder.js";
 import { UsageRecorder } from "./runtime/usage-recorder.js";
 import { UsageService } from "./services/usage-service.js";
 import { ProjectConfigService } from "./services/project-config-service.js";
+import { SkillSyncService } from "./services/skill-sync.js";
+import { SkillSynchronization } from "./mechanisms/skill-sync.js";
 import { ModelOAuthService } from "./services/model-oauth-service.js";
 import { PlatformAuth, PlatformAuthProvider } from "./services/platform-auth-service.js";
 import { ModelScopeAuth, ModelScopeAuthProvider } from "./services/modelscope-auth-service.js";
@@ -340,6 +342,7 @@ export class IdentityModule {}
     ModelScopeAuthProvider,
     ProjectsRoutes,
     ProjectAdminRoutes,
+    SkillSyncService,
   ],
   exports: [
     Projects,
@@ -348,6 +351,7 @@ export class IdentityModule {}
     Access,
     ProjectLifecycle,
     ProjectConfigStore,
+    SkillSynchronization,
     ModelProviderAuthTokens,
     ModelOAuth,
     PlatformAuth,
