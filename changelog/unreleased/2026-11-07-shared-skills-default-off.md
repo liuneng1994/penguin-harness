@@ -3,6 +3,7 @@
 - **Date:** 2026-11-07
 - **Type:** feature
 - **Scope:** `core`, `server`, `web`
+- **PR:** [#3](https://github.com/liuneng1994/penguin-harness/pull/3)
 - **Breaking:** yes — shared skills without an explicit Agent switch require enablement.
 
 [中文版](2026-11-07-shared-skills-default-off.zh.md)

@@ -3,6 +3,7 @@
 - **Date:** 2026-11-07
 - **Type:** feature
 - **Scope:** `core`, `server`
+- **PR:** [#3](https://github.com/liuneng1994/penguin-harness/pull/3)
 - **Breaking:** yes — 消费 Agent 未保存开关时，共享技能不再默认启用。
 
 [English](2026-11-07-shared-skills-default-off-compatibility.md)

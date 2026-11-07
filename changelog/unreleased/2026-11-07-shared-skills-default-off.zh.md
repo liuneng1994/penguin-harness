@@ -3,6 +3,7 @@
 - **Date:** 2026-11-07
 - **Type:** feature
 - **Scope:** `core`, `server`, `web`
+- **PR:** [#3](https://github.com/liuneng1994/penguin-harness/pull/3)
 - **Breaking:** yes — 未保存 Agent 开关的共享技能需要启用后才能使用。
 
 [English](2026-11-07-shared-skills-default-off.md)

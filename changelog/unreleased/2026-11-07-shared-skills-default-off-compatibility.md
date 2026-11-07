@@ -3,6 +3,7 @@
 - **Date:** 2026-11-07
 - **Type:** feature
 - **Scope:** `core`, `server`
+- **PR:** [#3](https://github.com/liuneng1994/penguin-harness/pull/3)
 - **Breaking:** yes — a missing consumer switch no longer enables a shared skill.
 
 [中文版](2026-11-07-shared-skills-default-off-compatibility.zh.md)
