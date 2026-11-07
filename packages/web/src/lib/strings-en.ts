@@ -3172,9 +3172,9 @@ export const en: Strings = {
     makeLocalCopy: "Create private copy",
     localCopyCreated: (name: string): string => `Created a private copy of ${name}`,
     generalSharingInfo:
-      "General's skills are shared with the other agents in this Project. Existing files stay in place. Each agent keeps its own switches and activity. Updates to these files are shared; private copies are preserved. Sharing skills does not install their MCP servers or hooks on other agents.",
+      "General's skills are shared with the other agents in this Project. Existing files stay in place. Shared skills start disabled on other agents; enable each one as needed. Each agent keeps its own switches and activity. Updates to these files are shared; private copies are preserved. Sharing skills does not install their MCP servers or hooks on other agents.",
     sharedSkillInfo:
-      "Skills shared from General use the same files. A private skill with the same name takes precedence. Create a private copy to customize a shared skill; uninstalling that copy restores the shared version. This agent's switches and activity remain independent. Newly discovered skills enter the next model context.",
+      "Skills shared from General use the same files and start disabled; enable them as needed. A private skill with the same name takes precedence. Create a private copy to customize a shared skill; uninstalling that copy restores the shared version and preserves its switch. This agent's switches and activity remain independent. Enabled skills enter the next model context.",
     uninstallSharedConfirmBody: (name: string): string =>
       `Delete the shared skill ${name} from General? Its files will be deleted and other agents will lose this shared version. Their private copies will be kept.`,
     uninstallPrivateConfirmBody: (name: string, agent: string): string =>

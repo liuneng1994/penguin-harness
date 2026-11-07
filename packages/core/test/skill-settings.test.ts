@@ -4,6 +4,7 @@
  *   and re-enabling restores prompt discovery without losing auxiliary files.
  * - Given an unknown name or corrupt setting, refuse rather than creating or enabling it.
  * - Given a stale explicit selection, a Session refuses it before contacting the model.
+ * - Given a shared skill without a switch, explicit selections are refused until the consumer enables it.
  * - Given a running Session whose skill is disabled, new entry reads are denied even if a hook allows them.
  * - Given an ordinary file or an enabled entry, reading still succeeds; malformed tool arguments reach validation.
  * - Given paths recorded on another platform, match only the installed entry, never a workspace lookalike.
@@ -114,6 +115,24 @@ async function collect(session: Session, input = "hello") {
 }
 
 describe("skill switches", () => {
+  it("refuses a shared selection with no saved switch before contacting the model", async () => {
+    await installSkill(root, P, "default_agent", {
+      name: "shared",
+      content: "---\nname: shared\n---\nShared instructions\n",
+    });
+    const { session, contacts } = sessionFor();
+    try {
+      await expect(collect(session, buildSkillsMessage(["shared"], "Task"))).rejects.toThrow(
+        /shared.*disabled/,
+      );
+      expect(contacts()).toBe(0);
+      await setSkillEnabled(root, P, A, "shared", true);
+      await collect(session, buildSkillsMessage(["shared"], "Task"));
+      expect(contacts()).toBe(1);
+    } finally {
+      await session.dispose();
+    }
+  });
   it.each([A, "default_agent"])(
     "blocks aliases of disabled content installed on %s using the consumer's switch",
     async (owner) => {
@@ -190,7 +209,6 @@ describe("skill switches", () => {
       undefined,
       JSON.stringify({ file_path: sharedPath }),
     ]);
-    await setSkillEnabled(root, P, A, "shared", false);
     const denied = await collect(session);
     expect(
       denied.some(
