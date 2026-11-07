@@ -262,6 +262,7 @@ describe("buildToolConfig", () => {
       "write_file",
       "exec_command",
       "input_command",
+      "list_agents",
       "run_subagent",
       "input_subagent",
     ]);
@@ -404,6 +405,7 @@ describe("buildToolConfig", () => {
       "write_file",
       "exec_command",
       "input_command",
+      "list_agents",
       "run_subagent",
       "input_subagent",
     ]);

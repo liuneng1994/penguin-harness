@@ -19,6 +19,7 @@ export * from "./skill-settings.js";
 export * from "./skill-sync.js";
 export { listAvailableSkills } from "./skill-catalog.js";
 export * from "./skill-paths.js";
+export * from "./agent-catalog.js";
 export * from "./agent-vault.js";
 export * from "./memory.js";
 export * from "./benchmark-manifest.js";

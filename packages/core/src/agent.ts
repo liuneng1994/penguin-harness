@@ -24,9 +24,12 @@ import {
   buildToolConfig,
   selectBuiltinToolsForModel,
   DEFAULT_COMPACTION_PROMPT,
+  defaultSystemConfig,
   formatModelRef,
   getModel,
   listAvailableSkills,
+  listProjectAgents,
+  createAgentDiscovery,
   listScheduleNames,
   loadAgentState,
   loadAgentVault,
@@ -102,6 +105,8 @@ import type {
 } from "@prismshadow/amsp/records";
 import { SUBAGENT_NAME } from "./environment/tools/run-subagent.js";
 import { INPUT_SUBAGENT_NAME } from "./environment/tools/input-subagent.js";
+import { LIST_AGENTS_NAME } from "./environment/tools/list-agents.js";
+import { withAgentDiscovery } from "./internal/agent-discovery.js";
 import type { CompactionSettings, OpenContextOptions } from "./engine/context-engine.js";
 import type {
   ApproveFn,
@@ -632,6 +637,13 @@ export class Agent {
     const baseToolConfig = buildToolConfig(state);
     const modelVision = modelEntry.vision !== false;
     let customTools = selectBuiltinToolsForModel(baseToolConfig.customTools, modelVision);
+    if (customTools.some((tool) => tool.name === SUBAGENT_NAME || tool.name === LIST_AGENTS_NAME)) {
+      customTools = withAgentDiscovery(
+        customTools,
+        await listProjectAgents(root, projectId),
+        defaultSystemConfig().tools!.builtin!.find((tool) => tool.name === LIST_AGENTS_NAME)!,
+      );
+    }
     if (!canSpawn) {
       customTools = customTools.filter(
         (d) =>
@@ -1412,7 +1424,11 @@ export class Agent {
         this.state.agentId,
         sessionId,
       ),
-      services: { subagentRunner, ...(visionDescriber ? { visionDescriber } : {}) },
+      services: {
+        subagentRunner,
+        agentDiscovery: createAgentDiscovery(root, projectId, parentAgentId),
+        ...(visionDescriber ? { visionDescriber } : {}),
+      },
       ...(Object.keys(initial.vault).length > 0 ? { vault: initial.vault } : {}),
       ...(this.proxyEnv ? { proxyEnv: this.proxyEnv } : {}),
       // The control-env policy is bound to THIS Session's coordinates here (sessionId is
