@@ -1,6 +1,6 @@
 /**
- * Agent settings page "Skills" tab: the skills installed on this Agent
- * (agent_state/skills/<name>/ — the files are the single source of truth, so the list is
+ * Agent settings page "Skills" tab: this Agent's private and General's shared skills
+ * (private versions take precedence — the files are the single source of truth, so the list is
  * re-fetched from the API after every mutation instead of trusting client state). Rows lead
  * with the icon of the plugin the skill came from (the book glyph when it has none), then
  * the name, localized short description and version; uninstall
@@ -163,12 +163,32 @@ export function SkillsTab({
     if (machineId === null) void reloadAgents();
   };
 
+  const makeLocalCopy = async (name: string) => {
+    if (!projectId) return;
+    setBusy(true);
+    try {
+      await api.copySharedSkill(projectId, agentId, name, machineId);
+      toastSuccess(S.skills.localCopyCreated(name));
+      await load();
+      if (machineId === null) void reloadAgents();
+    } catch (e) {
+      toastApiError(e);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   if (!projectId) return null;
 
   return (
     <div className="space-y-4">
       {/* Tab-level description: no title in the panel to anchor a "?" to (see help-fold.tsx). */}
-      <HelpFold label={S.agent.tabSkills}>{S.skills.agentTabDesc}</HelpFold>
+      <HelpFold label={S.agent.tabSkills}>
+        <p>{S.skills.agentTabDesc}</p>
+        <p>
+          {agentId === "default_agent" ? S.skills.generalSharingInfo : S.skills.sharedSkillInfo}
+        </p>
+      </HelpFold>
 
       {toggleCard}
       {alertStrip}
@@ -216,7 +236,12 @@ export function SkillsTab({
                 toastSuccess(S.skills.switchSaved(skill.name, response.enabled));
               }}
               onExport={() => void exportSkill(skill.name)}
-              onRemove={() => setRemoving(skill.name)}
+              onMakeLocal={
+                skill.sourceAgentId !== undefined ? () => void makeLocalCopy(skill.name) : undefined
+              }
+              onRemove={
+                skill.sourceAgentId === undefined ? () => setRemoving(skill.name) : undefined
+              }
             />
           ))}
         </SettingsList>
@@ -244,7 +269,13 @@ export function SkillsTab({
         cancelLabel={S.common.cancel}
       >
         <p className="text-sm text-gray-600 dark:text-gray-300">
-          {removing !== null ? S.skills.uninstallConfirmBody(removing, agentName) : ""}
+          {removing === null
+            ? ""
+            : agentId === "default_agent"
+              ? S.skills.uninstallSharedConfirmBody(removing)
+              : skills?.find((skill) => skill.name === removing)?.overridesShared
+                ? S.skills.uninstallPrivateConfirmBody(removing, agentName)
+                : S.skills.uninstallConfirmBody(removing, agentName)}
         </p>
       </ConfirmModal>
 

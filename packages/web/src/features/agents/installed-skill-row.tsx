@@ -1,6 +1,7 @@
 /** One installed skill: activity, an immediate switch, export and uninstall. */
 import type { SkillMetadataItem } from "@prismshadow/penguin-server/api";
 import {
+  Button,
   DownloadIcon,
   GlyphIcon,
   ICONS,
@@ -23,12 +24,14 @@ export function InstalledSkillRow({
   onEnabledChange,
   onExport,
   onRemove,
+  onMakeLocal,
 }: {
   skill: SkillMetadataItem;
   busy: boolean;
   onEnabledChange: (enabled: boolean) => Promise<unknown>;
   onExport: () => void;
-  onRemove: () => void;
+  onRemove?: () => void;
+  onMakeLocal?: () => void;
 }) {
   const { locale } = useLocale();
   const enabled = useInstantSetting(skill.enabled !== false, onEnabledChange);
@@ -43,6 +46,10 @@ export function InstalledSkillRow({
             {skill.name}
           </span>
           {!enabled.value && <Pill tone="neutral">{S.skills.disabled}</Pill>}
+          {skill.sourceAgentId !== undefined && (
+            <Pill tone="neutral">{S.skills.sharedFromGeneral}</Pill>
+          )}
+          {skill.overridesShared && <Pill tone="neutral">{S.skills.privateVersion}</Pill>}
         </span>
       }
       description={
@@ -83,6 +90,11 @@ export function InstalledSkillRow({
               enabled.value ? S.skills.disableSkill(skill.name) : S.skills.enableSkill(skill.name)
             }
           />
+          {onMakeLocal && (
+            <Button size="sm" disabled={busy || enabled.busy} onClick={onMakeLocal}>
+              {S.skills.makeLocalCopy}
+            </Button>
+          )}
           <IconButton
             label={`${S.skills.exportSkill} ${skill.name}`}
             title={S.skills.exportSkill}
@@ -91,15 +103,17 @@ export function InstalledSkillRow({
           >
             <DownloadIcon size={ICON_SIZE.iconButton} />
           </IconButton>
-          <IconButton
-            variant="danger"
-            label={`${S.skills.uninstall} ${skill.name}`}
-            title={S.skills.uninstall}
-            disabled={busy || enabled.busy}
-            onClick={onRemove}
-          >
-            <GlyphIcon d={ICONS.trash} size={ICON_SIZE.iconButton} />
-          </IconButton>
+          {onRemove && (
+            <IconButton
+              variant="danger"
+              label={`${S.skills.uninstall} ${skill.name}`}
+              title={S.skills.uninstall}
+              disabled={busy || enabled.busy}
+              onClick={onRemove}
+            >
+              <GlyphIcon d={ICONS.trash} size={ICON_SIZE.iconButton} />
+            </IconButton>
+          )}
         </>
       }
     />

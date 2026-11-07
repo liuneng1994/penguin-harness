@@ -108,7 +108,10 @@ describe("manual Project skill sync", () => {
     const before = (await (
       await owner.get(`/api/projects/${p}/agents/new_agent/skills`)
     ).json()) as AgentSkillsResponse;
-    expect(before.skills).toEqual([]);
+    expect(before.skills).toEqual([
+      expect.objectContaining({ name: "shared", sourceAgentId: "default_agent" }),
+    ]);
+    await expect(fs.access(file("new_agent"))).rejects.toThrow();
     await loadAgentState({ root: t.root, projectId: p, agentId: "cli_agent", init: {} });
     expect(await listInstalledSkills(t.root, p, "cli_agent")).toEqual([]);
     await owner.post(base());

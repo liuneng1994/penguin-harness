@@ -74,12 +74,15 @@ describe("skill management", () => {
     const file = path.join(agentStateDir(t.root, projectId, A), "skills/demo/SKILL.md");
     const before = await fs.readFile(file, "utf8");
     expect((await member.patch(base() + "/demo", { enabled: false })).status).toBe(200);
-    expect((await read()).skills[0]).toMatchObject({ name: "demo", enabled: false });
+    expect((await read()).skills.find((skill) => skill.name === "demo")).toMatchObject({
+      name: "demo",
+      enabled: false,
+    });
     expect(await fs.readFile(file, "utf8")).toBe(before);
     expect((await outsider.patch(base() + "/demo", { enabled: true })).status).toBe(404);
     expect((await member.patch(base() + "/missing", { enabled: false })).status).toBe(404);
     expect((await member.patch(base() + "/demo", { enabled: "false" })).status).toBe(400);
-    expect((await read()).skills[0]!.enabled).toBe(false);
+    expect((await read()).skills.find((skill) => skill.name === "demo")!.enabled).toBe(false);
     await expect(
       fs.access(path.join(agentStateDir(t.root, projectId, A), "skill-settings/missing.json")),
     ).rejects.toThrow();
@@ -109,7 +112,7 @@ describe("skill management", () => {
       call("ordinary", "/work/SKILL.md"),
       toolCallOutput({ output: "Other", toolCallId: "ordinary", status: "completed" }),
     ]);
-    const skill = (await read()).skills[0]!;
+    const skill = (await read()).skills.find((skill) => skill.name === "demo")!;
     expect(skill.usage).toEqual({
       invocations: 1,
       reads: 1,
@@ -117,7 +120,9 @@ describe("skill management", () => {
       sessions: 1,
       lastUsedAt: "2026-11-06T02:00:00.000Z",
     });
-    expect((await read(false)).skills[0]!.usage).toBeUndefined();
+    expect(
+      (await read(false)).skills.find((skill) => skill.name === "demo")!.usage,
+    ).toBeUndefined();
     expect((await outsider.get(base() + "?usage=true")).status).toBe(404);
   });
   it("refreshes appended and rotated shards, pairs across shards and drops deleted sessions", async () => {
@@ -125,7 +130,7 @@ describe("skill management", () => {
       meta("usage-two"),
       call("later"),
     ]);
-    expect((await read()).skills[0]!.usage!.reads).toBe(1);
+    expect((await read()).skills.find((skill) => skill.name === "demo")!.usage!.reads).toBe(1);
     await fs.appendFile(
       file,
       "\nnot json\n" +
@@ -134,14 +139,16 @@ describe("skill management", () => {
         ) +
         "\n",
     );
-    expect((await read()).skills[0]!.usage!.invocations).toBe(2);
+    expect((await read()).skills.find((skill) => skill.name === "demo")!.usage!.invocations).toBe(
+      2,
+    );
     const shard = await writeTraceFile(t.root, projectId, A, "2026-11-06", "usage-two", 2, [
       at(
         "2026-11-06T04:00:00Z",
         toolCallOutput({ output: "Body", toolCallId: "later", status: "completed" }),
       ),
     ]);
-    expect((await read()).skills[0]!.usage).toEqual({
+    expect((await read()).skills.find((skill) => skill.name === "demo")!.usage).toEqual({
       invocations: 2,
       reads: 2,
       failedReads: 1,
@@ -150,6 +157,6 @@ describe("skill management", () => {
     });
     await fs.unlink(file);
     await fs.unlink(shard);
-    expect((await read()).skills[0]!.usage!.sessions).toBe(1);
+    expect((await read()).skills.find((skill) => skill.name === "demo")!.usage!.sessions).toBe(1);
   });
 });

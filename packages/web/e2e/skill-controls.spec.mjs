@@ -14,16 +14,35 @@ import {
 import { provisionAndLogin } from "./auth.mjs";
 import { setAccountPrefs } from "./account-prefs.mjs";
 const BASE = process.env.BASE_URL;
+const MOCK = process.env.MOCK_URL;
 
 test("skill statistics and individual switches across themes", async ({ page }, testInfo) => {
   await provisionAndLogin(page.request, "skill_controls_user", "password123");
   const { projects } = await (await page.request.get(`${BASE}/api/projects`)).json();
   const projectId = projects[0].projectId;
+  expect(
+    (
+      await page.request.put(`${BASE}/api/projects/${projectId}/models`, {
+        data: {
+          defaultModel: { provider: "custom", modelId: "claude-4-8" },
+          models: [
+            {
+              provider: "custom",
+              modelId: "claude-4-8",
+              apiKey: "sk-mock",
+              baseUrl: MOCK,
+              contextWindow: 200000,
+            },
+          ],
+        },
+      })
+    ).ok(),
+  ).toBe(true);
   const base = `${BASE}/api/projects/${projectId}/agents/skill_controls`;
   expect(
     (
       await page.request.post(`${BASE}/api/projects/${projectId}/agents`, {
-        data: { agentId: "skill_controls" },
+        data: { agentId: "skill_controls", name: "Skill controls" },
       })
     ).ok(),
   ).toBe(true);
@@ -80,8 +99,13 @@ test("skill statistics and individual switches across themes", async ({ page }, 
     await expect(toggle).toHaveAttribute("aria-checked", "false");
     await expect(row.getByRole("button", { name: "Export humanizer" })).toBeEnabled();
     const response = await (await page.request.get(`${base}/skills`)).json();
-    expect(response.skills[0].enabled).toBe(false);
-    await page.goto(`${BASE}/chat/new?agent=skill_controls`);
+    expect(response.skills.find((skill) => skill.name === "humanizer").enabled).toBe(false);
+    await page.goto(`${BASE}/chat/new`);
+    await page.getByRole("button", { name: "Choose agent", exact: true }).click();
+    await page
+      .getByRole("dialog", { name: "Choose agent", exact: true })
+      .getByText("Skill controls", { exact: true })
+      .click();
     await page.getByRole("button", { name: "Skills", exact: true }).click();
     await expect(page.getByRole("button", { name: /^humanizer\b/ })).toHaveCount(0);
     await page.goto(`${BASE}/agents/skill_controls?tab=skills`);

@@ -5006,6 +5006,10 @@ export interface SkillUsage {
 }
 
 export interface SkillMetadataItem {
+  /** General Agent content shared within this Project; absent means locally installed. */
+  sourceAgentId?: string;
+  /** A locally installed version overrides General's skill with the same name. */
+  overridesShared?: boolean;
   /** Installed-copy switch; absent means enabled. */
   enabled?: boolean;
   /** Only requested by skill management, not on composer/library reads. */
@@ -5184,6 +5188,7 @@ export interface AgentMcpServersResponse {
 
 /** GET /api/projects/:p/agents/:a/skills: Skills installed on this Agent. */
 export interface AgentSkillsResponse {
+  /** Effective catalog: private versions first, then same-Project General skills without a private override. */
   skills: SkillMetadataItem[];
 }
 

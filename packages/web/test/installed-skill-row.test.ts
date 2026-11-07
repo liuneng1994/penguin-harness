@@ -4,6 +4,7 @@
  *   skill manageable; the composer and slash picker exclude it.
  * - Given an immediate switch, show the new state while saving, adopt the answer on success,
  *   and restore the old state with an error toast when saving is refused.
+ * - Given a shared entry, its source and copy action are visible, export stays available, and uninstall is absent.
  */
 import { createElement as h, useState } from "react";
 import { afterEach, describe, expect, it } from "vitest";
@@ -61,6 +62,40 @@ function Row({
 }
 
 describe("installed skill row", () => {
+  it("offers independent copies for shared entries while keeping export and hiding source deletion", async () => {
+    let copies = 0,
+      exports = 0;
+    const mounted = await mount(
+      h(
+        LocaleProvider,
+        null,
+        h(
+          "ul",
+          null,
+          h(InstalledSkillRow, {
+            skill: { ...skill, sourceAgentId: "default_agent" },
+            busy: false,
+            onEnabledChange: async () => {},
+            onMakeLocal: () => {
+              copies++;
+            },
+            onExport: () => {
+              exports++;
+            },
+          }),
+        ),
+      ),
+    );
+    expect(mounted.container.textContent).toContain("Shared from General");
+    const buttons = [...mounted.container.querySelectorAll("button")];
+    await click(buttons.find((button) => button.textContent === "Create private copy")!);
+    await click(buttons.find((button) => button.getAttribute("aria-label") === "Export demo")!);
+    expect(copies).toBe(1);
+    expect(exports).toBe(1);
+    expect(buttons.some((button) => button.getAttribute("aria-label") === "Uninstall demo")).toBe(
+      false,
+    );
+  });
   it("shows activity and preserves management while the composer excludes disabled skills", async () => {
     const mounted = await mount(h(Row, { disabled: true, write: async () => {} }));
     expect(mounted.container.textContent).toContain("Selected 2 times");

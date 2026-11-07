@@ -1960,6 +1960,18 @@ export const setAgentSkillEnabled = (
     { method: "PATCH", body: { enabled }, server: machineId },
   );
 
+/** Make an independent, editable copy of General's shared skill; preserve the Agent's switch. */
+export const copySharedSkill = (
+  projectId: string,
+  agentId: string,
+  name: string,
+  machineId: string | null,
+) =>
+  apiFetch<AgentSkillsResponse>(
+    `/api/projects/${encodeURIComponent(projectId)}/agents/${encodeURIComponent(agentId)}/skills/${encodeURIComponent(name)}/local-copy`,
+    { method: "POST", server: machineId },
+  );
+
 export const getAgentHooks = (projectId: string, agentId: string, machineId: string | null) =>
   apiFetch<AgentHooksResponse>(
     `/api/projects/${encodeURIComponent(projectId)}/agents/${encodeURIComponent(agentId)}/hooks`,

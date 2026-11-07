@@ -7,6 +7,7 @@ import type { AmspRecord } from "@prismshadow/amsp/records";
 import { atomicWriteFile } from "../internal/atomic-write.js";
 import { agentStateDir } from "./paths.js";
 import { assertValidId } from "./ids.js";
+import { resolveSkillDirectory, skillStateDirectories } from "./skill-paths.js";
 
 function settingPath(stateDir: string, name: string): string {
   assertValidId("skill_name", name);
@@ -48,7 +49,7 @@ export async function setSkillEnabled(
   const stateDir = agentStateDir(root, projectId, agentId);
   const file = settingPath(stateDir, name);
   // Refuse unknown skills before creating a settings directory.
-  await fs.access(path.join(stateDir, "skills", name, "SKILL.md"));
+  await resolveSkillDirectory(stateDir, name);
   await fs.mkdir(path.dirname(file), { recursive: true });
   await atomicWriteFile(file, `${JSON.stringify({ enabled })}\n`);
 }
@@ -81,12 +82,14 @@ export function installedSkillRead(
   filePath: string,
 ): string | null {
   const paths = /^[A-Za-z]:[\\/]/.test(stateDir) ? path.win32 : path;
-  const relative = paths.relative(
-    paths.join(stateDir, "skills"),
-    paths.resolve(workspace, filePath),
-  );
-  const parts = relative.split(paths.sep);
-  if (parts.length !== 2 || parts[1] !== "SKILL.md" || !/^[A-Za-z0-9_-]+$/.test(parts[0]!))
-    return null;
-  return parts[0]!;
+  for (const source of skillStateDirectories(stateDir)) {
+    const relative = paths.relative(
+      paths.join(source, "skills"),
+      paths.resolve(workspace, filePath),
+    );
+    const parts = relative.split(paths.sep);
+    if (parts.length === 2 && parts[1] === "SKILL.md" && /^[A-Za-z0-9_-]+$/.test(parts[0]!))
+      return parts[0]!;
+  }
+  return null;
 }

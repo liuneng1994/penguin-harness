@@ -1,5 +1,5 @@
 /** Only the explicit Project settings action copies General Agent skills. Local conflicts
- * and disabled states are preserved; new Agents remain empty until another manual action.
+ * and disabled states are preserved; new Agents borrow shared content until another manual action.
  * Another Project stays unchanged. Capture the settings row in every theme.
  */
 import { test, expect } from "@playwright/test";
@@ -14,6 +14,8 @@ test("General Agent skills sync only on manual action within the Project", async
   const { projects } = await (await page.request.get(`${BASE}/api/projects`)).json();
   const projectId = projects[0].projectId;
   const root = `${BASE}/api/projects/${projectId}`;
+  const projectName = "Skill sync Project";
+  expect((await page.request.patch(root, { data: { name: projectName } })).ok()).toBe(true);
   const source = `${root}/agents/default_agent`;
   const { skills } = await (await page.request.get(`${source}/skills`)).json();
   for (const skill of skills)
@@ -39,10 +41,13 @@ test("General Agent skills sync only on manual action within the Project", async
   expect(
     (await page.request.post(`${otherRoot}/agents`, { data: { agentId: "other_writer" } })).ok(),
   ).toBe(true);
+  const otherBefore = (
+    await (await page.request.get(`${otherRoot}/agents/other_writer/skills`)).json()
+  ).skills;
   for (const themeId of ["github", "modern", "geek"]) {
     await setAccountPrefs(page.request, { lang: "en", themeId });
     await page.goto(`${BASE}/agents`);
-    await page.getByRole("button", { name: projects[0].name, exact: true }).first().click();
+    await page.getByRole("button", { name: projectName, exact: true }).click();
     await page.getByRole("button", { name: "Project settings", exact: true }).click();
     const dialog = page.getByRole("dialog", { name: "Project settings" });
     const sync = dialog.getByRole("button", { name: "Sync General Agent skills" });
@@ -51,7 +56,7 @@ test("General Agent skills sync only on manual action within the Project", async
     if (themeId === "github")
       expect(
         (await (await page.request.get(`${root}/agents/writer/skills`)).json()).skills,
-      ).toEqual([]);
+      ).toEqual([expect.objectContaining({ name: "humanizer", sourceAgentId: "default_agent" })]);
     await expect(dialog.getByRole("switch")).toHaveCount(0);
     await sync.click();
     await expect(dialog).toContainText("1 synced");
@@ -82,7 +87,7 @@ test("General Agent skills sync only on manual action within the Project", async
   ).toBe(true);
   expect(
     (await (await page.request.get(`${root}/agents/new_writer/skills`)).json()).skills,
-  ).toEqual([]);
+  ).toEqual([expect.objectContaining({ name: "humanizer", sourceAgentId: "default_agent" })]);
   expect((await page.request.post(`${root}/skill-sync`)).ok()).toBe(true);
   expect(
     (await (await page.request.get(`${root}/agents/new_writer/skills`)).json()).skills.map(
@@ -91,5 +96,5 @@ test("General Agent skills sync only on manual action within the Project", async
   ).toContain("humanizer");
   expect(
     (await (await page.request.get(`${otherRoot}/agents/other_writer/skills`)).json()).skills,
-  ).toEqual([]);
+  ).toEqual(otherBefore);
 });

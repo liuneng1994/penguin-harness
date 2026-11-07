@@ -7,6 +7,7 @@
  * - Given a running Session whose skill is disabled, new entry reads are denied even if a hook allows them.
  * - Given an ordinary file or an enabled entry, reading still succeeds; malformed tool arguments reach validation.
  * - Given paths recorded on another platform, match only the installed entry, never a workspace lookalike.
+ * - Given a shared entry in a running Session, its consumer's switch blocks entry reads even when General keeps it enabled.
  */
 import fs from "node:fs/promises";
 import os from "node:os";
@@ -51,7 +52,10 @@ afterEach(async () => {
   await fs.rm(root, { recursive: true, force: true });
 });
 
-function sessionFor(calls: string[] = []): { session: Session; contacts: () => number } {
+function sessionFor(calls: (string | undefined)[] = []): {
+  session: Session;
+  contacts: () => number;
+} {
   let turn = 0;
   const llm: LLMInterface = {
     async *streamGenerate(): AsyncGenerator<AmspRecord, LLMOutcome> {
@@ -107,6 +111,39 @@ async function collect(session: Session, input = "hello") {
 }
 
 describe("skill switches", () => {
+  it("enforces the consumer's switch on General's shared entry while allowing enabled reads", async () => {
+    await installSkill(root, P, "default_agent", {
+      name: "shared",
+      content: "---\nname: shared\n---\nShared body\n",
+    });
+    const sharedPath = path.join(agentStateDir(root, P, "default_agent"), "skills/shared/SKILL.md");
+    const { session } = sessionFor([
+      JSON.stringify({ file_path: sharedPath }),
+      undefined,
+      JSON.stringify({ file_path: sharedPath }),
+    ]);
+    await setSkillEnabled(root, P, A, "shared", false);
+    const denied = await collect(session);
+    expect(
+      denied.some(
+        (msg) =>
+          isCompleteModelMessage(msg) &&
+          msg.payload.type === "tool_call_output" &&
+          msg.payload.status === "aborted",
+      ),
+    ).toBe(true);
+    await setSkillEnabled(root, P, A, "shared", true);
+    const allowed = await collect(session);
+    expect(
+      allowed.some(
+        (msg) =>
+          isCompleteModelMessage(msg) &&
+          msg.payload.type === "tool_call_output" &&
+          msg.payload.output.includes("Shared body"),
+      ),
+    ).toBe(true);
+    await session.dispose();
+  });
   it("existing skills remain enabled and require no rewritten content or state", async () => {
     await install();
     const before = await fs.readFile(file("demo"), "utf8");
