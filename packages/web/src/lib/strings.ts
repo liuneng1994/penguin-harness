@@ -1664,6 +1664,21 @@ export const zh = {
     /** The model default shares its source with the Models page (the same default_model); this is just another entry point. */
     chatDefaultsModelHint: "与模型页的默认模型同步",
     /** Settings dialog tab rail. */
+    skillSyncTitle: "General Agent 技能同步",
+    skillSyncInfo:
+      "点击按钮后，将此 Project 的 General Agent 技能同步到本服务端的其他 Agent。新增技能会被安装，没有本地改动的同步副本会被更新。同名本地技能和副本中的本地修改会保留，并显示冲突。每个 Agent 的技能开关和使用历史保持独立。查看预览、新建 Agent 或开启对话不会同步；源技能移除后也会保留已安装的副本。",
+    skillSyncNow: "同步 General Agent 技能",
+    skillSyncPreview: (items: number, agents: number, conflicts: number): string =>
+      `待同步 ${items} 项，${agents} 个 Agent，${conflicts} 项冲突`,
+    skillSyncConflicts: "技能同步冲突",
+    skillSyncSummary: (items: number, agents: number, conflicts: number): string =>
+      `已同步 ${items} 项，${agents} 个 Agent，${conflicts} 项冲突`,
+    skillSyncReasons: {
+      local_skill: "已有同名本地技能，已保留",
+      local_edits: "同步副本有本地修改，已保留",
+      source_removed: "源技能已移除，副本已保留",
+      unreadable: "无法读取或同步技能文件",
+    },
     settingsTabGeneral: "通用",
     settingsTabMembers: "成员",
     settingsTabDefaults: "默认值",
@@ -3330,7 +3345,30 @@ export const zh = {
       `确定从 ${agent} 卸载 ${skill} 吗？已安装的技能文件（含本地改动）将被删除。`,
     /** Agent settings "Skills" tab (installed list + import modal). */
     agentTabDesc:
-      "该 Agent 已安装的技能（agent_state/skills/，文件即事实来源）：元数据注入系统提示词，正文由模型按需读取；卸载会删除整个技能目录。",
+      "每个技能可以单独启用或禁用。禁用保留文件，停止自动发现、手动选择和新的技能读取；已进入上下文的内容会保留到压缩后。统计来自保留的对话记录：指定次数是用户选择技能的消息数，读取次数是通过 read_file 成功读取 SKILL.md 的次数，读取失败单独计数。最近使用取最后一次指定或成功读取的时间。卸载会删除技能文件，启停状态在重装后保留。",
+    sharedFromGeneral: "General 共享",
+    privateVersion: "独立版本",
+    makeLocalCopy: "创建独立副本",
+    localCopyCreated: (name: string): string => `已创建 ${name} 的独立副本`,
+    generalSharingInfo:
+      "General 的技能供同 Project 的其他 Agent 共享使用，已有文件保留原位。每个 Agent 的开关和统计独立；更新共享文件会影响使用它的 Agent，独立副本会保留。共享技能不会为其他 Agent 安装其 MCP 服务或钩子。",
+    sharedSkillInfo:
+      "General 共享的技能使用同一份文件。同名独立技能优先；需要修改时可创建独立副本，卸载副本后恢复使用共享版本。本 Agent 的开关和统计独立，新发现的技能在下一个模型上下文中可用。",
+    uninstallSharedConfirmBody: (name: string): string =>
+      `确定从 General 删除共享技能 ${name} 吗？文件会被删除，其他 Agent 将失去这个共享版本，已有独立副本会保留。`,
+    uninstallPrivateConfirmBody: (name: string, agent: string): string =>
+      `确定从 ${agent} 删除 ${name} 的独立版本吗？本地文件和修改会被删除，此 Agent 将恢复使用 General 的共享版本，当前开关保留。`,
+    disabled: "已禁用",
+    enableSkill: (name: string): string => `启用 ${name}`,
+    disableSkill: (name: string): string => `禁用 ${name}`,
+    switchSaved: (name: string, enabled: boolean): string =>
+      `${name} 已${enabled ? "启用" : "禁用"}`,
+    invocations: (n: number): string => `指定 ${n} 次`,
+    reads: (n: number): string => `读取 ${n} 次`,
+    failedReads: (n: number): string => `读取失败 ${n} 次`,
+    sessions: (n: number): string => `${n} 个对话`,
+    lastUsed: (time: string): string => `最近使用：${time}`,
+    neverUsed: "尚未使用",
     agentTabEmpty: "尚未安装任何技能",
     exportSkill: "打包导出",
     importSkill: "导入技能",

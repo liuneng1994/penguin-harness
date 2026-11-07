@@ -63,6 +63,7 @@ import { WorkspaceSelect } from "../../features/chat/workspace-select";
 import { sameModelRef } from "../../features/models/model-grouping";
 import { SemanticIdField } from "../../features/semantic-id/semantic-id-field";
 import { toastApiError } from "../../lib/toast-api-error";
+import { ProjectSkillSync } from "../../features/skills/project-skill-sync";
 
 /**
  * Every form on the settings dialog's tabs: a tab switch and the dialog's close ask about these,
@@ -315,7 +316,7 @@ function GeneralSection({
   isOwner: boolean;
   onClose: () => void;
 }) {
-  const { currentProject, setCurrentProjectId, projects, reloadProjects } = useProject();
+  const { currentProject, setCurrentProjectId, projects, reloadProjects, agents } = useProject();
   /** The saved display name, with the same id fallback the switcher shows. */
   const savedName = currentProject ? projectDisplayName(currentProject) : "";
   /** Display-name edit buffer (owner only); saving is explicit, so it stays dirty until Save. */
@@ -399,6 +400,13 @@ function GeneralSection({
       <SettingRow title={S.project.projectIdLabel}>
         <span className="font-mono text-xs text-gray-400">{projectId}</span>
       </SettingRow>
+      <ProjectSkillSync
+        projectId={projectId}
+        isOwner={isOwner}
+        agentNames={Object.fromEntries(
+          agents.map((agent) => [agent.agentId, agentDisplayName(agent)]),
+        )}
+      />
       {isOwner &&
         (projectId === "default_project" ? (
           <SettingRow

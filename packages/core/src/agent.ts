@@ -26,7 +26,7 @@ import {
   DEFAULT_COMPACTION_PROMPT,
   formatModelRef,
   getModel,
-  listInstalledSkills,
+  listAvailableSkills,
   listScheduleNames,
   loadAgentState,
   loadAgentVault,
@@ -590,7 +590,7 @@ export class Agent {
         : await listInstalledHooks(root, projectId, agentId);
     let systemPrompt = opts.systemPrompt;
     if (systemPrompt === undefined) {
-      const installedSkills = await listInstalledSkills(root, projectId, agentId);
+      const installedSkills = await listAvailableSkills(root, projectId, agentId);
       // Schedule task names for the {{SCHEDULES}} roster (names only; the files' contents are
       // the server-side scheduler's concern).
       const scheduleNames = await listScheduleNames(root, projectId, agentId);

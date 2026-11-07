@@ -4979,7 +4979,41 @@ export interface BenchmarkArchiveImportResponse {
 // Plugin library, and an Agent's installed skills and hooks
 // ---------------------------------------------------------------------------
 
+/** Preview or result of explicitly sharing this Project's General Agent skills. */
+export interface SkillSyncResponse {
+  sourceAgentId: string;
+  targets: number;
+  entries: Array<{
+    agentId: string;
+    name: string;
+    status: "pending" | "synced" | "current" | "conflict";
+    reason?: "local_skill" | "local_edits" | "source_removed" | "unreadable";
+  }>;
+}
+
+/** Activity within an Agent's retained Trace history. */
+export interface SkillUsage {
+  /** User messages explicitly selecting the skill, counted once per message. */
+  invocations: number;
+  /** Completed read_file calls for the installed SKILL.md. */
+  reads: number;
+  /** Non-completed read_file calls for that entry file. */
+  failedReads: number;
+  /** Distinct native sessions with a selection or read attempt. */
+  sessions: number;
+  /** Latest explicit selection or completed read (UTC); null if neither exists. */
+  lastUsedAt: string | null;
+}
+
 export interface SkillMetadataItem {
+  /** General Agent content shared within this Project; absent means locally installed. */
+  sourceAgentId?: string;
+  /** A locally installed version overrides General's skill with the same name. */
+  overridesShared?: boolean;
+  /** Installed-copy switch; absent means enabled. */
+  enabled?: boolean;
+  /** Only requested by skill management, not on composer/library reads. */
+  usage?: SkillUsage;
   /** Skill directory name (the identity key for install / uninstall / Prompt addressing). */
   name: string;
   description: string;
@@ -5154,6 +5188,7 @@ export interface AgentMcpServersResponse {
 
 /** GET /api/projects/:p/agents/:a/skills: Skills installed on this Agent. */
 export interface AgentSkillsResponse {
+  /** Effective catalog: private versions first, then same-Project General skills without a private override. */
   skills: SkillMetadataItem[];
 }
 

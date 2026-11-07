@@ -1544,6 +1544,21 @@ export const en: Strings = {
     /** The model default is single-sourced with the Models page (the same default_model); this is just another entry point. */
     chatDefaultsModelHint: "Same default model as the Models page",
     /** Settings dialog tab rail. */
+    skillSyncTitle: "General Agent skill sync",
+    skillSyncInfo:
+      "Click the button to sync this Project's General Agent skills to its other agents on this server. Missing skills are installed and unedited synced copies are updated. Local skills with the same name and local edits are preserved and listed as conflicts. Each agent keeps its own skill switches and activity history. Previewing, creating an agent or opening a conversation does not sync files. Removing a source keeps installed copies in place.",
+    skillSyncNow: "Sync General Agent skills",
+    skillSyncPreview: (items: number, agents: number, conflicts: number): string =>
+      `${items} to sync, ${agents} ${agents === 1 ? "agent" : "agents"}, ${conflicts} ${conflicts === 1 ? "conflict" : "conflicts"}`,
+    skillSyncConflicts: "Skill sync conflicts",
+    skillSyncSummary: (items: number, agents: number, conflicts: number): string =>
+      `${items} synced, ${agents} ${agents === 1 ? "agent" : "agents"}, ${conflicts} ${conflicts === 1 ? "conflict" : "conflicts"}`,
+    skillSyncReasons: {
+      local_skill: "Local skill with the same name preserved",
+      local_edits: "Local edits to the synced copy preserved",
+      source_removed: "Source removed; installed copy preserved",
+      unreadable: "Could not read or sync skill files",
+    },
     settingsTabGeneral: "General",
     settingsTabMembers: "Members",
     settingsTabDefaults: "Defaults",
@@ -3151,7 +3166,30 @@ export const en: Strings = {
       `Uninstall ${skill} from ${agent}? Its installed files (local edits included) will be deleted.`,
     /** Agent settings "Skills" tab (installed list + import modal). */
     agentTabDesc:
-      "Skills installed on this agent (agent_state/skills/ — the files are the source of truth): metadata is injected into the system prompt and the body is read by the model on demand; uninstalling deletes the whole skill directory.",
+      "Enable or disable each skill independently. Disabling preserves its files and stops discovery, manual selection and new skill reads; content already in context stays until compaction. Activity comes from retained conversations: selections count user messages that name the skill, reads count completed read_file calls for SKILL.md, and failed reads are counted separately. Last used is the latest selection or completed read. Uninstalling deletes the skill files; its switch survives reinstallation.",
+    sharedFromGeneral: "Shared from General",
+    privateVersion: "Private version",
+    makeLocalCopy: "Create private copy",
+    localCopyCreated: (name: string): string => `Created a private copy of ${name}`,
+    generalSharingInfo:
+      "General's skills are shared with the other agents in this Project. Existing files stay in place. Each agent keeps its own switches and activity. Updates to these files are shared; private copies are preserved. Sharing skills does not install their MCP servers or hooks on other agents.",
+    sharedSkillInfo:
+      "Skills shared from General use the same files. A private skill with the same name takes precedence. Create a private copy to customize a shared skill; uninstalling that copy restores the shared version. This agent's switches and activity remain independent. Newly discovered skills enter the next model context.",
+    uninstallSharedConfirmBody: (name: string): string =>
+      `Delete the shared skill ${name} from General? Its files will be deleted and other agents will lose this shared version. Their private copies will be kept.`,
+    uninstallPrivateConfirmBody: (name: string, agent: string): string =>
+      `Delete the private version of ${name} from ${agent}? Its local files and edits will be deleted. This agent will use General's shared version again, keeping its current switch.`,
+    disabled: "Disabled",
+    enableSkill: (name: string): string => `Enable ${name}`,
+    disableSkill: (name: string): string => `Disable ${name}`,
+    switchSaved: (name: string, enabled: boolean): string =>
+      `${name} ${enabled ? "enabled" : "disabled"}`,
+    invocations: (n: number): string => `Selected ${n} ${n === 1 ? "time" : "times"}`,
+    reads: (n: number): string => `Read ${n} ${n === 1 ? "time" : "times"}`,
+    failedReads: (n: number): string => `${n} failed ${n === 1 ? "read" : "reads"}`,
+    sessions: (n: number): string => `${n} ${n === 1 ? "conversation" : "conversations"}`,
+    lastUsed: (time: string): string => `Last used: ${time}`,
+    neverUsed: "Never",
     agentTabEmpty: "No skills installed yet",
     exportSkill: "Export",
     importSkill: "Import skill",

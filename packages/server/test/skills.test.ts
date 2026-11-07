@@ -8,7 +8,7 @@
  *   a reinstall restores hand-edited content. An unknown skill is a 404 with nothing half
  *   installed, a malformed body a 400; outsiders and a missing Agent get 404.
  * - default_agent starts with the preinstalled library set (preinstall: false skills stay
- *   manual); a new plain Agent has none; creating an Agent seeds the picked skills, refuses an
+ *   manual); a new plain Agent has no private skills; creating an Agent seeds the picked skills, refuses an
  *   unknown one without creating the Agent, and refuses a non-array field.
  * - An archive installs in the nested or the root layout (the directory name winning over the
  *   frontmatter), refuses zip-slip, invalid names, malformed bodies and anything past the
@@ -215,11 +215,9 @@ describe("skills api", () => {
     });
     expect(res.status).toBe(201);
     const body = (await res.json()) as AgentSkillsResponse;
-    expect(body.skills.map((s) => s.name)).toEqual([
-      "data-analysis",
-      "software-engineering",
-      "web-design",
-    ]);
+    expect(
+      body.skills.filter((skill) => skill.sourceAgentId === undefined).map((s) => s.name),
+    ).toEqual(["data-analysis", "software-engineering", "web-design"]);
     // The installed list likewise passes through the short description and the icon — the
     // plugin's, written as icon.svg beside SKILL.md on install (a skill has none of its own).
     const installed = body.skills.find((s) => s.name === "web-design")!;
@@ -246,10 +244,12 @@ describe("skills api", () => {
     expect((await member.delete(`${url}/web-design`)).status).toBe(204);
     await expect(fs.access(path.dirname(skillFile("web-design")))).rejects.toThrow();
     const after = (await (await member.get(url)).json()) as AgentSkillsResponse;
-    expect(after.skills.map((s) => s.name)).toEqual(["data-analysis", "software-engineering"]);
+    expect(
+      after.skills.filter((skill) => skill.sourceAgentId === undefined).map((s) => s.name),
+    ).toEqual(["data-analysis", "software-engineering"]);
 
     // Deleting a Skill that isn't installed (or was already uninstalled) → 404.
-    expect((await member.delete(`${url}/web-design`)).status).toBe(404);
+    expect((await member.delete(`${url}/no-such-skill`)).status).toBe(404);
   });
 
   it("reinstall is an idempotent update: hand-edited on-disk content is restored to the library content", async () => {
@@ -268,7 +268,9 @@ describe("skills api", () => {
     const res = await owner.post(toPlugins(url), { names: ["agent-development"] });
     expect(res.status).toBe(201);
     const body = (await res.json()) as AgentSkillsResponse;
-    expect(body.skills.map((s) => s.name)).toEqual([
+    expect(
+      body.skills.filter((skill) => skill.sourceAgentId === undefined).map((s) => s.name),
+    ).toEqual([
       "agent-initialization",
       "penguin-config",
       "penguin-orchestration",
@@ -289,7 +291,7 @@ describe("skills api", () => {
     expect(err.error.message).toContain("no-such-skill");
     // Whole request rejected: even the valid library skill was not written to disk.
     const list = (await (await owner.get(url)).json()) as AgentSkillsResponse;
-    expect(list.skills).toEqual([]);
+    expect(list.skills.filter((skill) => skill.sourceAgentId === undefined)).toEqual([]);
   });
 
   it("request body validation 400: names missing / empty array / non-string entries", async () => {
@@ -319,10 +321,16 @@ describe("skills api", () => {
     expect(res.status).toBe(200);
     const body = (await res.json()) as AgentSkillsResponse;
     // loadPreinstalledSkills keeps loadLibrarySkills' name sort, matching the installed-list ordering.
-    expect(body.skills.map((s) => s.name)).toEqual(preinstalledSkillNames());
+    expect(
+      body.skills.filter((skill) => skill.sourceAgentId === undefined).map((s) => s.name),
+    ).toEqual(preinstalledSkillNames());
     // use-claude-code and humanizer ship in the library marked `preinstall: false`: their skills are not present here.
-    expect(body.skills.map((s) => s.name)).not.toContain("remote-claude-code");
-    expect(body.skills.map((s) => s.name)).not.toContain("humanizer");
+    expect(
+      body.skills.filter((skill) => skill.sourceAgentId === undefined).map((s) => s.name),
+    ).not.toContain("remote-claude-code");
+    expect(
+      body.skills.filter((skill) => skill.sourceAgentId === undefined).map((s) => s.name),
+    ).not.toContain("humanizer");
     // The installed list likewise passes through the Chinese and short descriptions
     // (listInstalledSkills parses these from the on-disk frontmatter) and the icon each
     // install wrote beside SKILL.md — its plugin's.
@@ -338,7 +346,9 @@ describe("skills api", () => {
     });
     expect(manual.status).toBe(201);
     const withManual = (await manual.json()) as AgentSkillsResponse;
-    expect(withManual.skills.map((s) => s.name)).toContain("remote-claude-code");
+    expect(
+      withManual.skills.filter((skill) => skill.sourceAgentId === undefined).map((s) => s.name),
+    ).toContain("remote-claude-code");
     // A multi-file skill: the file its SKILL.md references is installed alongside SKILL.md,
     // byte-identical to the library source (subdirectory preserved).
     const aux = "reference/persistent-session.md";
@@ -354,7 +364,7 @@ describe("skills api", () => {
 
     await createPlainAgent("fresh_agent");
     const fresh = (await (await member.get(base("fresh_agent"))).json()) as AgentSkillsResponse;
-    expect(fresh.skills).toEqual([]);
+    expect(fresh.skills.filter((skill) => skill.sourceAgentId === undefined)).toEqual([]);
   });
 
   it("agent create seeds the picked library skills; the files land verbatim and the card count follows", async () => {
@@ -370,7 +380,9 @@ describe("skills api", () => {
     // The installed list is the same shape a library install produces (name-sorted):
     // every skill of both merged plugins.
     const listed = (await (await member.get(base("seeded_agent"))).json()) as AgentSkillsResponse;
-    expect(listed.skills.map((s) => s.name)).toEqual([
+    expect(
+      listed.skills.filter((skill) => skill.sourceAgentId === undefined).map((s) => s.name),
+    ).toEqual([
       "agent-initialization",
       "penguin-config",
       "penguin-orchestration",
@@ -407,7 +419,7 @@ describe("skills api", () => {
   it("agent create without skills stays a plain Agent; a non-array skills field is 400", async () => {
     await createPlainAgent("plain_seed");
     const plain = (await (await member.get(base("plain_seed"))).json()) as AgentSkillsResponse;
-    expect(plain.skills).toEqual([]);
+    expect(plain.skills.filter((skill) => skill.sourceAgentId === undefined)).toEqual([]);
     const bad = await owner.post(`/api/projects/${projectId}/agents`, {
       agentId: "bad_seed",
       plugins: "penguin-sdk",
@@ -472,9 +484,13 @@ describe("skills api", () => {
     });
     expect(res.status).toBe(201);
     const body = (await res.json()) as AgentSkillsResponse;
-    expect(body.skills.map((s) => s.name)).toEqual(["dir-skill"]);
-    expect(body.skills[0]!.version).toBe("2026.08.01.2");
-    expect(body.skills[0]!.shortDescription).toBe("Zip demo");
+    expect(
+      body.skills.filter((skill) => skill.sourceAgentId === undefined).map((s) => s.name),
+    ).toEqual(["dir-skill"]);
+    expect(body.skills.find((skill) => skill.name === "dir-skill")!.version).toBe("2026.08.01.2");
+    expect(body.skills.find((skill) => skill.name === "dir-skill")!.shortDescription).toBe(
+      "Zip demo",
+    );
     const dir = path.join(skillsDir(t.root, projectId, "zip_agent"), "dir-skill");
     expect(await fs.readFile(path.join(dir, "SKILL.md"), "utf8")).toBe(ZIP_SKILL_MD);
     expect(await fs.readFile(path.join(dir, "ref", "notes.md"), "utf8")).toBe("notes\n");
@@ -488,14 +504,16 @@ describe("skills api", () => {
     });
     expect(res.status).toBe(201);
     const body = (await res.json()) as AgentSkillsResponse;
-    expect(body.skills.map((s) => s.name)).toEqual(["zip-skill"]);
+    expect(
+      body.skills.filter((skill) => skill.sourceAgentId === undefined).map((s) => s.name),
+    ).toEqual(["zip-skill"]);
     // Uninstall goes through the same DELETE route as library skills: 204, directory gone.
     expect((await member.delete(`${url}/zip-skill`)).status).toBe(204);
     await expect(
       fs.access(path.join(skillsDir(t.root, projectId, "zip_root_agent"), "zip-skill")),
     ).rejects.toThrow();
     const after = (await (await member.get(url)).json()) as AgentSkillsResponse;
-    expect(after.skills).toEqual([]);
+    expect(after.skills.filter((skill) => skill.sourceAgentId === undefined)).toEqual([]);
   });
 
   it("archive: zip-slip and unsafe entry paths are rejected with 400, nothing written", async () => {
@@ -522,7 +540,7 @@ describe("skills api", () => {
     });
     expect(collision.status).toBe(400);
     const list = (await (await owner.get(url)).json()) as AgentSkillsResponse;
-    expect(list.skills).toEqual([]);
+    expect(list.skills.filter((skill) => skill.sourceAgentId === undefined)).toEqual([]);
   });
 
   it("archive: invalid skill names are rejected (top-level dir and frontmatter name)", async () => {
@@ -580,7 +598,7 @@ describe("skills api", () => {
       error: { message: expect.stringContaining("200-file limit") },
     });
     const list = (await (await owner.get(base("zip_limit_agent"))).json()) as AgentSkillsResponse;
-    expect(list.skills).toEqual([]);
+    expect(list.skills.filter((skill) => skill.sourceAgentId === undefined)).toEqual([]);
     await expect(
       fs.stat(path.join(skillsDir(t.root, projectId, "zip_limit_agent"), "zip-skill")),
     ).rejects.toMatchObject({ code: "ENOENT" });
@@ -619,7 +637,7 @@ describe("skills api", () => {
     const list = (await (
       await owner.get(base("zip_declared_agent"))
     ).json()) as AgentSkillsResponse;
-    expect(list.skills).toEqual([]);
+    expect(list.skills.filter((skill) => skill.sourceAgentId === undefined)).toEqual([]);
     await expect(
       fs.stat(path.join(skillsDir(t.root, projectId, "zip_declared_agent"), "zip-skill")),
     ).rejects.toMatchObject({ code: "ENOENT" });
@@ -940,7 +958,9 @@ describe("skills api", () => {
       const body = (await (await member.get("/api/plugins")).json()) as PluginLibraryResponse;
       const sample = body.groups.flatMap((g) => g.plugins).find((p) => p.name === "sample")!;
       expect(sample).toMatchObject({ version: "1.0.0", hookVersion: "2026.10.04.1" });
-      expect(sample.skills.map((s) => s.version)).toEqual(["2026.10.04.1", "2026.10.04.1"]);
+      expect(
+        sample.skills.filter((skill) => skill.sourceAgentId === undefined).map((s) => s.version),
+      ).toEqual(["2026.10.04.1", "2026.10.04.1"]);
     });
 
     it("serves a library plugin's README.md, and 404 without one or for no such plugin", async () => {

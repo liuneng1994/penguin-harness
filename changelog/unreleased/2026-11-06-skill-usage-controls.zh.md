@@ -1,0 +1,16 @@
+# 技能使用统计与独立开关
+
+- **Date:** 2026-11-06
+- **Type:** feature
+- **Scope:** core, server, web
+- **PR:** https://github.com/liuneng1994/penguin-harness/pull/1
+
+[English](2026-11-06-skill-usage-controls.md)
+
+在 Agent 设置中为每个已安装技能增加了独立开关和使用统计。禁用保留了技能文件，将技能移出自动发现列表和输入框的选择菜单，并拒绝新的显式调用和通过 `read_file` 读取技能入口。重新启用恢复了可用性。
+
+## 使用统计
+
+列表显示了用户指定次数、成功读取次数、读取失败次数、涉及的对话数，以及最后一次指定或成功读取的时间。统计从保留的 Trace 历史推导，包含旧记录；转发的子 Agent 记录不计入父 Agent 的统计。模型 Token 消耗和任务成功率未归因到技能。
+
+启停状态单独存储，更新和重装技能后仍然保留。已有文件采用了[默认启用的行为](2026-11-06-backward-compatibility.zh.md)。

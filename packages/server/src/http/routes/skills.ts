@@ -17,8 +17,12 @@ import path from "node:path";
 import { strFromU8, zipSync } from "fflate";
 import { Hono } from "hono";
 import {
-  listInstalledSkills,
+  listAvailableSkills,
+  agentStateDir,
+  DEFAULT_AGENT_ID,
+  resolveSkillDirectory,
   removeSkill,
+  setSkillEnabled,
   replaceSkillDirectory,
   skillsDir,
   parseSkillFrontmatter,
@@ -33,10 +37,14 @@ export interface SkillsRouteDeps {
   agentConfigService: AgentConfig;
   config: ServerConfig;
   access: Access;
+  traceIndex: TraceIndex;
+  traceStore: TraceIndexStore;
 }
 import { HttpError } from "../errors.js";
 import { badRequest, readJson, requireString, requireValidId } from "../validate.js";
 import { toSkillItem } from "../../services/plugin-library.js";
+import { SkillUsageReader, emptySkillUsage } from "../../services/skill-usage.js";
+import type { TraceIndex, TraceIndexStore } from "../../mechanisms/traces.js";
 import {
   MAX_ARCHIVE_BYTES,
   MAX_ARCHIVE_FILES,
@@ -165,12 +173,13 @@ function explicitSkillVersion(skillMd: string): string | null {
 /** /api/projects/:p/agents/:a/skills: read, import/export and uninstall are all Project-member operations. */
 export function agentSkillsRoutes(deps: SkillsRouteDeps): Hono<AppEnv> {
   const app = new Hono<AppEnv>();
+  const usageReader = new SkillUsageReader(deps.config.root, deps.traceIndex, deps.traceStore);
 
   const listResponse = async (
     projectId: string,
     agentId: string,
   ): Promise<AgentSkillsResponse> => ({
-    skills: (await listInstalledSkills(deps.config.root, projectId, agentId)).map(toSkillItem),
+    skills: (await listAvailableSkills(deps.config.root, projectId, agentId)).map(toSkillItem),
   });
 
   app.get("/", async (c) => {
@@ -179,7 +188,33 @@ export function agentSkillsRoutes(deps: SkillsRouteDeps): Hono<AppEnv> {
     const agentId = requireValidId(c, "agentId");
     deps.access.requireProjectAccess(c.var.user.userId, projectId);
     await deps.agentConfigService.requireExists(projectId, agentId);
-    return c.json(await listResponse(projectId, agentId));
+    const response = await listResponse(projectId, agentId);
+    if (c.req.query("usage") === "true") {
+      const usage = await usageReader.read(projectId, agentId);
+      response.skills = response.skills.map((skill) => ({
+        ...skill,
+        usage: usage.get(skill.name) ?? emptySkillUsage(),
+      }));
+    }
+    return c.json(response);
+  });
+
+  app.patch("/:name", async (c) => {
+    const projectId = requireValidId(c, "projectId");
+    const agentId = requireValidId(c, "agentId");
+    const name = requireValidId(c, "name");
+    deps.access.requireProjectAccess(c.var.user.userId, projectId);
+    await deps.agentConfigService.requireExists(projectId, agentId);
+    const body = await readJson(c);
+    if (typeof body.enabled !== "boolean") throw badRequest("enabled must be a boolean.");
+    try {
+      await setSkillEnabled(deps.config.root, projectId, agentId, name, body.enabled);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT")
+        throw new HttpError(404, "not_found", `Skill is not installed: ${name}`);
+      throw error;
+    }
+    return c.json({ enabled: body.enabled });
   });
 
   // Insert (or migrate a legacy hardcoded # Skills section to) the {{SKILLS}} placeholder —
@@ -245,7 +280,15 @@ export function agentSkillsRoutes(deps: SkillsRouteDeps): Hono<AppEnv> {
     const agentId = requireValidId(c, "agentId");
     deps.access.requireProjectAccess(c.var.user.userId, projectId);
     const name = requireValidId(c, "name");
-    const dir = path.join(skillsDir(deps.config.root, projectId, agentId), name);
+    await deps.agentConfigService.requireExists(projectId, agentId);
+    let dir: string;
+    try {
+      dir = await resolveSkillDirectory(agentStateDir(deps.config.root, projectId, agentId), name);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT")
+        throw new HttpError(404, "not_found", `Skill is not available: ${name}`);
+      throw error;
+    }
     // Installed-check uses the same criterion as listInstalledSkills: skills/<name>/SKILL.md exists.
     try {
       await fs.access(path.join(dir, "SKILL.md"));
@@ -273,15 +316,58 @@ export function agentSkillsRoutes(deps: SkillsRouteDeps): Hono<AppEnv> {
     const agentId = requireValidId(c, "agentId");
     deps.access.requireProjectAccess(c.var.user.userId, projectId);
     const name = requireValidId(c, "name");
+    await deps.agentConfigService.requireExists(projectId, agentId);
     // Installed-check uses the same criterion as listInstalledSkills: skills/<name>/SKILL.md exists.
     const file = path.join(skillsDir(deps.config.root, projectId, agentId), name, "SKILL.md");
     try {
       await fs.access(file);
     } catch {
+      const available = await listAvailableSkills(deps.config.root, projectId, agentId);
+      if (available.some((skill) => skill.name === name && skill.sourceAgentId !== undefined))
+        throw new HttpError(
+          409,
+          "shared_skill",
+          "Shared skills are managed on the General Agent. Disable this skill for this Agent instead.",
+        );
       throw new HttpError(404, "not_found", `Skill is not installed: ${name}`);
     }
     await removeSkill(deps.config.root, projectId, agentId, name);
     return c.body(null, 204);
+  });
+
+  // Explicitly detach one skill from the shared source. GET/listing never creates a copy.
+  app.post("/:name/local-copy", async (c) => {
+    const projectId = requireValidId(c, "projectId");
+    const agentId = requireValidId(c, "agentId");
+    const name = requireValidId(c, "name");
+    deps.access.requireProjectAccess(c.var.user.userId, projectId);
+    await deps.agentConfigService.requireExists(projectId, agentId);
+    const source = (await listAvailableSkills(deps.config.root, projectId, agentId)).find(
+      (skill) => skill.name === name,
+    );
+    if (!source) throw new HttpError(404, "not_found", `Skill is not available: ${name}`);
+    if (source.sourceAgentId === undefined)
+      throw new HttpError(409, "not_shared", "This skill has no shared version to copy.");
+    const sharedDir = path.join(skillsDir(deps.config.root, projectId, DEFAULT_AGENT_ID), name);
+    const archive = await collectSkillArchive(sharedDir, name);
+    const files = new Map(
+      Object.entries(archive).map(([entry, bytes]) => [entry.slice(name.length + 1), bytes]),
+    );
+    const target = path.join(skillsDir(deps.config.root, projectId, agentId), name);
+    await replaceSkillDirectory(target, files, {
+      beforeReplace: async () => {
+        const exists = await fs.lstat(target).then(
+          () => true,
+          (error: NodeJS.ErrnoException) => {
+            if (error.code === "ENOENT") return false;
+            throw error;
+          },
+        );
+        if (exists)
+          throw new HttpError(409, "skill_exists", `A private skill already exists: ${name}`);
+      },
+    });
+    return c.json(await listResponse(projectId, agentId), 201);
   });
 
   return app;

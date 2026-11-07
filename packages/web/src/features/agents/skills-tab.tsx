@@ -1,6 +1,6 @@
 /**
- * Agent settings page "Skills" tab: the skills installed on this Agent
- * (agent_state/skills/<name>/ — the files are the single source of truth, so the list is
+ * Agent settings page "Skills" tab: this Agent's private and General's shared skills
+ * (private versions take precedence — the files are the single source of truth, so the list is
  * re-fetched from the API after every mutation instead of trusting client state). Rows lead
  * with the icon of the plugin the skill came from (the book glyph when it has none), then
  * the name, localized short description and version; uninstall
@@ -31,18 +31,12 @@ import {
   ConfirmModal,
   CopiedStatus,
   CopyCheckGlyph,
-  DownloadIcon,
-  GlyphIcon,
   HelpFold,
   HiddenFileInput,
-  ICONS,
-  IconButton,
   Input,
   Modal,
   SettingsEmpty,
   SettingsList,
-  ListRow,
-  ICON_SIZE,
   SkeletonList,
   Textarea,
   buttonClass,
@@ -56,12 +50,10 @@ import * as api from "../../api/endpoints";
 import { ApiError } from "../../api/client";
 import { S } from "../../lib/strings";
 import { apiErrorText } from "../../lib/api-error";
-import { useLocale } from "../../state/locale";
 import { agentDisplayName, useProject } from "../../state/project";
 import { useAgentLocation } from "../../lib/agent-location";
 import { useAgentsOn } from "../../lib/machine-agent-lists";
-import { SkillTile } from "../skills/skill-icon-view";
-import { localizedShortText } from "../chat/skill-use";
+import { InstalledSkillRow } from "./installed-skill-row";
 import { useAiBridge } from "../ai-create";
 import { downloadArchive } from "./archive-download";
 import { buildImportPrompt } from "./skill-import-source";
@@ -85,7 +77,6 @@ export function SkillsTab({
   /** Config writes (toggle / prompt / placeholder insert) happen here directly, so the settings page must refetch its own copy — otherwise a later Prompt-tab save from stale data would silently revert them. */
   onConfigChanged?: () => void;
 }) {
-  const { locale } = useLocale();
   const { currentProject, reloadAgents } = useProject();
   const projectId = currentProject?.projectId ?? null;
   /** The machine the Agent lives on (null: this server), and the Agents that server runs. */
@@ -117,7 +108,7 @@ export function SkillsTab({
     try {
       // The injection controls' state loads in parallel with the tab's own list.
       const [res, configView] = await Promise.all([
-        api.getAgentSkills(projectId, agentId, machineId),
+        api.getAgentSkills(projectId, agentId, machineId, true),
         api.getAgentConfig(projectId, agentId, machineId),
       ]);
       setSkills(res.skills);
@@ -172,15 +163,32 @@ export function SkillsTab({
     if (machineId === null) void reloadAgents();
   };
 
-  /** Metadata: the installed copy's version (`YYYY.MM.DD.N`, or the legacy `YYYY-MM-DD.N` on a copy installed before that spelling; empty when the frontmatter carries none), shown bare like the library card. */
-  const metaLine = (skill: SkillMetadataItem): string => skill.version;
+  const makeLocalCopy = async (name: string) => {
+    if (!projectId) return;
+    setBusy(true);
+    try {
+      await api.copySharedSkill(projectId, agentId, name, machineId);
+      toastSuccess(S.skills.localCopyCreated(name));
+      await load();
+      if (machineId === null) void reloadAgents();
+    } catch (e) {
+      toastApiError(e);
+    } finally {
+      setBusy(false);
+    }
+  };
 
   if (!projectId) return null;
 
   return (
     <div className="space-y-4">
       {/* Tab-level description: no title in the panel to anchor a "?" to (see help-fold.tsx). */}
-      <HelpFold label={S.agent.tabSkills}>{S.skills.agentTabDesc}</HelpFold>
+      <HelpFold label={S.agent.tabSkills}>
+        <p>{S.skills.agentTabDesc}</p>
+        <p>
+          {agentId === "default_agent" ? S.skills.generalSharingInfo : S.skills.sharedSkillInfo}
+        </p>
+      </HelpFold>
 
       {toggleCard}
       {alertStrip}
@@ -207,45 +215,32 @@ export function SkillsTab({
       ) : (
         <SettingsList label={S.agent.tabSkills}>
           {skills.map((skill) => (
-            <ListRow
+            <InstalledSkillRow
               key={skill.name}
-              as="li"
-              leading={<SkillTile icon={skill.icon} name={skill.name} />}
-              title={
-                <span className="font-mono text-[length:var(--ui-text-code-size)] font-semibold">
-                  {skill.name}
-                </span>
+              skill={skill}
+              busy={busy}
+              onEnabledChange={async (enabled) => {
+                const response = await api.setAgentSkillEnabled(
+                  projectId,
+                  agentId,
+                  skill.name,
+                  enabled,
+                  machineId,
+                );
+                setSkills(
+                  (current) =>
+                    current?.map((item) =>
+                      item.name === skill.name ? { ...item, enabled: response.enabled } : item,
+                    ) ?? null,
+                );
+                toastSuccess(S.skills.switchSaved(skill.name, response.enabled));
+              }}
+              onExport={() => void exportSkill(skill.name)}
+              onMakeLocal={
+                skill.sourceAgentId !== undefined ? () => void makeLocalCopy(skill.name) : undefined
               }
-              description={
-                <span
-                  data-tooltip={skill.description}
-                  data-tooltip-content="text"
-                  data-tooltip-extra={skill.description !== localizedShortText(locale, skill)}
-                >
-                  {localizedShortText(locale, skill)}
-                </span>
-              }
-              meta={metaLine(skill) || undefined}
-              trailing={
-                <>
-                  <IconButton
-                    label={`${S.skills.exportSkill} ${skill.name}`}
-                    title={S.skills.exportSkill}
-                    disabled={busy}
-                    onClick={() => void exportSkill(skill.name)}
-                  >
-                    <DownloadIcon size={ICON_SIZE.iconButton} />
-                  </IconButton>
-                  <IconButton
-                    variant="danger"
-                    label={`${S.skills.uninstall} ${skill.name}`}
-                    title={S.skills.uninstall}
-                    disabled={busy}
-                    onClick={() => setRemoving(skill.name)}
-                  >
-                    <GlyphIcon d={ICONS.trash} size={ICON_SIZE.iconButton} />
-                  </IconButton>
-                </>
+              onRemove={
+                skill.sourceAgentId === undefined ? () => setRemoving(skill.name) : undefined
               }
             />
           ))}
@@ -274,7 +269,13 @@ export function SkillsTab({
         cancelLabel={S.common.cancel}
       >
         <p className="text-sm text-gray-600 dark:text-gray-300">
-          {removing !== null ? S.skills.uninstallConfirmBody(removing, agentName) : ""}
+          {removing === null
+            ? ""
+            : agentId === "default_agent"
+              ? S.skills.uninstallSharedConfirmBody(removing)
+              : skills?.find((skill) => skill.name === removing)?.overridesShared
+                ? S.skills.uninstallPrivateConfirmBody(removing, agentName)
+                : S.skills.uninstallConfirmBody(removing, agentName)}
         </p>
       </ConfirmModal>
 
