@@ -5,6 +5,7 @@
  * - Given an unknown name or corrupt setting, refuse rather than creating or enabling it.
  * - Given a stale explicit selection, a Session refuses it before contacting the model.
  * - Given a shared skill without a switch, explicit selections are refused until the consumer enables it.
+ * - Given General's shared entry is temporarily absent during replacement, explicit selections stay disabled and never contact the model.
  * - Given a running Session whose skill is disabled, new entry reads are denied even if a hook allows them.
  * - Given an ordinary file or an enabled entry, reading still succeeds; malformed tool arguments reach validation.
  * - Given paths recorded on another platform, match only the installed entry, never a workspace lookalike.
@@ -115,6 +116,36 @@ async function collect(session: Session, input = "hello") {
 }
 
 describe("skill switches", () => {
+  it("keeps shared selections disabled while General's entry is absent during replacement", async () => {
+    await installSkill(root, P, "default_agent", {
+      name: "shared",
+      content: "---\nname: shared\n---\nOriginal instructions\n",
+    });
+    const source = path.join(agentStateDir(root, P, "default_agent"), "skills", "shared");
+    const retained = path.join(root, "retained-shared");
+    const { session, contacts } = sessionFor();
+    const input = buildSkillsMessage(["shared"], "Task");
+    try {
+      await expect(collect(session, input)).rejects.toThrow(/shared.*disabled/);
+      // Hold the same absent-entry state reached between removing the old directory and
+      // publishing its replacement, without relying on filesystem timing or fake modules.
+      await fs.rename(source, retained);
+      await expect(collect(session, input)).rejects.toThrow(/shared.*disabled/);
+      expect(await skillEnabled(agentStateDir(root, P, "default_agent"), "shared")).toBe(true);
+      await installSkill(root, P, "default_agent", {
+        name: "shared",
+        content: "---\nname: shared\n---\nUpdated instructions\n",
+      });
+      await expect(collect(session, input)).rejects.toThrow(/shared.*disabled/);
+      expect(contacts()).toBe(0);
+      await expect(fs.access(path.join(state(), "skill-settings"))).rejects.toThrow();
+      await setSkillEnabled(root, P, A, "shared", true);
+      await collect(session, input);
+      expect(contacts()).toBe(1);
+    } finally {
+      await session.dispose();
+    }
+  });
   it("refuses a shared selection with no saved switch before contacting the model", async () => {
     await installSkill(root, P, "default_agent", {
       name: "shared",
