@@ -106,7 +106,7 @@ import type {
 import { SUBAGENT_NAME } from "./environment/tools/run-subagent.js";
 import { INPUT_SUBAGENT_NAME } from "./environment/tools/input-subagent.js";
 import { LIST_AGENTS_NAME } from "./environment/tools/list-agents.js";
-import { withAgentDiscovery } from "./internal/agent-discovery.js";
+import { recordedAgentCatalog, withAgentDiscovery } from "./internal/agent-discovery.js";
 import type { CompactionSettings, OpenContextOptions } from "./engine/context-engine.js";
 import type {
   ApproveFn,
@@ -576,7 +576,7 @@ export class Agent {
   private async assembleContext(
     spec: SessionSpec,
     modelEntry: ModelEntry,
-    opts: { systemPrompt?: string } = {},
+    opts: { systemPrompt?: string; agentCatalog?: string } = {},
   ): Promise<AssembledContext> {
     const { root, projectId, agentId } = this.state;
     const state = await loadAgentState({ root, projectId, agentId });
@@ -640,8 +640,9 @@ export class Agent {
     if (customTools.some((tool) => tool.name === SUBAGENT_NAME || tool.name === LIST_AGENTS_NAME)) {
       customTools = withAgentDiscovery(
         customTools,
-        await listProjectAgents(root, projectId),
+        opts.agentCatalog === undefined ? await listProjectAgents(root, projectId) : [],
         defaultSystemConfig().tools!.builtin!.find((tool) => tool.name === LIST_AGENTS_NAME)!,
+        opts.agentCatalog,
       );
     }
     if (!canSpawn) {
@@ -857,7 +858,8 @@ export class Agent {
         `Session does not exist: ${sessionId} (no matching Trace file found under ${dir}).`,
       );
     }
-    const resumed = resumeTrace(await readTraceTolerant(located.path));
+    const records = await readTraceTolerant(located.path);
+    const resumed = resumeTrace(records);
     if (!resumed.meta) {
       throw new Error(`Trace is missing session_meta and cannot be resumed: ${located.path}`);
     }
@@ -934,13 +936,16 @@ export class Agent {
     // An open context keeps the system prompt its file recorded — the history replayed into
     // it was produced under that request prefix — while its tools, Environment, vault and
     // run parameters can only come from the current Agent State: the Trace records no
-    // executable configuration (tool definitions travel with every Request and are not part
-    // of the history). The thinking level is a per-request parameter, not part of the
+    // executable configuration. Only the descriptive Agent catalog suffix is kept from the
+    // context's native tool record, so editing a peer does not invalidate the tools prefix.
+    // Live discovery still reads disk. The thinking level is a per-request parameter, not part of the
     // recorded prefix: it resolves from the pin and the config like on any other open.
     const context = await this.assembleContext(
       spec,
       modelEntry,
-      resumed.contextClosed ? {} : { systemPrompt: meta.system_prompt },
+      resumed.contextClosed
+        ? {}
+        : { systemPrompt: meta.system_prompt, agentCatalog: recordedAgentCatalog(records) },
     );
     const rt = this.buildRuntime(spec, context, { validateClient: unreachable === undefined });
 

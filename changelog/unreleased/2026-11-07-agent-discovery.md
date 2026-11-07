@@ -15,4 +15,6 @@ The read-only `list_agents` tool refreshed the roster and inspected an Agent's e
 
 The roster in the delegation schema stayed fixed for the context. A new context refreshed it; an in-progress task could call `list_agents` for current metadata. Discovery and delegation stayed on one node within one Project, and child Sessions retained the existing one-level delegation limit.
 
+Resuming an open context kept its recorded roster, including after another Agent was edited, added or removed. Forwarded child tool lists did not replace that snapshot. Tool permissions and configured parameter restrictions still came from the current Agent settings.
+
 Existing configurations followed the [compatibility behavior](2026-11-07-agent-discovery-compatibility.md).

@@ -12,3 +12,5 @@ Existing configurations with `run_subagent` gained discovery when a context open
 This composition behavior remained permanent for configurations that enabled delegation. It had no migration deadline or removal step. The `2026-11-07` kernel recorded the new default discovery tool and retained the previous tools hash for the existing explicit kernel-update action. Customized tools tabs and MCP settings continued to follow that action's preservation rules.
 
 No Agent files, skills, secrets or Trace records were migrated, and the existing one-level delegation limit was preserved.
+
+Open contexts recovered their descriptive roster from an existing native `tool_list_ready` record. Older or incomplete records without that roster used current metadata. This fallback remained permanent and required no Trace rewrite or new record field.

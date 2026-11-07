@@ -1,6 +1,9 @@
 /**
  * - Given local and foreign Projects/nodes, discovery reads only valid local Agent metadata without writing state.
  * - Given stored delegation tools, a model sees peer roles without a config migration; a context's roster stays fixed until the next context.
+ * - Given peer metadata changes and forwarded child tools, resuming an open context keeps its request prefix while live discovery refreshes.
+ * - Given current tool settings change, resume retains the descriptive roster while honoring new descriptions, restrictions and permissions.
+ * - Given a compacted context, resume refreshes the roster; old or incomplete tool records also permit recovery without migrating the Trace.
  * - Given a child Session, discovery stays available while a second delegation level remains unavailable.
  * - Given a model refreshing or inspecting an Agent, the tool returns current roles and enabled shared/private skills, excluding secrets.
  * - Given invalid, absent or foreign targets, discovery refuses them without creating an Agent.
@@ -10,13 +13,14 @@ import fs from "node:fs/promises";
 import { readFileSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   createAgent,
   createAgentDiscovery,
   defaultSystemConfig,
   installSkill,
   isCompleteModelMessage,
+  isEventMessage,
   listProjectAgents,
   saveProjectConfig,
   setSkillEnabled,
@@ -25,7 +29,10 @@ import {
   assistantText,
   partialText,
   withOrigin,
+  toolListReady,
+  tracesDir,
 } from "../src/index.js";
+import { findLatestTraceFile, readTraceTolerant } from "../src/trace/index.js";
 import { Session } from "../src/session.js";
 import { Environment } from "../src/environment/index.js";
 import type {
@@ -75,8 +82,42 @@ beforeEach(async () => {
   await writeAgent("reviewer", "Reviews code changes");
 });
 afterEach(async () => {
+  vi.restoreAllMocks();
   await fs.rm(root, { recursive: true, force: true });
 });
+
+/** One transport fake captures real Agent request assembly and completes each turn. */
+function captureRequests() {
+  const requests: { tools: unknown[]; messages: unknown[] }[] = [];
+  vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, init) => {
+    requests.push(JSON.parse(String(init?.body)));
+    const chunk = {
+      id: "reply",
+      object: "chat.completion.chunk",
+      model: "m",
+      created: 0,
+      choices: [{ index: 0, delta: { role: "assistant", content: "Done" }, finish_reason: null }],
+    };
+    const stop = {
+      ...chunk,
+      choices: [{ index: 0, delta: {}, finish_reason: "stop" }],
+      usage: { prompt_tokens: 100, completion_tokens: 1, total_tokens: 101 },
+    };
+    return new Response(
+      `data: ${JSON.stringify(chunk)}\n\ndata: ${JSON.stringify(stop)}\n\ndata: [DONE]\n\n`,
+      {
+        headers: { "Content-Type": "text/event-stream" },
+      },
+    );
+  });
+  return requests;
+}
+
+async function completedRun(session: Session, input = "Continue") {
+  const records: AmspRecord[] = [];
+  for await (const record of session.run([userText(input)])) records.push(record);
+  return records;
+}
 
 async function openedTools(depth = 0): Promise<ToolDefinition[]> {
   const agent = await createAgent({ root, projectId: P, agentId: A });
@@ -163,6 +204,162 @@ const outputs = (records: AmspRecord[]) =>
     .filter((payload) => payload.type === "tool_call_output");
 
 describe("Agent discovery", () => {
+  it("keeps the resumed request prefix despite peer edits and forwarded child tool lists", async () => {
+    const requests = captureRequests();
+    const agent = await createAgent({ root, projectId: P, agentId: A });
+    const first = await agent.createSession({ workspaceDir: root });
+    const sessionId = first.sessionId;
+    try {
+      await completedRun(first, "Make a plan");
+    } finally {
+      await first.dispose();
+    }
+    await writeAgent("writer", "Writes release notes");
+    await writeAgent("new_peer", "Checks releases");
+    await fs.rm(path.dirname(systemConfigPath(root, P, "reviewer")), { recursive: true });
+    const trace = (await findLatestTraceFile(tracesDir(root, P, A), sessionId))!;
+    await fs.appendFile(
+      trace.path,
+      `${JSON.stringify(withOrigin(toolListReady(oldTools()), "child"))}\n`,
+    );
+    const resumed = await agent.resumeSession({ sessionId });
+    try {
+      await completedRun(resumed);
+    } finally {
+      await resumed.dispose();
+    }
+    expect(requests).toHaveLength(2);
+    expect(requests[1]!.tools).toEqual(requests[0]!.tools);
+    expect(requests[1]!.messages.slice(0, requests[0]!.messages.length)).toEqual(
+      requests[0]!.messages,
+    );
+    const live = await createAgentDiscovery(root, P, A).list();
+    expect(live.find((peer) => peer.agentId === "writer")!.description).toBe(
+      "Writes release notes",
+    );
+    expect(live.some((peer) => peer.agentId === "new_peer")).toBe(true);
+    expect(live.some((peer) => peer.agentId === "reviewer")).toBe(false);
+  });
+
+  it("refreshes the roster when resume opens a compacted context", async () => {
+    captureRequests();
+    const configPath = systemConfigPath(root, P, A);
+    const config = JSON.parse(await fs.readFile(configPath, "utf8"));
+    await fs.writeFile(
+      configPath,
+      JSON.stringify({ ...config, compaction: { enabled: true, mode: "discard" } }),
+    );
+    const agent = await createAgent({ root, projectId: P, agentId: A });
+    const first = await agent.createSession({ workspaceDir: root });
+    const sessionId = first.sessionId;
+    try {
+      await completedRun(first);
+      for await (const _record of first.compact()) {
+        /* Drain the manual compaction. */
+      }
+    } finally {
+      await first.dispose();
+    }
+    await writeAgent("writer", "Writes release notes");
+    const resumed = await agent.resumeSession({ sessionId });
+    try {
+      const records = await completedRun(resumed);
+      const event = records.find(
+        (record) => isEventMessage(record) && record.payload.type === "tool_list_ready",
+      )!;
+      if (!isEventMessage(event) || event.payload.type !== "tool_list_ready")
+        throw new Error("Missing tool definitions");
+      const tool = event.payload.tools.find((tool) => tool.name === "run_subagent")!;
+      expect(argsOf(tool).agent_id!.description).toContain("Writes release notes");
+    } finally {
+      await resumed.dispose();
+    }
+  });
+
+  it("keeps current tool restrictions and permissions when restoring the roster", async () => {
+    captureRequests();
+    const agent = await createAgent({ root, projectId: P, agentId: A });
+    const first = await agent.createSession({ workspaceDir: root });
+    const sessionId = first.sessionId;
+    try {
+      await completedRun(first);
+    } finally {
+      await first.dispose();
+    }
+    await writeAgent("writer", "Writes release notes");
+    const configured = oldTools().map((tool) => {
+      if (tool.name !== "run_subagent") return tool;
+      const properties = tool.parameters!.properties as Record<string, Record<string, unknown>>;
+      return {
+        ...tool,
+        description: "Delegate only documentation review",
+        permission: "r" as const,
+        parameters: {
+          ...tool.parameters,
+          properties: { ...properties, agent_id: { ...properties.agent_id, enum: ["writer"] } },
+        },
+      };
+    });
+    await writeAgent(A, "Coordinates the user's task", { tools: configured });
+    const resumed = await agent.resumeSession({ sessionId });
+    try {
+      const records = await completedRun(resumed);
+      const event = records.find(
+        (record) => isEventMessage(record) && record.payload.type === "tool_list_ready",
+      )!;
+      if (!isEventMessage(event) || event.payload.type !== "tool_list_ready")
+        throw new Error("Missing tool definitions");
+      const tool = event.payload.tools.find((tool) => tool.name === "run_subagent")!;
+      expect(tool.description).toBe("Delegate only documentation review");
+      expect(resumed.toolPermission("run_subagent")).toBe("r");
+      expect(argsOf(tool).agent_id!.enum).toEqual(["writer"]);
+      expect(argsOf(tool).agent_id!.description).toContain("Drafts technical documentation");
+      expect(argsOf(tool).agent_id!.description).not.toContain("Writes release notes");
+    } finally {
+      await resumed.dispose();
+    }
+  });
+
+  it.each(["missing", "legacy", "incomplete", "malformed"])(
+    "recovers an open Trace whose tool record is %s using current metadata",
+    async (kind) => {
+      captureRequests();
+      const agent = await createAgent({ root, projectId: P, agentId: A });
+      const first = await agent.createSession({ workspaceDir: root });
+      const sessionId = first.sessionId;
+      try {
+        await completedRun(first);
+      } finally {
+        await first.dispose();
+      }
+      const trace = (await findLatestTraceFile(tracesDir(root, P, A), sessionId))!;
+      const previous = (await readTraceTolerant(trace.path)).filter(
+        (record) => !isEventMessage(record) || record.payload.type !== "tool_list_ready",
+      );
+      if (kind !== "missing") {
+        const record = toolListReady(kind === "legacy" ? oldTools() : []);
+        if (kind === "malformed") record.payload.tools = null as unknown as ToolDefinition[];
+        previous.push(record);
+      }
+      const retained = previous.map((record) => JSON.stringify(record)).join("\n") + "\n";
+      await fs.writeFile(trace.path, retained);
+      await writeAgent("writer", "Writes release notes");
+      const resumed = await agent.resumeSession({ sessionId });
+      try {
+        const records = await completedRun(resumed);
+        const event = records.find(
+          (record) => isEventMessage(record) && record.payload.type === "tool_list_ready",
+        )!;
+        if (!isEventMessage(event) || event.payload.type !== "tool_list_ready")
+          throw new Error("Missing tool definitions");
+        const tool = event.payload.tools.find((tool) => tool.name === "run_subagent")!;
+        expect(argsOf(tool).agent_id!.description).toContain("Writes release notes");
+      } finally {
+        await resumed.dispose();
+      }
+      expect((await fs.readFile(trace.path, "utf8")).startsWith(retained)).toBe(true);
+    },
+  );
   it("lists only valid Agents in this Project on this node without writing their state", async () => {
     await writeAgent("foreign_project", "Not local to this Project", { projectId: "other" });
     await writeAgent("foreign_node", "Not local to this node", {
