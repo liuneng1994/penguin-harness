@@ -7,7 +7,8 @@ import type { AmspRecord } from "@prismshadow/amsp/records";
 import { atomicWriteFile } from "../internal/atomic-write.js";
 import { agentStateDir } from "./paths.js";
 import { assertValidId } from "./ids.js";
-import { resolveSkillDirectory, skillStateDirectories } from "./skill-paths.js";
+import { resolveSkillDirectory } from "./skill-paths.js";
+export { installedSkillRead } from "./skill-paths.js";
 
 function settingPath(stateDir: string, name: string): string {
   assertValidId("skill_name", name);
@@ -73,23 +74,4 @@ export async function assertSkillInvocationsEnabled(
       }
     }
   }
-}
-
-/** Match only a skill's own entry file; ordinary workspace SKILL.md files are not skills. */
-export function installedSkillRead(
-  stateDir: string,
-  workspace: string,
-  filePath: string,
-): string | null {
-  const paths = /^[A-Za-z]:[\\/]/.test(stateDir) ? path.win32 : path;
-  for (const source of skillStateDirectories(stateDir)) {
-    const relative = paths.relative(
-      paths.join(source, "skills"),
-      paths.resolve(workspace, filePath),
-    );
-    const parts = relative.split(paths.sep);
-    if (parts.length === 2 && parts[1] === "SKILL.md" && /^[A-Za-z0-9_-]+$/.test(parts[0]!))
-      return parts[0]!;
-  }
-  return null;
 }

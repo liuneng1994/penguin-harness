@@ -38,11 +38,8 @@ import type {
 } from "@prismshadow/amsp/records";
 import type { ModelRef } from "./state/project-config.js";
 import { sameModelRef } from "./state/project-config.js";
-import {
-  assertSkillInvocationsEnabled,
-  installedSkillRead,
-  skillEnabled,
-} from "./state/skill-settings.js";
+import { assertSkillInvocationsEnabled, skillEnabled } from "./state/skill-settings.js";
+import { resolveInstalledSkillRead } from "./state/skill-paths.js";
 import { imagesToScratchpadPaths } from "./internal/session-support.js";
 import { runStopHooks } from "./hooks/stop-hook.js";
 import type { HookSubagentSpawner, SessionHooks, StopHook } from "./hooks/stop-hook.js";
@@ -656,7 +653,7 @@ export class Session {
             }
             const name =
               typeof args?.file_path === "string"
-                ? installedSkillRead(
+                ? await resolveInstalledSkillRead(
                     this.meta.payload.agent_state,
                     this.workspaceDir,
                     args.file_path,

@@ -8,6 +8,8 @@
  * - Given an ordinary file or an enabled entry, reading still succeeds; malformed tool arguments reach validation.
  * - Given paths recorded on another platform, match only the installed entry, never a workspace lookalike.
  * - Given a shared entry in a running Session, its consumer's switch blocks entry reads even when General keeps it enabled.
+ * - Given a disabled local or shared entry, case aliases and workspace symlinks cannot bypass its switch.
+ * - Given an entry alias changes target, the next read follows the new target; missing historical entries keep lexical identity.
  */
 import fs from "node:fs/promises";
 import os from "node:os";
@@ -32,6 +34,7 @@ import {
   skillEnabled,
   skillMetadataSection,
   installedSkillRead,
+  resolveInstalledSkillRead,
 } from "../src/state/index.js";
 
 let root: string;
@@ -111,6 +114,71 @@ async function collect(session: Session, input = "hello") {
 }
 
 describe("skill switches", () => {
+  it.each([A, "default_agent"])(
+    "blocks aliases of disabled content installed on %s using the consumer's switch",
+    async (owner) => {
+      await installSkill(root, P, owner, {
+        name: "Mixed_Name",
+        content: "---\nname: Mixed_Name\n---\nDisabled content\n",
+      });
+      await setSkillEnabled(root, P, A, "Mixed_Name", false);
+      const entryDir = path.join(agentStateDir(root, P, owner), "skills", "Mixed_Name");
+      const entry = path.join(entryDir, "SKILL.md");
+      const link = path.join(root, "entry-alias.md");
+      const dirLink = path.join(root, "skill-alias");
+      await fs.symlink(entry, link);
+      await fs.symlink(entryDir, dirLink, process.platform === "win32" ? "junction" : "dir");
+      const paths = [entry, link, path.join(dirLink, "SKILL.md")];
+      for (const alias of [
+        path.join(entryDir, "skill.md"),
+        path.join(path.dirname(entryDir), "mixed_name", "SKILL.md"),
+      ]) {
+        if (
+          await fs.access(alias).then(
+            () => true,
+            () => false,
+          )
+        )
+          paths.push(alias);
+      }
+      const { session } = sessionFor(paths.map((file_path) => JSON.stringify({ file_path })));
+      try {
+        const results = (await collect(session))
+          .filter(isCompleteModelMessage)
+          .map((message) => message.payload)
+          .filter((payload) => payload.type === "tool_call_output");
+        expect(results).toHaveLength(paths.length);
+        for (const result of results) {
+          expect(result.status).toBe("aborted");
+          expect(result.output).toContain("Mixed_Name is disabled");
+          expect(result.output).not.toContain("Disabled content");
+        }
+      } finally {
+        await session.dispose();
+      }
+    },
+  );
+
+  it("resolves changed aliases afresh and preserves missing historical entry identities", async () => {
+    await install();
+    const link = path.join(root, "entry-alias.md");
+    await fs.symlink(file("demo"), link);
+    expect(await resolveInstalledSkillRead(state(), root, link)).toBe("demo");
+    await fs.unlink(link);
+    await fs.writeFile(path.join(root, "SKILL.md"), "Ordinary workspace file");
+    await fs.symlink(path.join(root, "SKILL.md"), link);
+    expect(await resolveInstalledSkillRead(state(), root, link)).toBeNull();
+    await fs.unlink(file("demo"));
+    expect(await resolveInstalledSkillRead(state(), root, file("demo"))).toBe("demo");
+    expect(
+      await resolveInstalledSkillRead(
+        "C:\\old-host\\state",
+        "C:\\work",
+        "C:\\old-host\\state\\skills\\demo\\SKILL.md",
+      ),
+    ).toBe("demo");
+  });
+
   it("enforces the consumer's switch on General's shared entry while allowing enabled reads", async () => {
     await installSkill(root, P, "default_agent", {
       name: "shared",

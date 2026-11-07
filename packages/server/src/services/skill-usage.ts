@@ -4,10 +4,11 @@ import fs from "node:fs/promises";
 import { createInterface } from "node:readline";
 import {
   agentStateDir,
-  installedSkillRead,
+  resolveInstalledSkillRead,
   isSessionMeta,
   isCompleteModelMessage,
   parseSkillsMessage,
+  parseUserSteeringText,
   parseTraceLines,
 } from "@prismshadow/penguin-core";
 import type { SkillUsage } from "../api/types.js";
@@ -37,6 +38,7 @@ export class SkillUsageReader {
     private readonly root: string,
     private readonly index: TraceIndex,
     private readonly store: TraceIndexStore,
+    private readonly options: { observeRead?: (file: string) => void } = {},
   ) {}
 
   async read(projectId: string, agentId: string): Promise<Map<string, SkillUsage>> {
@@ -48,6 +50,9 @@ export class SkillUsageReader {
       sessions.set(file.sessionId, files);
     }
     const result = new Map<string, SkillUsage>();
+    // Keep this pass's hits alive while misses update the bounded LRU. Otherwise a miss
+    // evicts the next hit in a repeated traversal and forces a scan of the entire history.
+    const retained = new Map(this.cache);
     for (const [sessionId, rows] of sessions) {
       rows.sort((a, b) => a.fileIndex - b.fileIndex);
       const files: string[] = [];
@@ -64,7 +69,7 @@ export class SkillUsageReader {
       }
       const signature = JSON.stringify(stamps);
       const key = JSON.stringify([projectId, agentId, sessionId]);
-      let cached = this.cache.get(key);
+      let cached = retained.get(key);
       if (cached?.signature !== signature) {
         cached = {
           signature,
@@ -111,6 +116,7 @@ export class SkillUsageReader {
       result.set(name, usage);
     };
     for (const file of files) {
+      this.options.observeRead?.(file);
       const stream = createReadStream(file, { encoding: "utf8" });
       const lines = createInterface({ input: stream, crlfDelay: Infinity });
       try {
@@ -134,7 +140,7 @@ export class SkillUsageReader {
               p.role === "user" &&
               (p.sender === undefined || p.sender === "user")
             ) {
-              const invocation = parseSkillsMessage(p.text);
+              const invocation = parseSkillsMessage(parseUserSteeringText(p.text) ?? p.text);
               if (invocation)
                 for (const name of new Set(invocation.skills))
                   add(name, "invocations", msg.timestamp);
@@ -152,7 +158,7 @@ export class SkillUsageReader {
                 typeof args.file_path !== "string"
               )
                 continue;
-              const name = installedSkillRead(stateDir, workspace, args.file_path);
+              const name = await resolveInstalledSkillRead(stateDir, workspace, args.file_path);
               if (name !== null) pending.set(p.tool_call_id, name);
             } else if (p.type === "tool_call_output") {
               const name = pending.get(p.tool_call_id);

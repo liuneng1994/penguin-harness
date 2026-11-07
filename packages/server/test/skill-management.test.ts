@@ -5,6 +5,8 @@
  *   reads, deduplicate names within a message and exclude forwarded children and unrelated files.
  * - Given a growing/rotated/deleted Trace, another read refreshes the totals, including a
  *   tool call whose result lands in the next shard; requesting no stats returns metadata alone.
+ * - Given a skill selected through steering, stats count its invocation without requiring a read.
+ * - Given a shared entry read through a symlink or case alias, stats use its canonical name on the consuming Agent.
  */
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -17,6 +19,7 @@ import {
   toolCall,
   toolCallOutput,
   userText,
+  userSteeringText,
   withOrigin,
 } from "@prismshadow/penguin-core";
 import type { AmspRecord } from "@prismshadow/penguin-core";
@@ -158,5 +161,73 @@ describe("skill management", () => {
     await fs.unlink(file);
     await fs.unlink(shard);
     expect((await read()).skills.find((skill) => skill.name === "demo")!.usage!.sessions).toBe(1);
+  });
+
+  it("counts steering selections without reads and excludes forwarded or harness selections", async () => {
+    await installSkill(t.root, projectId, A, {
+      name: "steered",
+      content: "---\nname: steered\n---\nInstructions\n",
+    });
+    const selected = userText(userSteeringText(buildSkillsMessage(["steered", "steered"], "Task")));
+    await writeTraceFile(t.root, projectId, A, "2026-11-07", "usage-steering", 1, [
+      meta("usage-steering"),
+      at("2026-11-07T01:00:00Z", selected),
+      withOrigin(selected, "child"),
+      userText(userSteeringText(buildSkillsMessage(["steered"], "Harness task")), "harness"),
+    ]);
+    expect((await read()).skills.find((skill) => skill.name === "steered")!.usage).toEqual({
+      invocations: 1,
+      reads: 0,
+      failedReads: 0,
+      sessions: 1,
+      lastUsedAt: "2026-11-07T01:00:00.000Z",
+    });
+  });
+
+  it("attributes shared entry aliases to the consumer under the source's stored skill name", async () => {
+    await installSkill(t.root, projectId, "default_agent", {
+      name: "Shared_Mixed",
+      content: "---\nname: Shared_Mixed\n---\nShared instructions\n",
+    });
+    const entryDir = path.join(
+      agentStateDir(t.root, projectId, "default_agent"),
+      "skills/Shared_Mixed",
+    );
+    const link = path.join(t.root, "shared-entry.md");
+    await fs.symlink(path.join(entryDir, "SKILL.md"), link);
+    const paths = [link];
+    for (const alias of [
+      path.join(entryDir, "skill.md"),
+      path.join(path.dirname(entryDir), "shared_mixed/SKILL.md"),
+    ]) {
+      if (
+        await fs.access(alias).then(
+          () => true,
+          () => false,
+        )
+      )
+        paths.push(alias);
+    }
+    await writeTraceFile(t.root, projectId, A, "2026-11-07", "usage-alias", 1, [
+      meta("usage-alias"),
+      ...paths.flatMap((file, index) => [
+        call(`alias-${index}`, file),
+        at(
+          "2026-11-07T02:00:00Z",
+          toolCallOutput({ output: "Body", toolCallId: `alias-${index}`, status: "completed" }),
+        ),
+      ]),
+    ]);
+    expect((await read()).skills.find((skill) => skill.name === "Shared_Mixed")!.usage).toEqual({
+      invocations: 0,
+      reads: paths.length,
+      failedReads: 0,
+      sessions: 1,
+      lastUsedAt: "2026-11-07T02:00:00.000Z",
+    });
+    const general = (await (
+      await member.get(`/api/projects/${projectId}/agents/default_agent/skills?usage=true`)
+    ).json()) as AgentSkillsResponse;
+    expect(general.skills.find((skill) => skill.name === "Shared_Mixed")!.usage!.reads).toBe(0);
   });
 });
