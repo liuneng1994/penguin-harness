@@ -22,7 +22,7 @@ import { createHash } from "node:crypto";
  * change without it moving. (The reverse — moving it with no default change — is inert rather
  * than an error: nothing is keyed by version, so there is no table to fall out of sync with.)
  */
-export const KERNEL_VERSION = "2026-10-19";
+export const KERNEL_VERSION = "2026-11-07";
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
@@ -220,15 +220,17 @@ export function isKernelOutdated(kernelVersion: string | null | undefined): bool
  * - `2026-10-14` — the prompt avoids repeating code from generated files, separates
  *   framework reuse from the React preference, and drops the redundant library-availability
  *   clause. The prompt tab moved.
- * - `2026-10-19` (current) — `model.timeoutMs` rose to 600000: some relays consume a model's
+ * - `2026-10-19` — `model.timeoutMs` rose to 600000: some relays consume a model's
  *   thinking stream upstream and send nothing until the answer starts, so the whole thinking
  *   phase lands in the wait for the first event again, and 300000 cut long ones short. The
  *   runtime tab moved.
+ * - `2026-11-07` (current) — the read-only `list_agents` tool discovers local Project roles
+ *   and enabled skills so the model can choose a delegation plan. The tools tab moved.
  */
 export const KERNEL_DEFAULT_TAB_HASHES: Readonly<Record<KernelTab, string>> = {
   prompt: "c1ce239d2ef23ef533b5f00d3ed453e98bd7eb66ac8af9916fd0a5281455effb",
   runtime: "83cffc520d74ff6b307a1371b8e770a1986436ef0632e9f5146fec1a3dc67134",
-  tools: "3ee93edff7292412e9b0bbaff6cc64ee53127299450e6738fbd2e7448e148d5b",
+  tools: "1dbc1ec0aaa008174fe6208d1bcc16c7e278d76963b1c2e41eb5c92253ab509a",
   skills: "7e343aa692e5eaeadfc8add6bb375fb50ac33ef81ebe460490fc219b0f3d707f",
   memory: "53d190390829cc0132bb12e468a6891f2e0576ec0c4022a9b4a5d9233666900d",
   vault: "19bd36a6d4ab442b66583c423450602b817990a9a79bafa21c9b6137fb6b47d8",
@@ -268,6 +270,7 @@ export const KERNEL_SUPERSEDED_TAB_HASHES: KernelSupersededTabHashes = {
     "8bbd336ff1f3fc283c4e11e54d43dd2bfe4ba2458577bf9eb3b6e3d7be4f3cde", // before the kill tools folded into the input tools
     "c24bcf47b1377e9da4dcfb69a1f7240dcdbfff2d420df5db0a5eaec2b7d4087d", // before the image tools folded into read_file
     "a5e067fe58899be651c3c0541f587b2d5999030dc3008a39737a8fe21f5f7a23", // read_file's description named `prompt`, before the argument went text-only
+    "3ee93edff7292412e9b0bbaff6cc64ee53127299450e6738fbd2e7448e148d5b", // before local Project Agent discovery
   ],
   // The memory prompt's wording before #397 named when a fact is worth saving.
   memory: ["c28acdda755552967cd0c99ba4ced407eddfa843b3dce228a965da4674676dc7"],
