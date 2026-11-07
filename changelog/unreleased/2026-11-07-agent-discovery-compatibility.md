@@ -3,6 +3,7 @@
 - **Date:** 2026-11-07
 - **Type:** feature
 - **Scope:** `core`
+- **PR:** [#2](https://github.com/liuneng1994/penguin-harness/pull/2)
 
 [中文版](2026-11-07-agent-discovery-compatibility.zh.md)
 
