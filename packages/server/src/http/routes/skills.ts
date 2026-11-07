@@ -23,6 +23,7 @@ import {
   resolveSkillDirectory,
   removeSkill,
   setSkillEnabled,
+  preserveSharedSkillSwitch,
   replaceSkillDirectory,
   skillsDir,
   parseSkillFrontmatter,
@@ -365,6 +366,7 @@ export function agentSkillsRoutes(deps: SkillsRouteDeps): Hono<AppEnv> {
         );
         if (exists)
           throw new HttpError(409, "skill_exists", `A private skill already exists: ${name}`);
+        await preserveSharedSkillSwitch(agentStateDir(deps.config.root, projectId, agentId), name);
       },
     });
     return c.json(await listResponse(projectId, agentId), 201);

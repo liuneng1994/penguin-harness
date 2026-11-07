@@ -3351,9 +3351,9 @@ export const zh = {
     makeLocalCopy: "创建独立副本",
     localCopyCreated: (name: string): string => `已创建 ${name} 的独立副本`,
     generalSharingInfo:
-      "General 的技能供同 Project 的其他 Agent 共享使用，已有文件保留原位。每个 Agent 的开关和统计独立；更新共享文件会影响使用它的 Agent，独立副本会保留。共享技能不会为其他 Agent 安装其 MCP 服务或钩子。",
+      "General 的技能供同 Project 的其他 Agent 共享使用，已有文件保留原位。其他 Agent 的共享技能默认关闭，按需单独启用。每个 Agent 的开关和统计独立；更新共享文件会影响使用它的 Agent，独立副本会保留。共享技能不会为其他 Agent 安装其 MCP 服务或钩子。",
     sharedSkillInfo:
-      "General 共享的技能使用同一份文件。同名独立技能优先；需要修改时可创建独立副本，卸载副本后恢复使用共享版本。本 Agent 的开关和统计独立，新发现的技能在下一个模型上下文中可用。",
+      "General 共享的技能使用同一份文件，默认关闭，按需启用。同名独立技能优先；需要修改时可创建独立副本，卸载副本后恢复共享版本，开关状态保留。本 Agent 的开关和统计独立，启用的技能在下一个模型上下文中可用。",
     uninstallSharedConfirmBody: (name: string): string =>
       `确定从 General 删除共享技能 ${name} 吗？文件会被删除，其他 Agent 将失去这个共享版本，已有独立副本会保留。`,
     uninstallPrivateConfirmBody: (name: string, agent: string): string =>

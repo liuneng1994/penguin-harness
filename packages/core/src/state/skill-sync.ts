@@ -6,6 +6,7 @@ import { atomicWriteFile } from "../internal/atomic-write.js";
 import { assertValidId, isValidId } from "./ids.js";
 import { agentStateDir, DEFAULT_AGENT_ID, skillsDir, systemConfigPath } from "./paths.js";
 import { replaceSkillDirectory } from "./agent-state.js";
+import { preserveSharedSkillSwitch } from "./skill-settings.js";
 
 export interface SkillSyncEntry {
   agentId: string;
@@ -197,7 +198,10 @@ async function synchronize(
               try {
                 await fs.lstat(target);
               } catch (error) {
-                if ((error as NodeJS.ErrnoException).code === "ENOENT") return;
+                if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+                  await preserveSharedSkillSwitch(agentStateDir(root, projectId, agentId), name);
+                  return;
+                }
                 throw error;
               }
               throw new SyncConflict("local_skill");

@@ -1,5 +1,5 @@
 /**
- * - Given General's existing files, other and newly created Agents discover them without copying or changing files.
+ * - Given General's existing files, consumers discover them disabled without copying or writing settings; General keeps its default enabled state.
  * - Given shared content, switches belong to consumers; a disabled private override never falls back to the source.
  * - Given a private version, source updates preserve it and removing it restores sharing with the same switch.
  * - Given another Project or another Agent's entry path, sharing and read attribution stay within their scope.
@@ -20,6 +20,8 @@ import {
   setSkillEnabled,
   skillMetadataSection,
   skillsDir,
+  skillEnabled,
+  preserveSharedSkillSwitch,
 } from "../src/state/index.js";
 
 let root: string;
@@ -50,22 +52,25 @@ describe("General's shared skills", () => {
       expect(skills).toEqual([
         expect.objectContaining({ name: "demo", sourceAgentId: G, pathToSkillMd: source() }),
       ]);
-      expect(skills[0]!.enabled).toBeUndefined();
-      expect(skillMetadataSection(skills)).toContain(JSON.stringify(source()));
+      expect(skills[0]!.enabled).toBe(false);
+      expect(skillMetadataSection(skills)).toBe("");
       expect(await listInstalledSkills(root, P, agentId)).toEqual([]);
       await expect(fs.access(agentStateDir(root, P, agentId))).rejects.toThrow();
     }
     expect(await fs.readFile(source(), "utf8")).toBe(before);
     expect((await listAvailableSkills(root, P, G))[0]!.sourceAgentId).toBeUndefined();
+    expect(await skillEnabled(agentStateDir(root, P, G), "demo")).toBe(true);
   });
 
   it("keeps switches independent and does not fall back around a disabled private version", async () => {
     await install(G);
     await setSkillEnabled(root, P, G, "demo", false);
+    expect(skillMetadataSection(await listAvailableSkills(root, P, A))).toBe("");
+    await setSkillEnabled(root, P, A, "demo", true);
     expect(skillMetadataSection(await listAvailableSkills(root, P, A))).toContain("demo");
     await setSkillEnabled(root, P, A, "demo", false);
     expect(skillMetadataSection(await listAvailableSkills(root, P, A))).toBe("");
-    expect(skillMetadataSection(await listAvailableSkills(root, P, "other"))).toContain("demo");
+    expect(skillMetadataSection(await listAvailableSkills(root, P, "other"))).toBe("");
     await install(A, "Private");
     const skills = await listAvailableSkills(root, P, A);
     expect(skills).toHaveLength(1);
@@ -93,6 +98,30 @@ describe("General's shared skills", () => {
     expect(await fs.readFile(source(), "utf8")).toContain("Updated source");
     await setSkillEnabled(root, P, A, "demo", true);
     expect(skillMetadataSection(await listAvailableSkills(root, P, A))).toContain("shared entry:");
+  });
+
+  it("keeps explicit enablement across source updates and new skills disabled for consumers", async () => {
+    await install(G);
+    await setSkillEnabled(root, P, A, "demo", true);
+    await install(G, "Updated shared instructions");
+    expect(skillMetadataSection(await listAvailableSkills(root, P, A))).toContain(
+      JSON.stringify(source()),
+    );
+    expect(await skillEnabled(agentStateDir(root, P, "other"), "demo")).toBe(false);
+    await install(A, "Private instructions");
+    expect(await skillEnabled(state(), "demo")).toBe(true);
+  });
+
+  it("preserves an explicit switch while materializing shared defaults concurrently", async () => {
+    await install(G);
+    await Promise.all([
+      preserveSharedSkillSwitch(state(), "demo"),
+      setSkillEnabled(root, P, A, "demo", true),
+    ]);
+    expect(await skillEnabled(state(), "demo")).toBe(true);
+    await preserveSharedSkillSwitch(state(), "demo");
+    expect(await skillEnabled(state(), "demo")).toBe(true);
+    expect(await fs.readdir(path.join(state(), "skill-settings"))).toEqual(["demo.json"]);
   });
 
   it("keeps sharing and entry-read attribution inside one Project and supports recorded Windows paths", async () => {
