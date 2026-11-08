@@ -23,6 +23,7 @@ import { EXEC_COMMAND_NAME, createExecCommandTool } from "./exec-command.js";
 import { INPUT_COMMAND_NAME, createInputCommandTool } from "./input-command.js";
 import { SUBAGENT_NAME, createSubagentTool } from "./run-subagent.js";
 import { INPUT_SUBAGENT_NAME, createInputSubagentTool } from "./input-subagent.js";
+import { LIST_AGENTS_NAME, createListAgentsTool } from "./list-agents.js";
 
 /**
  * A factory that constructs a BuiltinTool instance from a tool config entry; optionally
@@ -44,4 +45,5 @@ export const BUILTIN_TOOL_FACTORIES: Record<string, BuiltinToolFactory> = {
   [INPUT_COMMAND_NAME]: createInputCommandTool,
   [SUBAGENT_NAME]: createSubagentTool,
   [INPUT_SUBAGENT_NAME]: createInputSubagentTool,
+  [LIST_AGENTS_NAME]: createListAgentsTool,
 };
