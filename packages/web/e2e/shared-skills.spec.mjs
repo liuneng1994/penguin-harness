@@ -1,4 +1,4 @@
-/** Existing General skills are shared by default. Consumer switches and private copies
+/** Existing General skills are shared but disabled by default. Consumer switches and private copies
  * remain independent. Removing a private copy restores the shared version. The source
  * remains intact throughout, with screenshots in all three themes and at phone width.
  */
@@ -26,10 +26,15 @@ test("General skills are shared by default with independent switches and private
   const find = async (url) =>
     (await (await page.request.get(url)).json()).skills.find((skill) => skill.name === "humanizer");
   expect((await find(writer)).sourceAgentId).toBe("default_agent");
+  expect((await find(writer)).enabled).toBe(false);
   const original = Buffer.from(
     await (await page.request.get(`${base}/default_agent/skills/humanizer/archive`)).body(),
   );
   for (const themeId of ["github", "modern", "geek"]) {
+    if (themeId !== "github")
+      expect(
+        (await page.request.patch(`${writer}/humanizer`, { data: { enabled: false } })).ok(),
+      ).toBe(true);
     await setAccountPrefs(page.request, { lang: "en", themeId });
     await page.goto(`${BASE}/agents/shared_writer?tab=skills`);
     const row = page
@@ -40,9 +45,12 @@ test("General skills are shared by default with independent switches and private
       0,
     );
     const toggle = row.getByRole("switch", { name: "Enable humanizer", exact: true });
+    await expect(toggle).toHaveAttribute("aria-checked", "false");
+    await toggle.click();
+    await expect(toggle).toHaveAttribute("aria-checked", "true");
     await toggle.click();
     await expect(toggle).toHaveAttribute("aria-checked", "false");
-    expect((await find(reviewer)).enabled).not.toBe(false);
+    expect((await find(reviewer)).enabled).toBe(false);
     await page.screenshot({
       path: testInfo.outputPath(`${themeId}-shared-skill.png`),
       animations: "allow",

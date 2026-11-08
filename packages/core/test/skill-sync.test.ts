@@ -3,6 +3,7 @@
  * - Given a manual sync, source files reach each target in this Project, concurrent target requests
  *   are not lost, and a later source update replaces an unedited managed copy exactly.
  * - Given a target switch is off, updates preserve that switch and all source content.
+ * - Given a new shared copy, its default-off state persists after copying; an explicit enabled state remains enabled.
  * - Given same-name local content, edited managed copies or unsafe source files, sync preserves
  *   local files and reports a conflict instead of overwriting them.
  * - Given a source is removed or edited, installed copies stay as they were until an explicit sync.
@@ -50,6 +51,16 @@ afterEach(async () => {
 });
 
 describe("General Agent skill sync", () => {
+  it("keeps new shared copies disabled unless a consumer explicitly enabled them", async () => {
+    await install();
+    await setSkillEnabled(root, P, B, "shared", true);
+    await synchronizeAgentSkills(root, P, [A, B]);
+    expect(await skillEnabled(agentStateDir(root, P, A), "shared")).toBe(false);
+    expect(await skillEnabled(agentStateDir(root, P, B), "shared")).toBe(true);
+    await removeSkill(root, P, DEFAULT_AGENT_ID, "shared");
+    expect(await skillEnabled(agentStateDir(root, P, A), "shared")).toBe(false);
+    expect(await skillEnabled(agentStateDir(root, P, B), "shared")).toBe(true);
+  });
   it("previews pending copies without changing local content or creating files", async () => {
     await install();
     await install(A, "Local choice");

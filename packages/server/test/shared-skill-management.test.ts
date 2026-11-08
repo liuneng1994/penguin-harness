@@ -3,6 +3,7 @@
  * - Given an explicit private-copy request, only one concurrent request creates it; updates and removal preserve source and switches.
  * - Given native consumer reads, retained Trace statistics count them for that Agent, not for General or forwarded children.
  * - Given a shared-only entry or another Project, deletion and unauthorized copying cannot change General's files.
+ * - Given a shared skill has no saved switch, creating a private copy preserves default-off; explicit enablement survives copying and removal.
  */
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -62,13 +63,13 @@ describe("shared skill management", () => {
 
   it("exposes and exports General's existing skills while preserving each Agent's switch and files", async () => {
     const before = await fs.readFile(file(), "utf8");
-    expect(await read()).toMatchObject({ sourceAgentId: G });
+    expect(await read()).toMatchObject({ sourceAgentId: G, enabled: false });
     await expect(fs.access(file(A))).rejects.toThrow();
     expect((await member.patch(base(G) + "/shared_demo", { enabled: false })).status).toBe(200);
-    expect((await read()).enabled).toBeUndefined();
+    expect((await read()).enabled).toBe(false);
     expect((await member.patch(base() + "/shared_demo", { enabled: false })).status).toBe(200);
     expect((await read()).enabled).toBe(false);
-    expect((await read(B)).enabled).toBeUndefined();
+    expect((await read(B)).enabled).toBe(false);
     const archive = await member.get(base() + "/shared_demo/archive");
     expect(archive.status).toBe(200);
     const zip = unzipSync(new Uint8Array(await archive.arrayBuffer()));
@@ -142,5 +143,19 @@ describe("shared skill management", () => {
     await expect(
       fs.access(path.join(agentStateDir(t.root, p, A), "skills/missing")),
     ).rejects.toThrow();
+  });
+
+  it("preserves default-off and explicitly enabled switches when creating and removing private copies", async () => {
+    expect((await read(B)).enabled).toBe(false);
+    expect((await member.post(base(B) + "/shared_demo/local-copy")).status).toBe(201);
+    expect(await read(B)).toMatchObject({ overridesShared: true, enabled: false });
+    expect((await member.delete(base(B) + "/shared_demo")).status).toBe(204);
+    expect(await read(B)).toMatchObject({ sourceAgentId: G, enabled: false });
+    expect((await member.patch(base(B) + "/shared_demo", { enabled: true })).status).toBe(200);
+    expect((await member.post(base(B) + "/shared_demo/local-copy")).status).toBe(201);
+    expect((await read(B)).enabled).not.toBe(false);
+    expect((await member.delete(base(B) + "/shared_demo")).status).toBe(204);
+    expect(await read(B)).toMatchObject({ sourceAgentId: G });
+    expect((await read(B)).enabled).not.toBe(false);
   });
 });
