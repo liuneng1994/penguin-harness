@@ -234,6 +234,8 @@ export interface VisionDescriberService {
  */
 export interface EnvironmentServices {
   subagentRunner?: SubagentRunner;
+  /** Read-only discovery within the serving node's current Project; no remote transport. */
+  agentDiscovery?: import("../state/agent-catalog.js").AgentDiscovery;
   /** Injected when (and only when) the running context's model doesn't support images: read_file then describes an image through it instead of returning image content. Follows the model across an in-session switch (`Environment.reconfigure` re-injects or removes it as each context opens). */
   visionDescriber?: VisionDescriberService;
   /** Registry of long-running command sessions (shared by `exec_command` / `input_command`); constructed and injected internally by Environment. */

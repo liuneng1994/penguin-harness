@@ -800,6 +800,31 @@ function defaultBuiltinTools(): ToolDefinitionConfig[] {
       maxOutputLength: 16000,
     },
     {
+      name: "list_agents",
+      description:
+        "Discover Agents on this node in the current Project. Returns their IDs, names and declared roles. Pass agent_id to inspect one Agent's enabled skills. Use this information to decide whether and how to delegate with run_subagent.",
+      parameters: {
+        type: "object",
+        properties: {
+          description: {
+            type: "string",
+            description:
+              "One short sentence explaining what you are looking for, in the user's language.",
+          },
+          agent_id: {
+            type: "string",
+            description:
+              "Optional Agent ID from the local Project catalog; when given, also returns its enabled skill names.",
+          },
+        },
+        required: ["description"],
+      },
+      permission: "r",
+      call_description: true,
+      timeoutMs: 10000,
+      maxOutputLength: 32000,
+    },
+    {
       name: "run_subagent",
       description:
         "Delegate a self-contained subtask to a subagent that runs autonomously in the same workspace and returns its final answer. Use it for focused sub-tasks you can fully specify in one prompt. Optionally choose a specific agent via `agent_id`, a model via `model_id`, and a thinking level via `thinking_level`. " +
