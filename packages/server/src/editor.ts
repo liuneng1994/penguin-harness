@@ -18,7 +18,7 @@ export function isEditorSshAlias(alias: string): boolean {
 }
 
 export function vscodeUri(
-  target: Pick<EditorTarget, "path" | "line" | "column">,
+  target: { path: string; line?: unknown; column?: unknown },
   sshAlias = "",
 ): string {
   let file = target.path;

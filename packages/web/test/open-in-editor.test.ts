@@ -6,41 +6,34 @@
  * - Given ownership refreshes during target resolution, keep the clicked node's connection.
  * - Given a machine id, use its SSH config Host alias by default for Session and Workspace files.
  * - Given a personal override, including local files, keep it ahead of the discovered default.
+ * - Given a changing or invalid stored preference, never launch using a second or invalid connection.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   openFileInVSCode,
   saveEditorSshAlias,
-  editorSshAlias,
-  editorConnectionConfigured,
+  editorConnection,
+  editorMachine,
 } from "../src/features/chat/open-in-editor";
 import { rememberSessionMachine, forgetSessionMachines } from "../src/lib/session-machines";
 import type { FilesScope } from "../src/api/workspace-files";
+import { apiError, json, stubFetch } from "./helpers/fetch";
+import type { FakeFetch, FetchRequest } from "./helpers/fetch";
+import { blockedStorage, stubLocalStorage } from "./helpers/storage";
 
 describe("external editor file opening", () => {
-  let calls: { url: string; body?: unknown }[], launch: string[], missing: boolean;
+  let http: FakeFetch, calls: readonly FetchRequest[], launch: string[], missing: boolean;
+  const target = { path: "/repo/src/a b#%.ts", workspace: "/repo", line: 42, column: 7 };
   beforeEach(() => {
-    calls = [];
     launch = [];
     missing = false;
-    const store = new Map<string, string>();
-    vi.stubGlobal("localStorage", {
-      getItem: (key: string) => store.get(key) ?? null,
-      setItem: (key: string, value: string) => store.set(key, value),
-    });
+    stubLocalStorage();
     vi.stubGlobal("WebSocket", undefined);
-    vi.stubGlobal("fetch", async (url: string, init?: { body?: string }) => {
-      calls.push({ url, ...(init?.body ? { body: JSON.parse(init.body) } : {}) });
-      if (url.includes("/desktop/editor/")) return new Response(null, { status: 204 });
-      return new Response(
-        JSON.stringify(
-          missing
-            ? { error: { code: "path_not_found", message: "File missing" } }
-            : { path: "/repo/src/a b#%.ts", workspace: "/repo", line: 42, column: 7 },
-        ),
-        { status: missing ? 404 : 200, headers: { "content-type": "application/json" } },
-      );
+    http = stubFetch(({ path }) => {
+      if (path.includes("/desktop/editor/")) return new Response(null, { status: 204 });
+      return missing ? apiError(404, "path_not_found", "File missing") : json(target);
     });
+    calls = http.requests;
   });
   afterEach(() => {
     vi.unstubAllGlobals();
@@ -60,8 +53,7 @@ describe("external editor file opening", () => {
     { kind: "workspace", projectId: "p", workspace: "/repo", machineId: "remote-id" },
   ])("uses the SSH config Host alias for a $kind addressed by machine id", async (source) => {
     rememberSessionMachine("s", "remote-id");
-    expect(editorSshAlias("u", source, hosts)).toBe("server-2222");
-    expect(editorConnectionConfigured("u", source, hosts)).toBe(true);
+    expect(editorConnection("u", editorMachine(source), hosts)).toBe("server-2222");
     await openFileInVSCode(
       source,
       { path: "src/a b#%.ts", line: 42, column: 7 },
@@ -76,10 +68,10 @@ describe("external editor file opening", () => {
   });
   it("prefers a reader's saved connection to the host alias, including an explicit local choice", async () => {
     rememberSessionMachine("s", "remote-id");
-    saveEditorSshAlias("u", scope, "reader-dev");
-    expect(editorSshAlias("other", scope, hosts)).toBe("server-2222");
+    saveEditorSshAlias("u", "remote-id", "reader-dev");
+    expect(editorConnection("other", "remote-id", hosts)).toBe("server-2222");
     await openFileInVSCode(scope, { path: "src/a b#%.ts" }, { ...opts(), machines: hosts });
-    saveEditorSshAlias("u", scope, "");
+    saveEditorSshAlias("u", "remote-id", "");
     await openFileInVSCode(scope, { path: "src/a b#%.ts" }, { ...opts(), machines: hosts });
     expect(launch).toEqual([
       "vscode://vscode-remote/ssh-remote+reader-dev/repo/src/a%20b%23%25.ts:42:7",
@@ -107,7 +99,7 @@ describe("external editor file opening", () => {
   });
   it("resolves remote files on their node and launches from the local desktop server", async () => {
     rememberSessionMachine("s", "remote-id");
-    saveEditorSshAlias("u", scope, "client-dev");
+    saveEditorSshAlias("u", "remote-id", "client-dev");
     await openFileInVSCode(
       scope,
       { path: "src/a b#%.ts", line: 42, column: 7 },
@@ -116,36 +108,29 @@ describe("external editor file opening", () => {
     expect(calls.find((call) => call.url.includes("editor-target"))!.url).toContain(
       "/server/remote-id/api/sessions/s/",
     );
-    expect(calls.find((call) => call.url.includes("desktop/editor"))).toEqual({
+    expect(calls.find((call) => call.url.includes("desktop/editor"))).toMatchObject({
       url: "/api/desktop/editor/open",
+      method: "POST",
+      machine: null,
       body: { path: "/repo/src/a b#%.ts", line: 42, column: 7, sshAlias: "client-dev" },
     });
     expect(launch).toEqual([]);
   });
   it("keeps connections per user and node, including explicit local overrides", () => {
     rememberSessionMachine("s", "ssh:server-dev");
-    expect(editorSshAlias("u", scope)).toBe("server-dev");
-    saveEditorSshAlias("u", scope, "client-dev");
-    expect(editorSshAlias("u", scope)).toBe("client-dev");
-    expect(editorSshAlias("other", scope)).toBe("server-dev");
-    expect(
-      editorSshAlias("u", {
-        kind: "workspace",
-        projectId: "p",
-        workspace: "/repo",
-        machineId: "ssh:another",
-      }),
-    ).toBe("another");
-    saveEditorSshAlias("u", scope, "");
-    expect(editorSshAlias("u", scope)).toBe("");
+    expect(editorConnection("u", "ssh:server-dev")).toBe("server-dev");
+    saveEditorSshAlias("u", "ssh:server-dev", "client-dev");
+    expect(editorConnection("u", "ssh:server-dev")).toBe("client-dev");
+    expect(editorConnection("other", "ssh:server-dev")).toBe("server-dev");
+    expect(editorConnection("u", "ssh:another")).toBe("another");
+    saveEditorSshAlias("u", "ssh:server-dev", "");
+    expect(editorConnection("u", "ssh:server-dev")).toBe("");
   });
   it("keeps the clicked connection if Session ownership changes during the request", async () => {
     rememberSessionMachine("s", "original-id");
-    const fetch = globalThis.fetch;
-    vi.stubGlobal("fetch", async (...args: Parameters<typeof fetch>) => {
-      const result = await fetch(...args);
+    http.answer(() => {
       rememberSessionMachine("s", "replacement-id");
-      return result;
+      return json(target);
     });
     await openFileInVSCode(
       scope,
@@ -178,9 +163,9 @@ describe("external editor file opening", () => {
   });
   it("opens an unknown node locally only after an explicit empty connection is saved", async () => {
     rememberSessionMachine("s", "remote-id");
-    expect(editorConnectionConfigured("u", scope)).toBe(false);
-    saveEditorSshAlias("u", scope, "");
-    expect(editorConnectionConfigured("u", scope)).toBe(true);
+    expect(editorConnection("u", "remote-id")).toBeNull();
+    saveEditorSshAlias("u", "remote-id", "");
+    expect(editorConnection("u", "remote-id")).toBe("");
     await openFileInVSCode(scope, { path: "src/a b#%.ts" }, opts());
     expect(calls.find((call) => call.url.includes("editor-target"))!.url).toContain(
       "/server/remote-id/api/sessions/s/",
@@ -189,19 +174,31 @@ describe("external editor file opening", () => {
   });
   it("reports denied preference storage and keeps an unknown node closed", async () => {
     rememberSessionMachine("s", "remote-id");
-    vi.stubGlobal("localStorage", {
-      getItem: () => {
-        throw new Error("Storage denied");
-      },
-      setItem: () => {
-        throw new Error("Storage denied");
-      },
-    });
-    expect(() => saveEditorSshAlias("u", scope, "reader-dev")).toThrow("Could not save");
-    expect(editorSshAlias("u", scope)).toBe("");
+    stubLocalStorage(blockedStorage());
+    expect(() => saveEditorSshAlias("u", "remote-id", "reader-dev")).toThrow("Could not save");
+    expect(editorConnection("u", "remote-id")).toBeNull();
     await expect(openFileInVSCode(scope, { path: "src/a.ts" }, opts())).rejects.toMatchObject({
       code: "editor_connection_required",
     });
+    expect(calls).toEqual([]);
+    expect(launch).toEqual([]);
+  });
+  it("captures one connection even if the stored value changes between reads", async () => {
+    rememberSessionMachine("s", "remote-id");
+    const store = stubLocalStorage();
+    let reads = 0;
+    store.getItem = () => (reads++ === 0 ? "reader-dev" : "");
+    await openFileInVSCode(scope, { path: "src/a.ts" }, opts());
+    expect(launch).toEqual([
+      "vscode://vscode-remote/ssh-remote+reader-dev/repo/src/a%20b%23%25.ts:42:7",
+    ]);
+  });
+  it("refuses an invalid stored override before resolving or launching a file", async () => {
+    rememberSessionMachine("s", "remote-id");
+    localStorage.setItem("penguin.vscodeSsh.u.remote-id", "invalid/alias");
+    await expect(
+      openFileInVSCode(scope, { path: "src/a.ts" }, { ...opts(), machines: hosts }),
+    ).rejects.toMatchObject({ code: "editor_connection_required" });
     expect(calls).toEqual([]);
     expect(launch).toEqual([]);
   });

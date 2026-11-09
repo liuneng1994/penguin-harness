@@ -10,60 +10,44 @@ import type { MachineInfo } from "@prismshadow/penguin-server/api";
 
 type EditorHost = Pick<MachineInfo, "id" | "machineId" | "alias" | "local">;
 
-function defaultEditorSshAlias(scope: FilesScope, machines?: readonly EditorHost[] | null): string {
-  const machine = editorMachine(scope);
-  if (machine === null) return "";
-  const host = machines?.find(
-    (entry) => !entry.local && (entry.machineId === machine || entry.id === machine),
-  );
-  return host?.alias ?? (machine.startsWith("ssh:") ? machine.slice(4) : "");
-}
-
 export function editorMachine(scope: FilesScope): string | null {
   return scope.kind === "session" ? machineForSession(scope.sessionId) : (scope.machineId ?? null);
 }
 
-function editorKey(userId: string, scope: FilesScope): string {
-  return `penguin.vscodeSsh.${encodeURIComponent(userId)}.${encodeURIComponent(editorMachine(scope) ?? "local")}`;
+function editorKey(userId: string, machineId: string | null): string {
+  return `penguin.vscodeSsh.${encodeURIComponent(userId)}.${encodeURIComponent(machineId ?? "local")}`;
 }
 
-export function editorSshAlias(
+/** Empty means local files; null means no usable connection has been configured. */
+export function editorConnection(
   userId: string,
-  scope: FilesScope,
+  machineId: string | null,
   machines?: readonly EditorHost[] | null,
-): string {
-  const fallback = defaultEditorSshAlias(scope, machines);
+): string | null {
   try {
-    return localStorage.getItem(editorKey(userId, scope)) ?? fallback;
+    const saved = localStorage.getItem(editorKey(userId, machineId));
+    if (saved !== null) return isEditorSshAlias(saved) ? saved : null;
   } catch {
-    return fallback;
+    // A configured host is still usable when the browser refuses preference storage.
   }
+  if (machineId === null) return "";
+  const host = machines?.find(
+    (entry) => !entry.local && (entry.machineId === machineId || entry.id === machineId),
+  );
+  const alias = host?.alias ?? (machineId.startsWith("ssh:") ? machineId.slice(4) : null);
+  return alias && isEditorSshAlias(alias) ? alias : null;
 }
 
-export function saveEditorSshAlias(userId: string, scope: FilesScope, alias: string): void {
+export function saveEditorSshAlias(userId: string, machineId: string | null, alias: string): void {
   if (!isEditorSshAlias(alias)) throw new Error("Invalid SSH connection name.");
   try {
-    localStorage.setItem(editorKey(userId, scope), alias);
+    localStorage.setItem(editorKey(userId, machineId), alias);
   } catch {
     throw new ApiError(
       500,
       "editor_preferences_unavailable",
       "Could not save the editor connection in this browser.",
     );
-  }
-}
-
-export function editorConnectionConfigured(
-  userId: string,
-  scope: FilesScope,
-  machines?: readonly EditorHost[] | null,
-): boolean {
-  const fallback = defaultEditorSshAlias(scope, machines);
-  if (editorMachine(scope) === null || (fallback !== "" && isEditorSshAlias(fallback))) return true;
-  try {
-    return localStorage.getItem(editorKey(userId, scope)) !== null;
-  } catch {
-    return false;
   }
 }
 
@@ -89,13 +73,13 @@ export async function openFileInVSCode(
     launchUri?: (uri: string) => void;
   },
 ): Promise<void> {
-  if (!editorConnectionConfigured(opts.userId, scope, opts.machines))
+  const alias = editorConnection(opts.userId, editorMachine(scope), opts.machines);
+  if (alias === null)
     throw new ApiError(
       400,
       "editor_connection_required",
       "Configure this machine's VS Code SSH connection first.",
     );
-  const alias = editorSshAlias(opts.userId, scope, opts.machines);
   // Capture the reader's connection before the request: refreshing Session ownership while
   // it is in flight must not open the old node's path on a newly selected machine.
   const target = await filesApi(scope).editorTarget(location.path, location.line, location.column);

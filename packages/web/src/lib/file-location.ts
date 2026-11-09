@@ -1,5 +1,6 @@
 /** Locations printed by code tools and Markdown citations, normalized inside one Workspace. */
 import { toWorkspaceRelative, hasKnownFileExtension } from "./file-path";
+import { editorPosition } from "@prismshadow/penguin-server/editor";
 
 export interface FileLocation {
   path: string;
@@ -19,17 +20,12 @@ export function fileLocation(
   const match = /^(.*?)(?::(\d+)(?::(\d+))?|#L(\d+)(?:C(\d+)|-L\d+)?)$/.exec(file);
   if (match) {
     file = match[1]!;
-    line = Number(match[2] ?? match[4]);
-    column = Number(match[3] ?? match[5] ?? 1);
-    if (
-      !Number.isSafeInteger(line) ||
-      line < 1 ||
-      line > 2147483647 ||
-      !Number.isSafeInteger(column) ||
-      column < 1 ||
-      column > 2147483647
-    )
+    try {
+      line = editorPosition(match[2] ?? match[4], "line");
+      column = editorPosition(match[3] ?? match[5], "column");
+    } catch {
       return null;
+    }
   }
   if (encoded) {
     try {
@@ -43,8 +39,14 @@ export function fileLocation(
   if (/^[a-z][a-z0-9+.-]*:/i.test(file) && !/^[A-Za-z]:[\\/]/.test(file)) return null;
   const path = toWorkspaceRelative(file, workspace);
   if (path === null) return null;
-  // Explicit Markdown links may contain spaced names; inline references use the same extension list.
-  if (!hasKnownFileExtension(path)) return null;
+  // A position makes uncommon extensions useful too. Bare inline names still need a file
+  // shape, so data such as status:200, 12:30 and v1.2:3 keeps rendering as text.
+  const positioned =
+    line !== undefined &&
+    (encoded ||
+      path.includes("/") ||
+      /\.[a-z][a-z0-9_-]*$|^(?:Dockerfile|Makefile|README|LICENSE|Jenkinsfile)$/i.test(path));
+  if (!positioned && !hasKnownFileExtension(path)) return null;
   return { path, ...(line !== undefined ? { line, column } : {}) };
 }
 

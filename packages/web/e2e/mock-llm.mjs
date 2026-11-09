@@ -254,7 +254,10 @@ const server = http.createServer((req, res) => {
           type: "text_delta",
           text: "Read viewer.ts:42:7, then `viewer.ts:9` and [definition](viewer.ts:12:3).\n\n",
         },
-        { type: "text_delta", text: "Encoded filename: `报告 #100%.ts:15:2`." },
+        {
+          type: "text_delta",
+          text: "Encoded filename: `报告 #100%.ts:15:2`.\n\nComponent: [component](viewer.vue:6:2), build Dockerfile:3.",
+        },
       ]);
       messageStop(res, "end_turn", 30);
       return;

@@ -22,7 +22,7 @@ export function remarkFileLocations(opts: { hrefFor: (text: string) => string | 
         }
         const value = child.value;
         const pattern =
-          /[^\s`<>()[\]{}"'，。！？；：]+?\.[A-Za-z0-9]{1,8}(?::\d+(?::\d+)?|#L\d+(?:C\d+|-L\d+)?)(?![\w:])/g;
+          /[^\s`<>()[\]{}"'，。！？；：]+?(?::\d+(?::\d+)?|#L\d+(?:C\d+|-L\d+)?)(?![\w:]|\.\d)/g;
         const out: Node[] = [];
         let end = 0;
         for (const match of value.matchAll(pattern)) {

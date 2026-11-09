@@ -6,7 +6,7 @@ import open from "open";
 import { Bind, Component, Use } from "@prismshadow/penguin-core/kernel";
 import { Desktop } from "../../hmr/capabilities.js";
 import type { AppEnv } from "../../auth/middleware.js";
-import { vscodeUri, editorPosition } from "../../editor.js";
+import { vscodeUri } from "../../editor.js";
 import { badRequest, readJson, requireString } from "../validate.js";
 import { HttpError } from "../errors.js";
 
@@ -31,8 +31,8 @@ export function desktopEditorRoutes(deps: {
       uri = vscodeUri(
         {
           path: file,
-          line: editorPosition(body.line, "line"),
-          column: editorPosition(body.column, "column"),
+          line: body.line,
+          column: body.column,
         },
         sshAlias,
       );

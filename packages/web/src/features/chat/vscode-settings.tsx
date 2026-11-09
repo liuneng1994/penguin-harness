@@ -3,8 +3,7 @@ import { useState } from "react";
 import { Modal, Input, Button, useFormDraft, useGuardedClose } from "@prismshadow/penguin-ui";
 import { isEditorSshAlias } from "@prismshadow/penguin-server/editor";
 import type { FilesScope } from "../../api/workspace-files";
-import { editorConnectionConfigured, editorSshAlias, saveEditorSshAlias } from "./open-in-editor";
-import { ApiError } from "../../api/client";
+import { editorConnection, editorMachine, saveEditorSshAlias } from "./open-in-editor";
 import { apiErrorText } from "../../lib/api-error";
 import { S } from "../../lib/strings";
 import { useMachines } from "../../state/machines";
@@ -19,21 +18,22 @@ export function VSCodeSettings({
   onClose: () => void;
 }) {
   const machineHosts = useMachines().state?.machines;
-  const initial = editorSshAlias(userId, scope, machineHosts);
-  const form = useFormDraft(initial, { normalize: (value) => value.trim() });
+  const [machineId] = useState(() => editorMachine(scope));
+  const connection = editorConnection(userId, machineId, machineHosts);
+  const form = useFormDraft(connection ?? "", { normalize: (value) => value.trim() });
   const alias = form.draft.trim();
   const requestClose = useGuardedClose(onClose, form.scope);
   const valid = isEditorSshAlias(alias);
-  const canSave = valid && (form.dirty || !editorConnectionConfigured(userId, scope, machineHosts));
+  const canSave = valid && (form.dirty || connection === null);
   const [error, setError] = useState<string | null>(null);
   const save = () => {
     if (!canSave) return;
     try {
-      saveEditorSshAlias(userId, scope, alias);
+      saveEditorSshAlias(userId, machineId, alias);
       form.adopt(alias);
       onClose();
     } catch (error) {
-      setError(error instanceof ApiError ? apiErrorText(error) : S.files.editorInvalidAlias);
+      setError(apiErrorText(error));
     }
   };
   return (

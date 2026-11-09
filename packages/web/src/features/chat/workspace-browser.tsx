@@ -1717,15 +1717,12 @@ export function WorkspaceBrowser({
       treeMenu.openAt({ top: r.top, bottom: r.bottom, left: r.left, right: r.right });
     },
     onPointerDown: (e: ReactPointerEvent) => {
-      // Holds prepare their target here; a secondary mouse click also passes through the
-      // hook so native focus cannot scroll the dock before its context menu opens.
-      if (!isLongPressPointer(e.pointerType) && !(e.pointerType === "mouse" && e.button === 2))
-        return;
       const row = hitRow(e.target);
       const blank = row === null ? hitBlank(e.target) : null;
       if (row === null && blank === null) return;
       treeMenu.rowRef(row?.el ?? blank);
-      setTreeMenuTarget(row === null ? "blank" : { path: row.path, kind: row.kind });
+      if (isLongPressPointer(e.pointerType))
+        setTreeMenuTarget(row === null ? "blank" : { path: row.path, kind: row.kind });
       treeMenu.rowProps.onPointerDown(e);
     },
     onPointerMove: treeMenu.rowProps.onPointerMove,

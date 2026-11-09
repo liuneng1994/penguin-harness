@@ -1,6 +1,7 @@
 /** Chat locations and the Files panel invoke one external-editor target, with reader-owned
  * connection settings. All themes and phone width use an isolated Workspace and intercept
  * only the final OS protocol handoff, leaving authentication and target resolution real.
+ * Uncommon extensions and extensionless build files retain their requested position.
  */
 import fs from "node:fs";
 import os from "node:os";
@@ -21,6 +22,11 @@ test("chat file positions and Files actions open VS Code with the reader's conne
     Array.from({ length: 60 }, (_, i) => `// line ${i + 1}`).join("\n"),
   );
   fs.writeFileSync(path.join(ws, "报告 #100%.ts"), "// Unicode file\n");
+  fs.writeFileSync(
+    path.join(ws, "viewer.vue"),
+    Array.from({ length: 8 }, (_, i) => `<!-- line ${i + 1} -->`).join("\n"),
+  );
+  fs.writeFileSync(path.join(ws, "Dockerfile"), "FROM scratch\n# build\n# entry\n");
   for (let i = 0; i < 30; i++)
     fs.writeFileSync(
       path.join(ws, `z-reference-${String(i).padStart(2, "0")}.ts`),
@@ -105,6 +111,10 @@ test("chat file positions and Files actions open VS Code with the reader's conne
       await lastTarget(expected("viewer.ts", 12, 3), ++count);
       await page.locator('a[href*="100%25.ts#L15C2"]').first().click();
       await lastTarget(expected("报告 #100%.ts", 15, 2), ++count);
+      await page.locator('a[href="./viewer.vue#L6C2"]').first().click();
+      await lastTarget(expected("viewer.vue", 6, 2), ++count);
+      await page.locator('a[href="./Dockerfile#L3C1"]').first().click();
+      await lastTarget(expected("Dockerfile", 3, 1), ++count);
       const pick = page.getByTestId("dock-pick-workspace");
       const toggle = page.getByTestId("dock-toggle-right");
       if ((await toggle.getAttribute("aria-expanded")) !== "true") await toggle.click();

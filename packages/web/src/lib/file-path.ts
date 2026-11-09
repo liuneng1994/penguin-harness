@@ -136,12 +136,13 @@ export function toWorkspaceRelative(path: string, workspace: string | null): str
     return /^[A-Za-z]:/.test(slashed) ? slashed[0]!.toLowerCase() + slashed.slice(1) : slashed;
   };
   const normalizedInput = normalize(s);
-  const normalizedWs = ws === null ? null : normalize(ws);
+  const normalizedWs = ws === null ? null : normalize(ws).replace(/\/+$/, "");
   const absolute = normalizedInput.startsWith("/") || (winWs && /^[a-z]:/.test(normalizedInput));
   let rel = normalizedInput;
   if (absolute) {
-    if (normalizedWs === null || !normalizedInput.startsWith(`${normalizedWs}/`)) return null;
-    rel = normalizedInput.slice(normalizedWs.length + 1);
+    const prefix = normalizedWs === null ? null : `${normalizedWs}/`;
+    if (prefix === null || !normalizedInput.startsWith(prefix)) return null;
+    rel = normalizedInput.slice(prefix.length);
   }
   const stack: string[] = [];
   for (const seg of rel.split("/")) {

@@ -2,6 +2,7 @@
  * - Given code locations, resolve colon and GitHub-style positions inside the current Workspace.
  * - Given Windows, spaced, Unicode and percent-bearing names, preserve the actual file and position.
  * - Given foreign paths, URLs or invalid positions, do not offer an editor target.
+ * - Given root or trailing-slash Workspaces, absolute citations still resolve inside them.
  */
 import { describe, expect, it } from "vitest";
 import { fileLocation, fileLocationHref } from "../src/lib/file-location";
@@ -10,6 +11,13 @@ import type { MouseEvent } from "react";
 
 const WS = "/work/repo";
 describe("file locations", () => {
+  it.each([
+    ["/src/a.ts:12", "/", "src/a.ts"],
+    ["C:/src/a.ts:12", "C:\\", "src/a.ts"],
+    ["/work/repo/src/a.ts:12", "/work/repo/", "src/a.ts"],
+  ])("resolves %s inside Workspace %s", (text, workspace, path) => {
+    expect(fileLocation(text, workspace)).toEqual({ path, line: 12, column: 1 });
+  });
   it.each(["src/a.ts:42:7", "src/a.ts#L42C7", "/work/repo/src/a.ts:42:7"])(
     "resolves %s to the same file and position",
     (text) => {
