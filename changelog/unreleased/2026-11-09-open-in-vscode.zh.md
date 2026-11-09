@@ -3,6 +3,7 @@
 - **Date:** 2026-11-09
 - **Type:** feature
 - **Scope:** `server`, `web`, `ui`, `desktop`
+- **PR:** [#4](https://github.com/liuneng1994/penguin-harness/pull/4)
 
 [English](2026-11-09-open-in-vscode.md)
 
