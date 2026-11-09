@@ -102,6 +102,7 @@ import { filesApi, filesScopeKey } from "../../api/workspace-files";
 import type { FilesScope } from "../../api/workspace-files";
 import { useAuth } from "../../state/auth";
 import { openFileInVSCode } from "./open-in-editor";
+import { useMachines } from "../../state/machines";
 import { VSCodeSettings } from "./vscode-settings";
 import { S } from "../../lib/strings";
 import { apiErrorText } from "../../lib/api-error";
@@ -503,13 +504,18 @@ export function WorkspaceBrowser({
   // the new tab to the same-origin sandbox (which the link flags rather than failing
   // silently in the page) and the in-app rendered view to the srcDoc fallback.
   const { previewIsolated: serverPreviewIsolated, desktopMode, sessionVia, user } = useAuth();
+  const machineHosts = useMachines().state?.machines;
   const [editorSettings, setEditorSettings] = useState(false);
   const openEditor = (path: string) => {
     if (!user) return;
     void openFileInVSCode(
       scope,
       { path },
-      { userId: user.userId, desktop: isDesktopShellWindow({ desktopMode, sessionVia }) },
+      {
+        userId: user.userId,
+        desktop: isDesktopShellWindow({ desktopMode, sessionVia }),
+        machines: machineHosts,
+      },
     ).catch((error) => toastApiError(error));
   };
   // The Markdown preview's reader: its outline and find buttons sit in the panel's header row,

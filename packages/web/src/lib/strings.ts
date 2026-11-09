@@ -5072,7 +5072,7 @@ Benchmark：
     editorSettings: "VS Code 连接设置",
     editorSshAlias: "SSH 连接名",
     editorSshPlaceholder: "留空打开本机文件",
-    editorSshHint: "远程连接名需与这台电脑的 SSH 配置一致。",
+    editorSshHint: "默认使用主机在 SSH config 中的 Host 名称。若这台电脑的连接名不同，可在此修改。",
     editorInvalidAlias: "请输入由字母、数字、下划线、点或连字符组成的连接名。",
     title: "文件",
     upload: "上传",

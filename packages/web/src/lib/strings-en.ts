@@ -4831,7 +4831,8 @@ Scenarios:
     editorSettings: "VS Code connection settings",
     editorSshAlias: "SSH connection name",
     editorSshPlaceholder: "Leave empty to open local files",
-    editorSshHint: "Remote connection names must match this computer's SSH configuration.",
+    editorSshHint:
+      "Defaults to the machine's Host alias in SSH config. Change it if this computer uses a different connection name.",
     editorInvalidAlias:
       "Use letters, numbers, underscores, dots or hyphens for the connection name.",
     title: "Files",

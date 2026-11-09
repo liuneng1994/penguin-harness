@@ -15,5 +15,6 @@ Chat file references gained an action that opened VS Code at the referenced line
 - File targets were resolved through the existing Workspace permissions and path checks before opening.
 - The browser handed the file to the reader's VS Code; the desktop app opened it through its local protocol handler.
 - VS Code connection settings stored the reader's SSH alias per user and machine in the browser. An empty connection name selected local files; a remote machine without a known alias required configuration.
+- Remote connections defaulted to the machine's `Host` alias from SSH config, including Sessions and Workspaces addressed by machine id. A saved personal connection name took precedence.
 - The `list_agents` tool gained its missing English and Chinese short names in chat tool cards.
 - File menus stopped closing immediately when browser focus scrolled the dock.

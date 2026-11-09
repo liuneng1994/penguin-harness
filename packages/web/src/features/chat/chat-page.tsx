@@ -85,6 +85,7 @@ import { bucketCostUsd } from "../../lib/amsp/task-stats";
 import { useAuth } from "../../state/auth";
 import { isDesktopShellWindow } from "../../lib/account-menu";
 import { openFileInVSCode } from "./open-in-editor";
+import { useMachines } from "../../state/machines";
 import type { FileLocation } from "../../lib/file-location";
 import { useLocale } from "../../state/locale";
 import { useTheme } from "../../state/theme";
@@ -274,6 +275,9 @@ export function ChatPage() {
   const location = useLocation();
   const params = useParams<{ sessionId?: string }>();
   const { user, desktopMode, sessionVia } = useAuth();
+  const machineHosts = useMachines().state?.machines;
+  const machineHostsRef = useRef(machineHosts);
+  machineHostsRef.current = machineHosts;
   const company = useCompany();
   const { currency } = useTheme();
   const { currentProject, currentAgent, setCurrentAgentId, reloadAgents, agents } = useProject();
@@ -2068,6 +2072,7 @@ export function ChatPage() {
       void openFileInVSCode({ kind: "session", sessionId: selected.sessionId }, location, {
         userId: user.userId,
         desktop: isDesktopShellWindow({ desktopMode, sessionVia }),
+        machines: machineHostsRef.current,
       }).catch((error) => toastApiError(error));
     },
     [selected?.sessionId, user?.userId, desktopMode, sessionVia],

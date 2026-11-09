@@ -4,6 +4,8 @@
  * - Given a missing file or unknown remote connection, do not launch an editor.
  * - Given different users or nodes, keep editor connection preferences independent.
  * - Given ownership refreshes during target resolution, keep the clicked node's connection.
+ * - Given a machine id, use its SSH config Host alias by default for Session and Workspace files.
+ * - Given a personal override, including local files, keep it ahead of the discovered default.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
@@ -50,6 +52,53 @@ describe("external editor file opening", () => {
     launchUri: (uri: string) => launch.push(uri),
   });
   const scope: FilesScope = { kind: "session", sessionId: "s" };
+  const hosts = [
+    { id: "ssh:server-2222", machineId: "remote-id", alias: "server-2222", local: false },
+  ];
+  it.each<FilesScope>([
+    scope,
+    { kind: "workspace", projectId: "p", workspace: "/repo", machineId: "remote-id" },
+  ])("uses the SSH config Host alias for a $kind addressed by machine id", async (source) => {
+    rememberSessionMachine("s", "remote-id");
+    expect(editorSshAlias("u", source, hosts)).toBe("server-2222");
+    expect(editorConnectionConfigured("u", source, hosts)).toBe(true);
+    await openFileInVSCode(
+      source,
+      { path: "src/a b#%.ts", line: 42, column: 7 },
+      { ...opts(), machines: hosts },
+    );
+    expect(calls.find((call) => call.url.includes("editor-target"))!.url).toContain(
+      "/server/remote-id/api/",
+    );
+    expect(launch).toEqual([
+      "vscode://vscode-remote/ssh-remote+server-2222/repo/src/a%20b%23%25.ts:42:7",
+    ]);
+  });
+  it("prefers a reader's saved connection to the host alias, including an explicit local choice", async () => {
+    rememberSessionMachine("s", "remote-id");
+    saveEditorSshAlias("u", scope, "reader-dev");
+    expect(editorSshAlias("other", scope, hosts)).toBe("server-2222");
+    await openFileInVSCode(scope, { path: "src/a b#%.ts" }, { ...opts(), machines: hosts });
+    saveEditorSshAlias("u", scope, "");
+    await openFileInVSCode(scope, { path: "src/a b#%.ts" }, { ...opts(), machines: hosts });
+    expect(launch).toEqual([
+      "vscode://vscode-remote/ssh-remote+reader-dev/repo/src/a%20b%23%25.ts:42:7",
+      "vscode://file/repo/src/a%20b%23%25.ts:42:7",
+    ]);
+  });
+  it("does not mistake the server's own hostname or an invalid alias for a remote connection", async () => {
+    rememberSessionMachine("s", "remote-id");
+    for (const entries of [
+      [{ ...hosts[0]!, local: true }],
+      [{ ...hosts[0]!, alias: "invalid/alias" }],
+    ]) {
+      await expect(
+        openFileInVSCode(scope, { path: "src/a.ts" }, { ...opts(), machines: entries }),
+      ).rejects.toMatchObject({ code: "editor_connection_required" });
+    }
+    expect(calls).toEqual([]);
+    expect(launch).toEqual([]);
+  });
   it("resolves a local location and opens exactly its encoded file and position", async () => {
     await openFileInVSCode(scope, { path: "src/a b#%.ts", line: 42, column: 7 }, opts());
     const request = calls.find((call) => call.url.includes("editor-target"))!;
@@ -91,14 +140,29 @@ describe("external editor file opening", () => {
     expect(editorSshAlias("u", scope)).toBe("");
   });
   it("keeps the clicked connection if Session ownership changes during the request", async () => {
-    rememberSessionMachine("s", "ssh:original");
+    rememberSessionMachine("s", "original-id");
     const fetch = globalThis.fetch;
     vi.stubGlobal("fetch", async (...args: Parameters<typeof fetch>) => {
       const result = await fetch(...args);
-      rememberSessionMachine("s", "ssh:replacement");
+      rememberSessionMachine("s", "replacement-id");
       return result;
     });
-    await openFileInVSCode(scope, { path: "src/a b#%.ts" }, opts());
+    await openFileInVSCode(
+      scope,
+      { path: "src/a b#%.ts" },
+      {
+        ...opts(),
+        machines: [
+          { id: "ssh:original", machineId: "original-id", alias: "original", local: false },
+          {
+            id: "ssh:replacement",
+            machineId: "replacement-id",
+            alias: "replacement",
+            local: false,
+          },
+        ],
+      },
+    );
     expect(launch).toEqual([
       "vscode://vscode-remote/ssh-remote+original/repo/src/a%20b%23%25.ts:42:7",
     ]);

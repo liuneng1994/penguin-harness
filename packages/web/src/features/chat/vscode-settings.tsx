@@ -7,6 +7,7 @@ import { editorConnectionConfigured, editorSshAlias, saveEditorSshAlias } from "
 import { ApiError } from "../../api/client";
 import { apiErrorText } from "../../lib/api-error";
 import { S } from "../../lib/strings";
+import { useMachines } from "../../state/machines";
 
 export function VSCodeSettings({
   scope,
@@ -17,12 +18,13 @@ export function VSCodeSettings({
   userId: string;
   onClose: () => void;
 }) {
-  const [initial] = useState(() => editorSshAlias(userId, scope));
+  const machineHosts = useMachines().state?.machines;
+  const initial = editorSshAlias(userId, scope, machineHosts);
   const form = useFormDraft(initial, { normalize: (value) => value.trim() });
   const alias = form.draft.trim();
   const requestClose = useGuardedClose(onClose, form.scope);
   const valid = isEditorSshAlias(alias);
-  const canSave = valid && (form.dirty || !editorConnectionConfigured(userId, scope));
+  const canSave = valid && (form.dirty || !editorConnectionConfigured(userId, scope, machineHosts));
   const [error, setError] = useState<string | null>(null);
   const save = () => {
     if (!canSave) return;
