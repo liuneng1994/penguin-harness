@@ -56,6 +56,7 @@ const FORM_MODULES: readonly string[] = [
   "features/benchmark/create-benchmark-modal.tsx",
   "features/builtin-browser/homepage-dialog.tsx",
   "features/chat/shortcuts-folder.tsx",
+  "features/chat/vscode-settings.tsx",
   "features/company/calendar-page.tsx",
   "features/company/channel-dialogs.tsx",
   "features/company/employee-dialogs.tsx",

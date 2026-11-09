@@ -26,11 +26,13 @@
  */
 import type { MouseEvent } from "react";
 import { toWorkspaceRelative } from "./file-path";
+import { fileLocation } from "./file-location";
+import type { FileLocation } from "./file-location";
 
 export type ReplyLink =
   | { kind: "external" }
   | { kind: "anchor"; id: string }
-  | { kind: "file"; path: string }
+  | ({ kind: "file" } & FileLocation)
   | { kind: "none" };
 
 /** A URL scheme, as the URL parser reads one: a letter, then letters, digits, `+`, `.` or `-`, then `:`. */
@@ -54,6 +56,8 @@ export function resolveReplyLink(href: string | undefined, workspace: string | n
     const id = decode(href.slice(1));
     return id === null || id === "" ? NONE : { kind: "anchor", id };
   }
+  const location = fileLocation(href, workspace, true);
+  if (location?.line !== undefined) return { kind: "file", ...location };
   if (href.startsWith("//") || SCHEME_RE.test(href)) return EXTERNAL;
   const decoded = decode(href.replace(/[?#].*$/, ""));
   if (decoded === null) return NONE;
@@ -67,6 +71,7 @@ export interface WorkspaceLinks {
   workspace: string | null;
   /** Opens a Workspace-relative path in the conversation's Files panel. */
   openFile: (path: string) => void;
+  openEditor?: (location: FileLocation) => void;
 }
 
 /** The attributes a rendered link adds on top of its own. */
@@ -115,7 +120,8 @@ export function replyLinkBehavior(href: string | undefined, links: WorkspaceLink
       return {
         onClick: (event) => {
           event.preventDefault();
-          links.openFile(link.path);
+          if (link.line !== undefined && links.openEditor) links.openEditor(link);
+          else links.openFile(link.path);
         },
       };
     case "anchor":

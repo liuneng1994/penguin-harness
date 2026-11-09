@@ -101,6 +101,9 @@ import { ApiError } from "../../api/client";
 import { filesApi, filesScopeKey } from "../../api/workspace-files";
 import type { FilesScope } from "../../api/workspace-files";
 import { useAuth } from "../../state/auth";
+import { openFileInVSCode } from "./open-in-editor";
+import { useMachines } from "../../state/machines";
+import { VSCodeSettings } from "./vscode-settings";
 import { S } from "../../lib/strings";
 import { apiErrorText } from "../../lib/api-error";
 import { isDesktopShellWindow } from "../../lib/account-menu";
@@ -500,7 +503,21 @@ export function WorkspaceBrowser({
   // rendered view and "open in new tab" through the preview origin; false downgrades
   // the new tab to the same-origin sandbox (which the link flags rather than failing
   // silently in the page) and the in-app rendered view to the srcDoc fallback.
-  const { previewIsolated: serverPreviewIsolated, desktopMode, sessionVia } = useAuth();
+  const { previewIsolated: serverPreviewIsolated, desktopMode, sessionVia, user } = useAuth();
+  const machineHosts = useMachines().state?.machines;
+  const [editorSettings, setEditorSettings] = useState(false);
+  const openEditor = (path: string) => {
+    if (!user) return;
+    void openFileInVSCode(
+      scope,
+      { path },
+      {
+        userId: user.userId,
+        desktop: isDesktopShellWindow({ desktopMode, sessionVia }),
+        machines: machineHosts,
+      },
+    ).catch((error) => toastApiError(error));
+  };
   // The Markdown preview's reader: its outline and find buttons sit in the panel's header row,
   // and its find takes the find.open binding while it has the focus.
   const reader = useMarkdownReader(useReaderFind());
@@ -509,6 +526,7 @@ export function WorkspaceBrowser({
   // the same server, even on this machine, must not be.
   const isShellWindow = isDesktopShellWindow({ desktopMode, sessionVia });
   const scopeKey = filesScopeKey(scope);
+  useEffect(() => setEditorSettings(false), [scopeKey]);
   // Keyed by the scope's identity, not the object: the parent builds a fresh one every render.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const files = useMemo(() => filesApi(scope), [scopeKey]);
@@ -1699,14 +1717,12 @@ export function WorkspaceBrowser({
       treeMenu.openAt({ top: r.top, bottom: r.bottom, left: r.left, right: r.right });
     },
     onPointerDown: (e: ReactPointerEvent) => {
-      // Only a press-and-hold opens from here; a mouse arrives through onContextMenu instead,
-      // and running this for every click would re-render the panel on each one.
-      if (!isLongPressPointer(e.pointerType)) return;
       const row = hitRow(e.target);
       const blank = row === null ? hitBlank(e.target) : null;
       if (row === null && blank === null) return;
       treeMenu.rowRef(row?.el ?? blank);
-      setTreeMenuTarget(row === null ? "blank" : { path: row.path, kind: row.kind });
+      if (isLongPressPointer(e.pointerType))
+        setTreeMenuTarget(row === null ? "blank" : { path: row.path, kind: row.kind });
       treeMenu.rowProps.onPointerDown(e);
     },
     onPointerMove: treeMenu.rowProps.onPointerMove,
@@ -1882,6 +1898,8 @@ export function WorkspaceBrowser({
     : `${S.files.openInNewTab}: ${S.files.previewNotIsolatedHint}`;
   const dirLabel = (dir: string): string => (dir === "" ? S.files.root : dir);
   const fileMenuLabels: WorkspaceFileMenuLabels = {
+    openInVSCode: S.files.openInVSCode,
+    editorSettings: S.files.editorSettings,
     copyPath: S.files.copyPath,
     addToChat: S.files.addToChat,
     addSelectionToChat: S.files.addSelectionToChat,
@@ -2017,6 +2035,14 @@ export function WorkspaceBrowser({
             ) : (
               <WorkspaceFileMenuRows
                 target={treeMenuTarget}
+                onOpenEditor={(target) => {
+                  closeTreeMenu();
+                  openEditor(target.path);
+                }}
+                onEditorSettings={() => {
+                  closeTreeMenu();
+                  setEditorSettings(true);
+                }}
                 labels={fileMenuLabels}
                 downloadHref={(path) => files.fileUrl(path, true)}
                 downloadName={baseName}
@@ -2437,6 +2463,16 @@ export function WorkspaceBrowser({
             </button>
           </Tooltip>
         )}
+        <Tooltip label={S.files.openInVSCode} placement="bottom" className="shrink-0">
+          <button
+            type="button"
+            aria-label={S.files.openInVSCode}
+            onClick={() => openEditor(preview.path)}
+            className={iconActionClass}
+          >
+            <GlyphIcon d={ICONS.externalLink} size={ICON_SIZE.iconButton} />
+          </button>
+        </Tooltip>
         {/* The Markdown reader's outline and find, at the row's end; nothing while no Markdown
             file is being read. */}
         <ReaderTools reader={reader} />
@@ -2537,6 +2573,14 @@ export function WorkspaceBrowser({
           >
             <WorkspaceFileMenuRows
               target={{ path: shown.path, kind: "file" }}
+              onOpenEditor={(target) => {
+                previewMenu.close();
+                openEditor(target.path);
+              }}
+              onEditorSettings={() => {
+                previewMenu.close();
+                setEditorSettings(true);
+              }}
               labels={fileMenuLabels}
               downloadHref={(path) => files.fileUrl(path, true)}
               downloadName={baseName}
@@ -2656,6 +2700,14 @@ export function WorkspaceBrowser({
         onChange={onMenuPick}
       />
 
+      {editorSettings && user && (
+        <VSCodeSettings
+          key={scopeKey}
+          scope={scope}
+          userId={user.userId}
+          onClose={() => setEditorSettings(false)}
+        />
+      )}
       {/* Upload-overwrite confirmation: same-name files in the target directory get replaced. */}
       <ConfirmModal
         open={pendingUpload !== null}

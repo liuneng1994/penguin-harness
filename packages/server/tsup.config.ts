@@ -20,6 +20,7 @@ export default defineConfig({
   // esbuild in scripts/deploy.mjs, never through this package's published dist,
   // so it has no reason to be a tsup entry or a subpath export.
   entry: {
+    editor: "src/editor.ts",
     index: "src/index.ts",
     "api/types": "src/api/types.ts",
     lock: "src/lock.ts",

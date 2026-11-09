@@ -90,6 +90,12 @@ export interface KeyRule {
  *     domain inside an example URL in a doc comment. It is not a storage key.
  */
 export const KEY_RULES: readonly KeyRule[] = [
+  {
+    kind: "family",
+    key: "penguin.vscodeSsh.",
+    scope: "install",
+    why: "The reader's editor connection maps a server's user and machine identities to SSH aliases.",
+  },
   // ---------------------------------------------------------------- browser preferences
   {
     kind: "exact",

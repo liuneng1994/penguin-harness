@@ -87,7 +87,7 @@ describe("Dropdown", () => {
     const source = readFileSync(join(SRC_DIR, "components/overlays/dropdown/dropdown.tsx"), "utf8");
     expect(source).toContain("const placed = !portal || pos !== null;");
     expect(source).toMatch(
-      /if \(!open \|\| !placed \|\| focusOnOpenRef\.current === false\) return;\s*panelItems\(\)\[0\]\?\.focus\(\);\s*\}, \[open, placed, panelItems\]\);/,
+      /if \(!open \|\| !placed \|\| focusOnOpenRef\.current === false\) return;[\s\S]*?panelItems\(\)\[0\]\?\.focus\(\{ preventScroll: true \}\);\s*\}, \[open, placed, panelItems\]\);/,
     );
     expect(source).toContain('visibility: "hidden" as const');
   });

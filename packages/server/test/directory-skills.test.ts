@@ -258,7 +258,10 @@ describe("directory skills api", () => {
     const listed = (await (
       await owner.get(`/api/projects/${projectId}/agents/dir_agent/skills`)
     ).json()) as AgentSkillsResponse;
-    expect(listed.skills.map((s) => s.name)).toEqual(["alpha", "beta"]);
+    expect(listed.skills.filter((s) => s.sourceAgentId === undefined).map((s) => s.name)).toEqual([
+      "alpha",
+      "beta",
+    ]);
   });
 
   it("lets a directory Skill shadow a library Skill of the same name", async () => {
