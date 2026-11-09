@@ -6,6 +6,7 @@
     "jsx": "react-jsx",
     "useDefineForClassFields": true,
     "paths": {
+      "@prismshadow/penguin-server/editor": ["../server/src/editor.ts"],
       "@prismshadow/penguin-server/api": ["../server/src/api/types.ts"]
     }
   },

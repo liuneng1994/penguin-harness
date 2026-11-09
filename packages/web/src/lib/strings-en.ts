@@ -4627,6 +4627,7 @@ Scenarios:
       input_command: "follow",
       run_subagent: "subagent",
       input_subagent: "communicate",
+      list_agents: "discover agents",
     } as Record<string, string>,
     workRunning: "Running",
     workDone: "Done",
@@ -5211,6 +5212,14 @@ Scenarios:
   },
 
   files: {
+    openInVSCode: "Open in VS Code",
+    editorSettings: "VS Code connection settings",
+    editorSshAlias: "SSH connection name",
+    editorSshPlaceholder: "Leave empty to open local files",
+    editorSshHint:
+      "Defaults to the machine's Host alias in SSH config. Change it if this computer uses a different connection name.",
+    editorInvalidAlias:
+      "Use letters, numbers, underscores, dots or hyphens for the connection name.",
     title: "Files",
     audioPlay: (name: string) => `Play ${name}`,
     audioPause: (name: string) => `Pause ${name}`,
@@ -6735,6 +6744,12 @@ Scenarios:
     noDefaultModel: "This project has no default model yet — add one on the Models page first",
     /** Localized text for the common server error codes (server error messages are English-only); looked up by ApiError.code in apiErrorText, falling back to the raw message for unmapped codes. */
     byCode: {
+      editor_connection_required:
+        "Set this machine's connection name in the Files panel's VS Code connection settings first.",
+      editor_open_failed:
+        "Could not open VS Code. Check that VS Code is installed and this connection is configured.",
+      editor_preferences_unavailable:
+        "Could not save the VS Code connection settings. Check this browser's storage permissions.",
       invalid_credentials: "Incorrect username or password.",
       too_many_attempts: "Too many failed sign-in attempts. Try again shortly.",
       password_mismatch: "The current password is incorrect.",

@@ -278,6 +278,7 @@ import type {
   HookItem,
   SkillMetadataItem,
 } from "@prismshadow/penguin-server/api";
+import type { EditorTarget } from "@prismshadow/penguin-server/editor";
 import type { MCPServerConfig } from "@prismshadow/penguin-core/interfaces";
 import { iconsOn } from "./machine-icons";
 import { ApiError, apiFetch, apiFetchStream, apiFetchWithMeta, apiUpload } from "./client";
@@ -1695,6 +1696,23 @@ export const workspaceFilePreviewUrl = (sessionId: string, path: string): string
 export const revealWorkspaceFile = (sessionId: string, path: string) =>
   apiFetch<void>(`/api/sessions/${sessionId}/files/reveal`, { method: "POST", query: { path } });
 
+export const workspaceEditorTarget = (sessionId: string, path: string, line = 1, column = 1) =>
+  apiFetch<EditorTarget>(`/api/sessions/${sessionId}/files/editor-target`, {
+    query: { path, line, column },
+  });
+
+export const openDesktopEditor = (target: EditorTarget, sshAlias: string) =>
+  apiFetch<void>("/api/desktop/editor/open", {
+    method: "POST",
+    server: null,
+    body: {
+      path: target.path,
+      line: target.line,
+      column: target.column,
+      ...(sshAlias ? { sshAlias } : {}),
+    },
+  });
+
 /**
  * Writes a Workspace file whole. `ifVersion` is the marker a previous read returned in its
  * `ETag`: pass it and the write is refused with 409 `file_changed` unless the file is still
@@ -1841,6 +1859,12 @@ export const revealWorkspaceDirFile = (dir: WorkspaceDir, path: string) =>
   apiFetch<void>(`${workspaceDirBase(dir)}/reveal`, {
     method: "POST",
     query: { workspace: dir.workspace, path },
+    server: dir.machineId,
+  });
+
+export const workspaceDirEditorTarget = (dir: WorkspaceDir, path: string, line = 1, column = 1) =>
+  apiFetch<EditorTarget>(`${workspaceDirBase(dir)}/editor-target`, {
+    query: { workspace: dir.workspace, path, line, column },
     server: dir.machineId,
   });
 

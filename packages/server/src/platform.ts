@@ -189,6 +189,7 @@ import {
 import { TraceIndex, TraceIndexStore, Traces } from "./mechanisms/traces.js";
 import { AgentConfig, AgentLifecycle, Benchmarks, Memory, Snapshots } from "./mechanisms/agents.js";
 import { FileReveal, WorkspaceFiles } from "./mechanisms/workspace.js";
+import { DesktopEditorRoutes } from "./http/routes/editor.js";
 import { Settings, UiPrefsStore } from "./mechanisms/settings.js";
 import { BackgroundImageStore, UserDraftsStore } from "./mechanisms/account-data.js";
 import { MessagingBindings } from "./mechanisms/messaging.js";
@@ -513,6 +514,7 @@ export class CompanyModule {}
     DesktopUpdateRoutes,
     DesktopTrayRoutes,
     DesktopPrivacySettingsRoutes,
+    DesktopEditorRoutes,
     PluginRoutes,
     PluginRegistryRoutes,
     NpmPluginPackages,

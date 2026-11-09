@@ -67,6 +67,11 @@ const KNOWN_EXTENSIONS = new Set([
 
 const URL_SCHEME_RE = /^[a-z][a-z0-9+.-]*:\/\//i;
 
+export function hasKnownFileExtension(text: string): boolean {
+  const match = /\.([A-Za-z0-9]{1,8})$/.exec(text);
+  return match !== null && KNOWN_EXTENSIONS.has(match[1]!.toLowerCase());
+}
+
 export function isFilePathLike(text: string): boolean {
   const s = text.trim();
   if (s.length === 0 || s.length > 200) return false;
@@ -76,7 +81,7 @@ export function isFilePathLike(text: string): boolean {
   if (!m) return false;
   const ext = m[1]!.toLowerCase();
   if (/^\d+$/.test(ext)) return false; // version numbers like "v1.2", "3.14" don't count as file paths
-  return KNOWN_EXTENSIONS.has(ext);
+  return hasKnownFileExtension(s);
 }
 
 /**
@@ -131,12 +136,13 @@ export function toWorkspaceRelative(path: string, workspace: string | null): str
     return /^[A-Za-z]:/.test(slashed) ? slashed[0]!.toLowerCase() + slashed.slice(1) : slashed;
   };
   const normalizedInput = normalize(s);
-  const normalizedWs = ws === null ? null : normalize(ws);
+  const normalizedWs = ws === null ? null : normalize(ws).replace(/\/+$/, "");
   const absolute = normalizedInput.startsWith("/") || (winWs && /^[a-z]:/.test(normalizedInput));
   let rel = normalizedInput;
   if (absolute) {
-    if (normalizedWs === null || !normalizedInput.startsWith(`${normalizedWs}/`)) return null;
-    rel = normalizedInput.slice(normalizedWs.length + 1);
+    const prefix = normalizedWs === null ? null : `${normalizedWs}/`;
+    if (prefix === null || !normalizedInput.startsWith(prefix)) return null;
+    rel = normalizedInput.slice(prefix.length);
   }
   const stack: string[] = [];
   for (const seg of rel.split("/")) {

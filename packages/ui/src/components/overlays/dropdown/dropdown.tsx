@@ -161,7 +161,9 @@ export function Dropdown({
   const placed = !portal || pos !== null;
   useEffect(() => {
     if (!open || !placed || focusOnOpenRef.current === false) return;
-    panelItems()[0]?.focus();
+    // A portal's focus must not scroll the anchor's overflow-hidden ancestors and dismiss
+    // the context menu through its own scroll listener.
+    panelItems()[0]?.focus({ preventScroll: true });
   }, [open, placed, panelItems]);
 
   /**
@@ -286,14 +288,29 @@ export function Dropdown({
   // phase — scroll events don't bubble.
   useEffect(() => {
     if (!open || !portal) return;
+    const owner = anchorOwnerRef.current?.() ?? null;
+    const ownerRect = owner?.getBoundingClientRect();
     const onScroll = (e: Event) => {
       if (panelRef.current?.contains(e.target as Node)) return;
       // A pointer-anchored panel has nothing left to follow once the content under the
       // pointer moves, so it dismisses instead (the usual context-menu behavior) — but only
       // for a scroll that actually moved that content (see scrollMovesAnchor).
       if (anchorRect) {
-        if (scrollMovesAnchor(e.target as Node | null, anchorOwnerRef.current?.() ?? null))
+        const currentOwner = anchorOwnerRef.current?.() ?? null;
+        if (scrollMovesAnchor(e.target as Node | null, currentOwner)) {
+          // Hidden overflow can emit a scroll while focus normalizes a border pixel. The
+          // anchored content has not meaningfully moved; keep that menu usable.
+          const currentRect = currentOwner?.getBoundingClientRect();
+          if (
+            currentOwner === owner &&
+            ownerRect &&
+            currentRect &&
+            Math.abs(currentRect.left - ownerRect.left) <= 1 &&
+            Math.abs(currentRect.top - ownerRect.top) <= 1
+          )
+            return;
           setOpenRef.current(false);
+        }
         return;
       }
       place();

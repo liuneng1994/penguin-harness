@@ -39,6 +39,8 @@ export interface WorkspaceFileMenuLabels extends WorkspaceNewMenuLabels {
   addSelectionToChat: string;
   uploadHere: string;
   download: string;
+  openInVSCode?: string;
+  editorSettings?: string;
   rename: string;
   delete: string;
 }
@@ -92,6 +94,8 @@ export function WorkspaceFileMenuRows({
   onRename,
   onDelete,
   onClose,
+  onOpenEditor,
+  onEditorSettings,
 }: {
   target: FileMenuTarget;
   labels: WorkspaceFileMenuLabels;
@@ -121,9 +125,21 @@ export function WorkspaceFileMenuRows({
   onDelete?: (target: FileMenuTarget) => void;
   /** Dismisses the panel. The button rows close through their own handlers; the download link, which acts by navigating, has only this. */
   onClose: () => void;
+  onOpenEditor?: (target: FileMenuTarget) => void;
+  onEditorSettings?: () => void;
 }) {
   return (
     <Menu density="sm">
+      {target.kind === "file" && onOpenEditor && labels.openInVSCode && (
+        <MenuItem
+          glyph={ICONS.externalLink}
+          label={labels.openInVSCode}
+          onSelect={() => onOpenEditor(target)}
+        />
+      )}
+      {onEditorSettings && labels.editorSettings && (
+        <MenuItem glyph={ICONS.penLine} label={labels.editorSettings} onSelect={onEditorSettings} />
+      )}
       <MenuItem glyph={ICONS.copy} label={labels.copyPath} onSelect={() => onCopyPath(target)} />
       {onAddToChat !== undefined && (
         <MenuItem

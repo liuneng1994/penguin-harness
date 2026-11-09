@@ -19,6 +19,7 @@ import type {
   WorkspaceSearchResponse,
 } from "@prismshadow/penguin-server/api";
 import * as api from "./endpoints";
+import type { EditorTarget } from "@prismshadow/penguin-server/editor";
 import type { WorkspaceDir } from "./endpoints";
 
 /** What the Files panel browses. */
@@ -51,6 +52,7 @@ export interface FilesApi {
   remove(path: string, ifVersion?: string): Promise<void>;
   search(q: string): Promise<WorkspaceSearchResponse>;
   reveal(path: string): Promise<void>;
+  editorTarget(path: string, line?: number, column?: number): Promise<EditorTarget>;
 }
 
 /** The operations for `scope`. */
@@ -68,6 +70,7 @@ export function filesApi(scope: FilesScope): FilesApi {
       remove: (path, ifVersion) => api.deleteWorkspaceFile(id, path, ifVersion),
       search: (q) => api.searchWorkspaceFiles(id, q),
       reveal: (path) => api.revealWorkspaceFile(id, path),
+      editorTarget: (path, line, column) => api.workspaceEditorTarget(id, path, line, column),
     };
   }
   const dir: WorkspaceDir = {
@@ -86,5 +89,6 @@ export function filesApi(scope: FilesScope): FilesApi {
     remove: (path, ifVersion) => api.deleteWorkspaceDirFile(dir, path, ifVersion),
     search: (q) => api.searchWorkspaceDirFiles(dir, q),
     reveal: (path) => api.revealWorkspaceDirFile(dir, path),
+    editorTarget: (path, line, column) => api.workspaceDirEditorTarget(dir, path, line, column),
   };
 }

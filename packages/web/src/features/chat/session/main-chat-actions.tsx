@@ -1,3 +1,4 @@
+import { useFileEditor } from "../use-file-editor";
 import { useCallback, useState } from "react";
 import type { ModelRefDto } from "@prismshadow/penguin-server/api";
 import { toastError } from "@prismshadow/penguin-ui";
@@ -99,6 +100,7 @@ export function useMainChatActions(scope: ReturnType<typeof useMainChatControls>
   // (a Session can switch models between Tasks), else on the Session's own.
   const pricingOf = (ref: ModelRefDto | null) => turnPricing(models?.models, ref);
   const modelPricing = pricingOf(activeModelRef);
+  const openEditorFile = useFileEditor(selected?.sessionId ?? null);
   const ctx: StreamRenderContext = {
     pendingApprovals: stream.pendingApprovals,
     bodies: stream.bodies,
@@ -125,6 +127,7 @@ export function useMainChatActions(scope: ReturnType<typeof useMainChatControls>
     ...(selected && stream.taskState === "idle" ? { onRetry } : {}),
     onShowFailure: setFailureShown,
     onOpenFile: openWorkspaceFile,
+    onOpenEditor: openEditorFile,
     onOpenSubagent: (sessionId, origin) => {
       // Chip click: the agents tab focused on that child (the focus chain ends with the
       // child's own id), with the graph pinned to this chip's Task.
