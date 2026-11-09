@@ -4460,6 +4460,7 @@ Benchmark：
       input_command: "跟进命令",
       run_subagent: "子智能体",
       input_subagent: "交流",
+      list_agents: "发现智能体",
     } as Record<string, string>,
     workRunning: "运行中",
     workDone: "运行完毕",
@@ -5067,6 +5068,12 @@ Benchmark：
   },
 
   files: {
+    openInVSCode: "在 VS Code 中打开",
+    editorSettings: "VS Code 连接设置",
+    editorSshAlias: "SSH 连接名",
+    editorSshPlaceholder: "留空打开本机文件",
+    editorSshHint: "远程连接名需与这台电脑的 SSH 配置一致。",
+    editorInvalidAlias: "请输入由字母、数字、下划线、点或连字符组成的连接名。",
     title: "文件",
     upload: "上传",
     download: "下载",
@@ -6572,6 +6579,10 @@ Benchmark：
     noDefaultModel: "该 Project 还没有默认模型，请先在「模型」页添加模型并设为默认",
     /** Localized text for the common server error codes (server error messages are English-only); looked up by ApiError.code in apiErrorText, falling back to the raw message for unmapped codes. */
     byCode: {
+      editor_connection_required: "请先在文件面板的 VS Code 连接设置中指定此机器的连接名。",
+      editor_open_failed: "无法打开 VS Code，请确认已安装 VS Code 并配置了此连接。",
+      editor_preferences_unavailable:
+        "无法在此浏览器中保存 VS Code 连接设置。请检查浏览器的存储权限。",
       invalid_credentials: "用户名或密码错误。",
       too_many_attempts: "登录失败次数过多，请稍后重试。",
       password_mismatch: "当前密码不正确。",

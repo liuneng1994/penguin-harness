@@ -40,9 +40,9 @@
  * They only ever ADD to the shared stage and to the maps below; nothing a surface passes can take
  * the shared plugins away.
  */
-import { createContext, isValidElement, memo, useContext } from "react";
+import { createContext, isValidElement, memo, useContext, useMemo } from "react";
 import type { ComponentPropsWithoutRef, MouseEvent, ReactElement, ReactNode } from "react";
-import ReactMarkdown from "react-markdown";
+import ReactMarkdown, { defaultUrlTransform } from "react-markdown";
 import type { Components, ExtraProps, Options } from "react-markdown";
 import { A2uiBlock } from "../a2ui/a2ui-block";
 import { MermaidBlock } from "../a2ui/mermaid-block";
@@ -125,7 +125,18 @@ export type ProseLinkResolver = (href: string | undefined) => ProseLinkBehavior;
  */
 export const PROSE_NEW_TAB: ProseLinkBehavior = { target: "_blank", rel: "noreferrer" };
 
-const ProseLinksContext = createContext<ProseLinkResolver | null>(null);
+export interface ProseCodeLink {
+  href: string;
+  onClick: (event: MouseEvent<HTMLAnchorElement>) => void;
+  tooltip?: string;
+}
+export type ProseCodeResolver = (text: string, source?: "code" | "href") => ProseCodeLink | null;
+const InsideProseLink = createContext(false);
+const ProseLinksContext = createContext<{
+  resolve: ProseLinkResolver | null;
+  inlineCode?: ProseCodeResolver;
+  plugins?: NonNullable<Options["remarkPlugins"]>;
+}>({ resolve: null });
 
 /**
  * Hands the Markdown below a link resolver; `null` restores the default, a new tab for every link.
@@ -134,12 +145,17 @@ const ProseLinksContext = createContext<ProseLinkResolver | null>(null);
  */
 export function ProseLinksProvider({
   resolve,
+  inlineCode,
+  plugins,
   children,
 }: {
   resolve: ProseLinkResolver | null;
+  inlineCode?: ProseCodeResolver;
+  plugins?: NonNullable<Options["remarkPlugins"]>;
   children?: ReactNode;
 }): ReactElement {
-  return <ProseLinksContext.Provider value={resolve}>{children}</ProseLinksContext.Provider>;
+  const value = useMemo(() => ({ resolve, inlineCode, plugins }), [resolve, inlineCode, plugins]);
+  return <ProseLinksContext.Provider value={value}>{children}</ProseLinksContext.Provider>;
 }
 
 /**
@@ -157,11 +173,11 @@ function MdLink({
   title,
   ...anchorProps
 }: ComponentPropsWithoutRef<"a"> & ExtraProps) {
-  const resolve = useContext(ProseLinksContext);
+  const { resolve } = useContext(ProseLinksContext);
   const behavior = resolve === null ? PROSE_NEW_TAB : resolve(anchorProps.href);
   return (
     <a {...anchorProps} data-tooltip={title} {...behavior}>
-      {children}
+      <InsideProseLink.Provider value>{children}</InsideProseLink.Provider>
     </a>
   );
 }
@@ -177,13 +193,39 @@ function MdLink({
  * flips on. The `a` adapter closes over nothing — its resolver comes from context, not from a
  * closure — so both maps share the one `MdLink` reference.
  */
+/** Hosts may make inline references actionable; fenced blocks still render through MdPre. */
+function MdCode({
+  node: _node,
+  children,
+  ...props
+}: ComponentPropsWithoutRef<"code"> & ExtraProps) {
+  const { inlineCode } = useContext(ProseLinksContext);
+  const insideLink = useContext(InsideProseLink);
+  const link = insideLink ? null : (inlineCode?.(codeText(children)) ?? null);
+  const code = <code {...props}>{children}</code>;
+  return link === null ? (
+    code
+  ) : (
+    <a
+      href={link.href}
+      onClick={link.onClick}
+      data-tooltip={link.tooltip}
+      data-tooltip-extra={!!link.tooltip}
+    >
+      {code}
+    </a>
+  );
+}
+
 const STREAMING_COMPONENTS: Components = {
   pre: (props) => <MdPre streaming>{props.children}</MdPre>,
   a: MdLink,
+  code: MdCode,
 };
 const SETTLED_COMPONENTS: Components = {
   pre: (props) => <MdPre streaming={false}>{props.children}</MdPre>,
   a: MdLink,
+  code: MdCode,
 };
 
 /**
@@ -238,11 +280,21 @@ export const Md = memo(function Md({
   arrivals,
 }: MdProps) {
   const base = streaming ? STREAMING_COMPONENTS : SETTLED_COMPONENTS;
+  const links = useContext(ProseLinksContext);
+  const urlTransform = useMemo(
+    () => (url: string, key: string) => {
+      if (key === "href") {
+        const file = links.inlineCode?.(url, "href");
+        if (file) return file.href;
+      }
+      return defaultUrlTransform(url);
+    },
+    [links.inlineCode],
+  );
   return (
     <ReactMarkdown
-      remarkPlugins={
-        extraPlugins === undefined ? REMARK_PLUGINS : [...REMARK_PLUGINS, ...extraPlugins]
-      }
+      urlTransform={urlTransform}
+      remarkPlugins={[...REMARK_PLUGINS, ...(extraPlugins ?? []), ...(links.plugins ?? [])]}
       rehypePlugins={withArrivals(streaming ? STREAMING_REHYPE_PLUGINS : REHYPE_PLUGINS, arrivals)}
       components={components === undefined ? base : { ...base, ...components }}
     >

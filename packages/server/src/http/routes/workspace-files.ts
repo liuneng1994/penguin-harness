@@ -19,6 +19,9 @@
  * an HTML file there previews through the same-origin sandbox (`preview=1`).
  */
 import path from "node:path";
+import fs from "node:fs/promises";
+import { editorPosition } from "../../editor.js";
+import type { EditorTarget } from "../../editor.js";
 import { Hono } from "hono";
 import type { Context } from "hono";
 import type { AppEnv } from "../../auth/middleware.js";
@@ -59,6 +62,22 @@ export function registerWorkspaceFileRoutes(
   resolve: WorkspaceResolver,
 ): void {
   const at = (suffix: string): string => `${base}${suffix}` || "/";
+
+  app.get(at("/editor-target"), async (c) => {
+    const workspace = await resolve(c);
+    const rel = c.req.query("path") ?? "";
+    let line: number, column: number;
+    try {
+      line = editorPosition(c.req.query("line"), "line");
+      column = editorPosition(c.req.query("column"), "column");
+    } catch (error) {
+      throw badRequest((error as Error).message);
+    }
+    const file = await deps.workspaceFiles.resolvePath(workspace, rel);
+    if (!(await fs.stat(file)).isFile()) throw badRequest("Select a file to open in the editor.");
+    const base = await deps.workspaceFiles.resolvePath(workspace, "");
+    return c.json({ path: file, workspace: base, line, column } satisfies EditorTarget);
+  });
 
   app.get(at(""), async (c) => {
     const workspace = await resolve(c);

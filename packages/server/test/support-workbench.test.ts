@@ -229,8 +229,9 @@ describe("built-in support workbench", { timeout: 30000 }, () => {
     );
     await fs.mkdir(dir, { recursive: true });
     await fs.writeFile(path.join(dir, "package.json"), "{}");
+    const before = await (await admin.get(`${agent}/skills`)).json();
     expect((await admin.post(`${agent}/plugins`, { names: ["penguin-support"] })).status).toBe(409);
-    expect(await (await admin.get(`${agent}/skills`)).json()).toMatchObject({ skills: [] });
+    expect(await (await admin.get(`${agent}/skills`)).json()).toEqual(before);
   });
 });
 

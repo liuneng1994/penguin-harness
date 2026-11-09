@@ -39,6 +39,7 @@ import type { StreamFollow } from "./stream-follow";
 import type { ForkTarget } from "./task-stats-line";
 import { useStreamSelectionMenu } from "./stream-selection-menu";
 import type { ComposerReference } from "../../lib/workspace-tree";
+import type { FileLocation } from "../../lib/file-location";
 import { FIND_LOAD_OLDER_EVENT, FIND_MORE_ATTR } from "../../lib/find-dom";
 import { FindRevealContext, useRegionRevealed } from "../../lib/find-expand";
 
@@ -104,6 +105,7 @@ export interface StreamRenderContext {
    * every rendered link reads it through context (see WorkspaceLinksProvider).
    */
   onOpenFile?: (path: string) => void;
+  onOpenEditor?: (location: FileLocation) => void;
   /** Opens the subagents panel focused on this child session (subagent chip click); `origin` is the ctx.origin at the chip's render level — the child's ancestor chain, excluding its own id. */
   onOpenSubagent?: (sessionId: string, origin: string[]) => void;
   /** Opens the Memory panel on its list (memory-changes card header); the button doesn't render if this isn't wired up. */
@@ -709,7 +711,11 @@ export function MessageStream({
           ) : (
             // Links in replies, reasoning and compaction summaries name files of this Session's
             // Workspace: they open in its Files panel rather than a new tab (see workspace-links.tsx).
-            <WorkspaceLinksProvider workspace={ctx.workspace ?? null} onOpenFile={ctx.onOpenFile}>
+            <WorkspaceLinksProvider
+              workspace={ctx.workspace ?? null}
+              onOpenFile={ctx.onOpenFile}
+              onOpenEditor={ctx.onOpenEditor}
+            >
               <FindRevealContext.Provider value={revealedForFind}>
                 <ElidedBodiesContext.Provider value={ctx.bodies ?? null}>
                   <MessageItems items={items} ctx={ctx} />

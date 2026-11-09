@@ -155,6 +155,9 @@ export function useRowContextMenu(): RowContextMenu {
     },
     onPointerDown: (e) => {
       if (!fromRow(e)) return;
+      // The secondary click will focus the menu when it opens. Native row focus can scroll
+      // an overflow-hidden ancestor first, queuing a scroll that dismisses the new menu.
+      if (e.pointerType === "mouse" && e.button === 2) e.preventDefault();
       dispatch({ kind: "pointerdown", pointerType: e.pointerType });
       if (!isLongPressPointer(e.pointerType)) return;
       const x = e.clientX;

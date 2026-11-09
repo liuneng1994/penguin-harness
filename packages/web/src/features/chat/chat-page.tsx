@@ -83,6 +83,9 @@ import { aggregateMemoryChanges, sameMemoryChanges } from "../../lib/amsp/memory
 import type { MemoryLocateTarget } from "../../lib/amsp/memory-changes";
 import { bucketCostUsd } from "../../lib/amsp/task-stats";
 import { useAuth } from "../../state/auth";
+import { isDesktopShellWindow } from "../../lib/account-menu";
+import { openFileInVSCode } from "./open-in-editor";
+import type { FileLocation } from "../../lib/file-location";
 import { useLocale } from "../../state/locale";
 import { useTheme } from "../../state/theme";
 import { agentDisplayName, useProject } from "../../state/project";
@@ -270,7 +273,7 @@ export function ChatPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const params = useParams<{ sessionId?: string }>();
-  const { user } = useAuth();
+  const { user, desktopMode, sessionVia } = useAuth();
   const company = useCompany();
   const { currency } = useTheme();
   const { currentProject, currentAgent, setCurrentAgentId, reloadAgents, agents } = useProject();
@@ -2059,6 +2062,16 @@ export function ChatPage() {
   // model the table no longer has keeps the catalog price the server costs it at (turnPricing).
   const pricingOf = (ref: ModelRefDto | null) => turnPricing(models?.models, ref);
   const modelPricing = pricingOf(activeModelRef);
+  const openEditorFile = useCallback(
+    (location: FileLocation) => {
+      if (!selected || !user) return;
+      void openFileInVSCode({ kind: "session", sessionId: selected.sessionId }, location, {
+        userId: user.userId,
+        desktop: isDesktopShellWindow({ desktopMode, sessionVia }),
+      }).catch((error) => toastApiError(error));
+    },
+    [selected?.sessionId, user?.userId, desktopMode, sessionVia],
+  );
   const ctx: StreamRenderContext = {
     pendingApprovals: stream.pendingApprovals,
     bodies: stream.bodies,
@@ -2085,6 +2098,7 @@ export function ChatPage() {
     ...(selected && stream.taskState === "idle" ? { onRetry } : {}),
     onShowFailure: setFailureShown,
     onOpenFile: openWorkspaceFile,
+    onOpenEditor: openEditorFile,
     onOpenSubagent: (sessionId, origin) => {
       // Chip click: the agents tab focused on that child (the focus chain ends with the
       // child's own id), with the graph pinned to this chip's Task.

@@ -67,6 +67,11 @@ const KNOWN_EXTENSIONS = new Set([
 
 const URL_SCHEME_RE = /^[a-z][a-z0-9+.-]*:\/\//i;
 
+export function hasKnownFileExtension(text: string): boolean {
+  const match = /\.([A-Za-z0-9]{1,8})$/.exec(text);
+  return match !== null && KNOWN_EXTENSIONS.has(match[1]!.toLowerCase());
+}
+
 export function isFilePathLike(text: string): boolean {
   const s = text.trim();
   if (s.length === 0 || s.length > 200) return false;
@@ -76,7 +81,7 @@ export function isFilePathLike(text: string): boolean {
   if (!m) return false;
   const ext = m[1]!.toLowerCase();
   if (/^\d+$/.test(ext)) return false; // version numbers like "v1.2", "3.14" don't count as file paths
-  return KNOWN_EXTENSIONS.has(ext);
+  return hasKnownFileExtension(s);
 }
 
 /**
