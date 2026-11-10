@@ -3,6 +3,7 @@
 - **Date:** 2026-11-10
 - **Type:** feature
 - **Scope:** `web`, `server`, `plugins`
+- **PR:** [#6](https://github.com/liuneng1994/penguin-harness/pull/6)
 
 [中文版](2026-11-10-code-viewer.zh.md)
 
