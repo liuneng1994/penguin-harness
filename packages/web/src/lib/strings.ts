@@ -6645,6 +6645,8 @@ Benchmark：
       dir_write_denied: "没有在该目录中新建的权限。",
       not_a_dir: "该路径不是目录。",
       path_not_found: "该路径不存在。",
+      editor_file_ambiguous: "有多个同名文件，请使用 Workspace 内的完整路径。",
+      editor_search_incomplete: "文件搜索未完成，请使用 Workspace 内的完整路径。",
       reveal_failed: "无法打开文件夹。",
       workspace_missing: "该 Session 的 Workspace 已不存在。",
       workspace_not_found: "该 Workspace 不存在或不是目录。",

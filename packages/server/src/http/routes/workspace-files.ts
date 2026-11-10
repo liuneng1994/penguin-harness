@@ -28,6 +28,7 @@ import type { AppEnv } from "../../auth/middleware.js";
 import type { Access } from "../../mechanisms/projects.js";
 import type { FileReveal, WorkspaceFiles } from "../../mechanisms/workspace.js";
 import { MAX_UPLOAD_BYTES } from "../../services/workspace-files-service.js";
+import { resolveEditorFile } from "../../services/editor-file.js";
 import { assertWorkspaceAllowed } from "../../services/workspace-guard.js";
 import { HttpError } from "../errors.js";
 import {
@@ -73,7 +74,7 @@ export function registerWorkspaceFileRoutes(
     } catch (error) {
       throw badRequest((error as Error).message);
     }
-    const file = await deps.workspaceFiles.resolvePath(workspace, rel);
+    const file = await resolveEditorFile(deps.workspaceFiles, workspace, rel);
     if (!(await fs.stat(file)).isFile()) throw badRequest("Select a file to open in the editor.");
     const base = await deps.workspaceFiles.resolvePath(workspace, "");
     return c.json({ path: file, workspace: base, line, column } satisfies EditorTarget);

@@ -256,7 +256,7 @@ const server = http.createServer((req, res) => {
         },
         {
           type: "text_delta",
-          text: "Encoded filename: `报告 #100%.ts:15:2`.\n\nComponent: [component](viewer.vue:6:2), build Dockerfile:3.",
+          text: "Encoded filename: `报告 #100%.ts:15:2`.\n\nComponent: [component](viewer.vue:6:2), build Dockerfile:3.\n\nWorker: `Worker.cpp:6:2`.",
         },
       ]);
       messageStop(res, "end_turn", 30);

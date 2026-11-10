@@ -2,6 +2,7 @@
  * connection settings. All themes and phone width use an isolated Workspace and intercept
  * only the final OS protocol handoff, leaving authentication and target resolution real.
  * Uncommon extensions and extensionless build files retain their requested position.
+ * An abbreviated filename resolves to the unique file below the Workspace root.
  */
 import fs from "node:fs";
 import os from "node:os";
@@ -27,6 +28,8 @@ test("chat file positions and Files actions open VS Code with the reader's conne
     Array.from({ length: 8 }, (_, i) => `<!-- line ${i + 1} -->`).join("\n"),
   );
   fs.writeFileSync(path.join(ws, "Dockerfile"), "FROM scratch\n# build\n# entry\n");
+  fs.mkdirSync(path.join(ws, "src"));
+  fs.writeFileSync(path.join(ws, "src", "Worker.cpp"), "// Worker source\n");
   for (let i = 0; i < 30; i++)
     fs.writeFileSync(
       path.join(ws, `z-reference-${String(i).padStart(2, "0")}.ts`),
@@ -115,6 +118,8 @@ test("chat file positions and Files actions open VS Code with the reader's conne
       await lastTarget(expected("viewer.vue", 6, 2), ++count);
       await page.locator('a[href="./Dockerfile#L3C1"]').first().click();
       await lastTarget(expected("Dockerfile", 3, 1), ++count);
+      await page.locator('a[href="./Worker.cpp#L6C2"]').first().click();
+      await lastTarget(expected("src/Worker.cpp", 6, 2), ++count);
       const pick = page.getByTestId("dock-pick-workspace");
       const toggle = page.getByTestId("dock-toggle-right");
       if ((await toggle.getAttribute("aria-expanded")) !== "true") await toggle.click();
