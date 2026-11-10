@@ -54,8 +54,12 @@ export function workbenchesBase(projectId: string, agentId: string): string {
 }
 
 /** A tab's page, keyed on the UI revision so a changed page is a new URL. */
-export function workbenchUiUrl(tab: Pick<WorkbenchTab, "src" | "uiRev">): string {
-  return `${tab.src}${tab.src.includes("?") ? "&" : "?"}rev=${tab.uiRev}`;
+export function workbenchUiUrl(
+  tab: Pick<WorkbenchTab, "src" | "uiRev">,
+  context?: Record<string, string>,
+): string {
+  const params = new URLSearchParams({ ...context, rev: tab.uiRev });
+  return `${tab.src}${tab.src.includes("?") ? "&" : "?"}${params}`;
 }
 
 /**

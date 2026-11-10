@@ -3,7 +3,7 @@
  * - Given code inside an existing link, retain a single anchor; fenced blocks never become file links.
  * - Given URLs, outside paths or a non-conversation surface, retain normal Markdown behavior.
  * - Given uncommon extensions or extensionless files, positioned citations still open the file.
- * - Given ranged citations, retain their whole label and open the starting location.
+ * - Given ranged citations, retain their whole label and endpoint for the preview.
  */
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -30,9 +30,9 @@ describe("editor references in prose", () => {
         streaming,
       );
       expect(anchors(html)).toHaveLength(3);
-      expect(html).toContain('href="./Expr.cpp#L785C1"');
-      expect(html).toContain('href="./src/Expr.h#L108C1"');
-      expect(html).toContain('href="./src/Range.kt#L3C2"');
+      expect(html).toContain('href="./Expr.cpp#L785C1-L795"');
+      expect(html).toContain('href="./src/Expr.h#L108C1-L120"');
+      expect(html).toContain('href="./src/Range.kt#L3C2-L5C7"');
       expect(html).toContain(">Expr.cpp:785-795</a>");
     },
   );

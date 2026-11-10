@@ -85,6 +85,7 @@ import { bucketCostUsd } from "../../lib/amsp/task-stats";
 import { useAuth } from "../../state/auth";
 import { isDesktopShellWindow } from "../../lib/account-menu";
 import { openFileInVSCode } from "./open-in-editor";
+import { CodePreview } from "./code-preview";
 import { useMachines } from "../../state/machines";
 import type { FileLocation } from "../../lib/file-location";
 import { useLocale } from "../../state/locale";
@@ -2066,7 +2067,11 @@ export function ChatPage() {
   // model the table no longer has keeps the catalog price the server costs it at (turnPricing).
   const pricingOf = (ref: ModelRefDto | null) => turnPricing(models?.models, ref);
   const modelPricing = pricingOf(activeModelRef);
-  const openEditorFile = useCallback(
+  const [codePreview, setCodePreview] = useState<FileLocation | null>(null);
+  useEffect(() => setCodePreview(null), [selected?.sessionId]);
+  // A Workbench opting into this key accepts a citation as URL context.
+  const codePreviewTab = workbenchTabs.tabs.find((tab) => tab.key === "code-preview");
+  const openVSCode = useCallback(
     (location: FileLocation) => {
       if (!selected || !user) return;
       void openFileInVSCode({ kind: "session", sessionId: selected.sessionId }, location, {
@@ -2076,6 +2081,13 @@ export function ChatPage() {
       }).catch((error) => toastApiError(error));
     },
     [selected?.sessionId, user?.userId, desktopMode, sessionVia],
+  );
+  const openEditorFile = useCallback(
+    (location: FileLocation) => {
+      if (codePreviewTab && selected) setCodePreview(location);
+      else openVSCode(location);
+    },
+    [codePreviewTab, selected?.sessionId, openVSCode],
   );
   const ctx: StreamRenderContext = {
     pendingApprovals: stream.pendingApprovals,
@@ -2349,6 +2361,18 @@ export function ChatPage() {
     // gray-950 in Primer, exactly what it painted before; paper in Console, the sheet in Frost —
     // and the transcript's sticky rows, painted in the same token, sit on it without a seam.
     <WallpaperSurface data-dock-host className="relative flex h-full flex-col bg-canvas">
+      {codePreview && codePreviewTab && projectId && pageAgentId && selected && (
+        <CodePreview
+          projectId={projectId}
+          agentId={pageAgentId}
+          sessionId={selected.sessionId}
+          location={codePreview}
+          tab={codePreviewTab}
+          onClose={() => setCodePreview(null)}
+          onOpenEditor={openVSCode}
+          onChanged={() => void workbenchTabs.refresh()}
+        />
+      )}
       {/* Workbench tabs: the Agent's own pages beside the chat. A workbench tab covers the
           chat (which stays mounted, so its state survives a look at the page, but is not
           painted: coveredByWorkbench) below the strip; the strip is absent when the Agent has

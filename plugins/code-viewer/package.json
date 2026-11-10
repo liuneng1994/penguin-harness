@@ -1,0 +1,40 @@
+{
+  "name": "@penguinharness/code-viewer",
+  "version": "0.2.18",
+  "description": "Read local code around chat citations in a centered CodeMirror preview.",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Prism-Shadow/penguin-harness.git",
+    "directory": "plugins/code-viewer"
+  },
+  "files": [
+    "icon.svg",
+    "workbenches",
+    "ifaces.json",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "node build.mjs && node ../../scripts/gen-ifaces.mjs --project tsconfig.json --out ifaces.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "devDependencies": {
+    "@prismshadow/penguin-core": "workspace:*",
+    "@codemirror/state": "^6.5.2",
+    "@codemirror/view": "^6.38.8",
+    "@codemirror/language": "^6.11.3",
+    "@codemirror/search": "^6.5.11",
+    "@codemirror/lang-cpp": "^6.0.3",
+    "@codemirror/lang-javascript": "^6.2.4",
+    "@codemirror/lang-python": "^6.2.1",
+    "@codemirror/lang-json": "^6.0.2",
+    "@codemirror/lang-rust": "^6.0.2",
+    "@codemirror/legacy-modes": "^6.5.1",
+    "@lezer/highlight": "^1.2.1",
+    "esbuild": "^0.28.1",
+    "typescript": "^5.6.0"
+  }
+}

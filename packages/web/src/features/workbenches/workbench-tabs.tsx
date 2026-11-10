@@ -195,6 +195,7 @@ export function WorkbenchFrame({
   agentId,
   tab,
   bare = false,
+  context,
   onChanged,
   onRemoved,
 }: {
@@ -203,6 +204,8 @@ export function WorkbenchFrame({
   tab: WorkbenchTab;
   /** The page alone, no bar: the full-page route (its palette carries the actions). */
   bare?: boolean;
+  /** Read-only page context supplied by the host, encoded in the frame URL. */
+  context?: Record<string, string>;
   /** The workbench was reloaded or restored; the caller refetches the list. */
   onChanged: (workbench: WorkbenchInfo) => void;
   /** The workbench and its versions are gone; the caller drops the tab (the list refetch confirms). */
@@ -283,7 +286,8 @@ export function WorkbenchFrame({
   // tab switch and every reload. So the frame stays invisible over the app's own background
   // until the theme is on it, and fades in. The timer is for a page that never fires `load`
   // (a hung subresource): it is shown anyway rather than hidden forever.
-  const frameKey = `${tab.tabId}@${tab.uiRev}`;
+  const frameUrl = workbenchUiUrl(tab, context);
+  const frameKey = `${tab.tabId}@${frameUrl}`;
   const [shownKey, setShownKey] = useState<string | null>(null);
   const detachKeys = useRef<() => void>(() => undefined);
   useEffect(() => () => detachKeys.current(), []);
@@ -473,7 +477,7 @@ export function WorkbenchFrame({
         ref={frameRef}
         onLoad={onFrameLoad}
         title={tab.title}
-        src={workbenchUiUrl(tab)}
+        src={frameUrl}
         className={`min-h-0 flex-1 border-0 transition-opacity duration-150 motion-reduce:transition-none ${
           shownKey === frameKey ? "opacity-100" : "opacity-0"
         }`}

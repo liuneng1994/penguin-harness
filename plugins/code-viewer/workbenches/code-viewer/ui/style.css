@@ -1,0 +1,32 @@
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+body {
+  background: var(--ui-surface);
+  color: var(--ui-fg);
+}
+.cm-editor {
+  height: 100%;
+}
+.cm-button {
+  color: var(--ui-fg);
+  background: var(--ui-surface);
+  border: 1px solid var(--ui-line);
+  font: inherit;
+  cursor: pointer;
+}
+.cm-search input {
+  accent-color: var(--ui-accent);
+}
+.cm-search button {
+  cursor: pointer;
+}
+
+@media (max-width: 600px) {
+  .preview-path {
+    flex: 0 0 100%;
+  }
+}

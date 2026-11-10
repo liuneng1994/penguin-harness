@@ -34,3 +34,6 @@ playwright-report/
 # vendored verbatim from upstream (see the dev skill's reference/ai-slop.md); kept byte-identical
 # so a refresh is a plain copy
 .agents/skills/penguin-harness-dev/reference/ai-slop/
+
+# CodeMirror and its parser chunks are emitted by the code-viewer plugin build.
+plugins/code-viewer/workbenches/code-viewer/ui/editor/

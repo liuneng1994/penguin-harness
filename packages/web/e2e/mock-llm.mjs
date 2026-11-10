@@ -276,6 +276,16 @@ const server = http.createServer((req, res) => {
     // missing-report.pdf doesn't exist; the card should only list the former. This branch
     // must be checked before hasToolResult (the same session's history already has a
     // first-round tool_result).
+    if (flat.includes("code viewer test")) {
+      block(res, 0, { type: "text", text: "" }, [
+        {
+          type: "text_delta",
+          text: "Read Expr.cpp:785-795, `Expr.h:108–120`, and [the implementation](Expr.cpp:785:3-795:7). Also check `missing.cpp:10`, `duplicate.cpp:5`, `binary.cpp:1`, and `large.cpp:1`.",
+        },
+      ]);
+      messageStop(res, "end_turn", 30);
+      return;
+    }
     if (flat.includes("files card test")) {
       block(res, 0, { type: "text", text: "" }, [
         {

@@ -77,7 +77,12 @@ describe("the shipped library", () => {
         plugin.name,
       ).toContain(plugin.category);
       expect(plugin.description.length, plugin.name).toBeGreaterThan(0);
-      expect(plugin.skills.length > 0 || plugin.hooks !== undefined, plugin.name).toBe(true);
+      expect(
+        plugin.skills.length > 0 ||
+          plugin.hooks !== undefined ||
+          (plugin.workbenches?.length ?? 0) > 0,
+        plugin.name,
+      ).toBe(true);
     }
   });
 
