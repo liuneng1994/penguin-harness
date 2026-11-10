@@ -3,11 +3,15 @@
  * - Given absent, directory, escaped or unauthorized targets, refuse without exposing an openable path.
  * - Given the desktop window, open only a structured VS Code target; browser sessions and malformed input never launch anything.
  * - Given platform paths and SSH aliases, encode filenames and preserve the requested line and column.
+ * - Given abbreviated filenames, locate a unique source file and refuse ambiguous references.
  */
 import fs from "node:fs/promises";
 import path from "node:path";
+import { execFileSync } from "node:child_process";
 import { Hono } from "hono";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import type { Dirent } from "node:fs";
+import { SEARCH_MAX_ENTRIES } from "../src/services/workspace-files-service.js";
 import type { AppEnv } from "../src/auth/middleware.js";
 import { handleError } from "../src/http/errors.js";
 import { desktopEditorRoutes } from "../src/http/routes/editor.js";
@@ -49,6 +53,132 @@ describe("Workspace editor targets", () => {
   });
   const query = () =>
     new URLSearchParams({ path: "src/报告 #100%.ts", line: "42", column: "7" }).toString();
+  it("opens a unique abbreviated filename in a Workspace without Git", async () => {
+    const params = new URLSearchParams({ path: "报告 #100%.ts", line: "42", column: "7" });
+    const response = await owner.get(`/api/sessions/${id}/files/editor-target?${params}`);
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      path: await fs.realpath(path.join(workspace, "src", "报告 #100%.ts")),
+      workspace: await fs.realpath(workspace),
+      line: 42,
+      column: 7,
+    });
+  });
+  it("resolves exact source filenames through Git despite ignored build copies", async () => {
+    const repo = path.join(workspace, "git-editor");
+    await fs.mkdir(path.join(repo, "src"), { recursive: true });
+    await fs.mkdir(path.join(repo, "build"), { recursive: true });
+    await fs.writeFile(path.join(repo, ".gitignore"), "build/\n");
+    const name = "Expr[1] #%.cpp";
+    await fs.writeFile(path.join(repo, "src", name), "Source");
+    await fs.writeFile(path.join(repo, "build", name), "Generated copy");
+    execFileSync("git", ["init", "--quiet", repo]);
+    execFileSync("git", ["-C", repo, "add", "src", ".gitignore"]);
+    const params = new URLSearchParams({ workspace: repo, path: name, line: "1047" });
+    const response = await owner.get(
+      `/api/projects/editor_owner-p/workspace-files/editor-target?${params}`,
+    );
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      path: await fs.realpath(path.join(repo, "src", name)),
+      line: 1047,
+    });
+  });
+  it("refuses ambiguous filenames instead of choosing a different source file", async () => {
+    const repo = path.join(workspace, "ambiguous-editor");
+    await fs.mkdir(path.join(repo, "src"), { recursive: true });
+    await fs.mkdir(path.join(repo, "tests"), { recursive: true });
+    await fs.writeFile(path.join(repo, "src", "Expr.cpp"), "Source");
+    await fs.writeFile(path.join(repo, "tests", "Expr.cpp"), "Test source");
+    execFileSync("git", ["init", "--quiet", repo]);
+    execFileSync("git", ["-C", repo, "add", "src"]);
+    const params = new URLSearchParams({ workspace: repo, path: "Expr.cpp" });
+    const response = await owner.get(
+      `/api/projects/editor_owner-p/workspace-files/editor-target?${params}`,
+    );
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({ error: { code: "editor_file_ambiguous" } });
+  });
+  it("does not treat an incomplete Workspace search as a unique match", async () => {
+    const readdir = fs.readdir;
+    const listing = Array.from({ length: SEARCH_MAX_ENTRIES + 1 }, (_, index) => ({
+      name: `other-${index}.txt`,
+      isDirectory: () => false,
+      isSymbolicLink: () => false,
+    })) as Dirent[];
+    const spy = vi.spyOn(fs, "readdir").mockImplementation(async (...args) => {
+      if (String(args[0]) === (await fs.realpath(workspace))) return listing as never;
+      return readdir(...args);
+    });
+    try {
+      const response = await owner.get(`/api/sessions/${id}/files/editor-target?path=unseen.cpp`);
+      expect(response.status).toBe(409);
+      expect(await response.json()).toMatchObject({ error: { code: "editor_search_incomplete" } });
+    } finally {
+      spy.mockRestore();
+    }
+  });
+  it("does not open deleted files kept in Git's index", async () => {
+    const repo = path.join(workspace, "stale-editor");
+    await fs.mkdir(path.join(repo, "src"), { recursive: true });
+    const file = path.join(repo, "src", "Gone.cpp");
+    await fs.writeFile(file, "Original source");
+    execFileSync("git", ["init", "--quiet", repo]);
+    execFileSync("git", ["-C", repo, "add", "src"]);
+    await fs.unlink(file);
+    const params = new URLSearchParams({ workspace: repo, path: "Gone.cpp" });
+    const response = await owner.get(
+      `/api/projects/editor_owner-p/workspace-files/editor-target?${params}`,
+    );
+    expect(response.status).toBe(404);
+    expect(await response.json()).toMatchObject({ error: { code: "path_not_found" } });
+  });
+  it.skipIf(process.platform === "win32")(
+    "does not run a repository's filesystem-monitor hook during file lookup",
+    async () => {
+      const repo = path.join(workspace, "monitor-editor");
+      await fs.mkdir(path.join(repo, "src"), { recursive: true });
+      await fs.writeFile(path.join(repo, "src", "Monitored.cpp"), "Source");
+      execFileSync("git", ["init", "--quiet", repo]);
+      execFileSync("git", ["-C", repo, "add", "src"]);
+      const hook = path.join(repo, "monitor.sh");
+      const marker = path.join(repo, "monitor-ran");
+      await fs.writeFile(hook, '#!/bin/sh\nprintf invoked > "monitor-ran"\nprintf "\\0"\n');
+      await fs.chmod(hook, 0o755);
+      execFileSync("git", ["-C", repo, "config", "core.fsmonitor", "./monitor.sh"]);
+      const params = new URLSearchParams({ workspace: repo, path: "Monitored.cpp" });
+      const response = await owner.get(
+        `/api/projects/editor_owner-p/workspace-files/editor-target?${params}`,
+      );
+      expect(response.status).toBe(200);
+      expect(await response.json()).toMatchObject({
+        path: await fs.realpath(path.join(repo, "src", "Monitored.cpp")),
+      });
+      expect(
+        await fs.access(marker).then(
+          () => true,
+          () => false,
+        ),
+      ).toBe(false);
+    },
+  );
+  it.skipIf(process.platform === "win32")(
+    "does not resolve an abbreviated name through an escaping symlink",
+    async () => {
+      const repo = path.join(workspace, "escaping-editor");
+      await fs.mkdir(path.join(repo, "src"), { recursive: true });
+      const foreign = path.join(t.root, "Outside.cpp");
+      await fs.writeFile(foreign, "Outside source");
+      await fs.symlink(foreign, path.join(repo, "src", "Outside.cpp"));
+      execFileSync("git", ["init", "--quiet", repo]);
+      const params = new URLSearchParams({ workspace: repo, path: "Outside.cpp" });
+      const response = await owner.get(
+        `/api/projects/editor_owner-p/workspace-files/editor-target?${params}`,
+      );
+      expect(response.status).toBe(404);
+      expect(await response.json()).toMatchObject({ error: { code: "path_not_found" } });
+    },
+  );
   it("resolves one file identically from a Session or a directory scope", async () => {
     const a = await owner.get(`/api/sessions/${id}/files/editor-target?${query()}`);
     const b = await owner.get(

@@ -6399,6 +6399,10 @@ Scenarios:
       dir_write_denied: "Creating anything in that directory is not allowed.",
       not_a_dir: "That path is not a directory.",
       path_not_found: "That path does not exist.",
+      editor_file_ambiguous:
+        "Several files have this name. Use the complete path inside this Workspace.",
+      editor_search_incomplete:
+        "File search did not finish. Use the complete path inside this Workspace.",
       reveal_failed: "Could not open the folder.",
       workspace_missing: "This Session's Workspace no longer exists.",
       workspace_not_found: "That Workspace does not exist, or is not a directory.",
