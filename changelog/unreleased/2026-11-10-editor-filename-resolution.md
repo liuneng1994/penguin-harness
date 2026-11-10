@@ -3,6 +3,7 @@
 - **Date:** 2026-11-10
 - **Type:** fix
 - **Scope:** `server`, `web`
+- **PR:** [#5](https://github.com/liuneng1994/penguin-harness/pull/5)
 
 [中文版](2026-11-10-editor-filename-resolution.zh.md)
 
