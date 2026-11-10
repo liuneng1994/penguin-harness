@@ -3,6 +3,7 @@
  * - Given Windows, spaced, Unicode and percent-bearing names, preserve the actual file and position.
  * - Given foreign paths, URLs or invalid positions, do not offer an editor target.
  * - Given root or trailing-slash Workspaces, absolute citations still resolve inside them.
+ * - Given line and column ranges, open their start and reject invalid or reversed endpoints.
  */
 import { describe, expect, it } from "vitest";
 import { fileLocation, fileLocationHref } from "../src/lib/file-location";
@@ -11,6 +12,35 @@ import type { MouseEvent } from "react";
 
 const WS = "/work/repo";
 describe("file locations", () => {
+  it.each(["Expr.cpp:785-795", "Expr.cpp:785–795", "Expr.cpp:785—795"])(
+    "opens the first line of %s",
+    (text) => {
+      expect(fileLocation(text, WS)).toEqual({ path: "Expr.cpp", line: 785, column: 1 });
+    },
+  );
+  it.each(["src/a.ts:42:3-50:7", "src/a.ts#L42C3-L50C7"])(
+    "opens the first position of %s",
+    (text) => {
+      expect(fileLocation(text, WS)).toEqual({ path: "src/a.ts", line: 42, column: 3 });
+    },
+  );
+  it("preserves ranges in explicit links and Windows paths", () => {
+    expect(fileLocation("./src/报告%20%23100%25.ts:12-15", WS, true)).toEqual({
+      path: "src/报告 #100%.ts",
+      line: 12,
+      column: 1,
+    });
+    expect(fileLocation("C:\\repo\\src\\a.ts:9-12", "c:/repo")).toEqual({
+      path: "src/a.ts",
+      line: 9,
+      column: 1,
+    });
+    expect(fileLocation("./src/a.ts:42:3%E2%80%9450:7", WS, true)).toEqual({
+      path: "src/a.ts",
+      line: 42,
+      column: 3,
+    });
+  });
   it.each([
     ["/src/a.ts:12", "/", "src/a.ts"],
     ["C:/src/a.ts:12", "C:\\", "src/a.ts"],
@@ -56,6 +86,14 @@ describe("file locations", () => {
     "src/a.ts:0",
     "src/a.ts:2:0",
     "src/a.ts:2147483648",
+    "src/a.ts:5-0",
+    "src/a.ts:5-4",
+    "src/a.ts:5-2147483648",
+    "src/a.ts:5:7-5:6",
+    "src/a.ts#L5-L0",
+    "src/a.ts#L5-L4",
+    "src/a.ts#L5C7-L5C6",
+    "src/a.ts:4:5:6",
     "src/%ZZ.ts:1",
   ])("refuses an invalid or foreign target %s", (text) => {
     expect(fileLocation(text, WS, true)).toBeNull();

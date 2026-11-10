@@ -16,13 +16,30 @@ export function fileLocation(
   if (!workspace) return null;
   if (/\r|\n/.test(text) || text.startsWith("//")) return null;
   let file = encoded ? text.trim().replace(/\?[^#]*/, "") : text.trim();
+  // Markdown encodes Unicode range separators; keep encoded colons and hashes literal.
+  if (encoded) file = file.replace(/%2d|%e2%80%9[34]/gi, (part) => decodeURIComponent(part));
   let line: number | undefined, column: number | undefined;
-  const match = /^(.*?)(?::(\d+)(?::(\d+))?|#L(\d+)(?:C(\d+)|-L\d+)?)$/.exec(file);
+  const match =
+    /^(?<file>.*?)(?::(?<line>\d+)(?::(?<column>\d+))?(?:[-–—](?<endLine>\d+)(?::(?<endColumn>\d+))?)?|#L(?<hashLine>\d+)(?:C(?<hashColumn>\d+))?(?:[-–—]L(?<hashEndLine>\d+)(?:C(?<hashEndColumn>\d+))?)?)$/.exec(
+      file,
+    );
   if (match) {
-    file = match[1]!;
+    const fields = match.groups!;
+    file = fields.file!;
+    // Literal numeric colons in filenames must be encoded, rather than absorbing an extra position.
+    if (/:\d+(?:[-–—]\d+)?$/.test(file)) return null;
     try {
-      line = editorPosition(match[2] ?? match[4], "line");
-      column = editorPosition(match[3] ?? match[5], "column");
+      line = editorPosition(fields.line ?? fields.hashLine, "line");
+      column = editorPosition(fields.column ?? fields.hashColumn, "column");
+      const end = fields.endLine ?? fields.hashEndLine;
+      const lastColumn = fields.endColumn ?? fields.hashEndColumn;
+      if (end !== undefined) {
+        const endLine = editorPosition(end, "endLine");
+        const endColumn =
+          lastColumn === undefined ? undefined : editorPosition(lastColumn, "endColumn");
+        if (endLine < line || (endLine === line && endColumn !== undefined && endColumn < column))
+          return null;
+      }
     } catch {
       return null;
     }

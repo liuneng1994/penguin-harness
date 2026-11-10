@@ -3,6 +3,7 @@
  * - Given code inside an existing link, retain a single anchor; fenced blocks never become file links.
  * - Given URLs, outside paths or a non-conversation surface, retain normal Markdown behavior.
  * - Given uncommon extensions or extensionless files, positioned citations still open the file.
+ * - Given ranged citations, retain their whole label and open the starting location.
  */
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -21,6 +22,29 @@ const render = (text: string, streaming = false) =>
   );
 const anchors = (html: string) => [...html.matchAll(/<a\b[^>]*>/g)].map((match) => match[0]);
 describe("editor references in prose", () => {
+  it.each([false, true])(
+    "links whole ranges in text, inline code and Markdown while streaming=%s",
+    (streaming) => {
+      const html = render(
+        "Read Expr.cpp:785-795, `src/Expr.h:108–120` and [range](/work/repo/src/Range.kt:3:2—5:7).",
+        streaming,
+      );
+      expect(anchors(html)).toHaveLength(3);
+      expect(html).toContain('href="./Expr.cpp#L785C1"');
+      expect(html).toContain('href="./src/Expr.h#L108C1"');
+      expect(html).toContain('href="./src/Range.kt#L3C2"');
+      expect(html).toContain(">Expr.cpp:785-795</a>");
+    },
+  );
+  it("keeps malformed and reversed ranges as text instead of linking a prefix", () => {
+    expect(
+      anchors(
+        render(
+          "src/a.ts:5-4, src/b.ts:5-0, src/c.ts:5-2147483648, src/d.ts:5-, src/e.ts:5-6-7, src/f.ts:5-6.2 and `src/g.ts#L5-L0`.",
+        ),
+      ),
+    ).toHaveLength(0);
+  });
   it("links positioned code and config files without requiring a fixed extension list", () => {
     const html = render(
       "Read src/App.vue:8, `Dockerfile:3` and [config](settings:4). status:200, v1.2:3, src/ignored.ts:4.5 and `12:30` are not file references.",
