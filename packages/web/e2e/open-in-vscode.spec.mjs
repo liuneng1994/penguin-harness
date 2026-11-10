@@ -3,6 +3,7 @@
  * only the final OS protocol handoff, leaving authentication and target resolution real.
  * Uncommon extensions and extensionless build files retain their requested position.
  * An abbreviated filename resolves to the unique file below the Workspace root.
+ * Whole ranged citations open their starting line and column.
  */
 import fs from "node:fs";
 import os from "node:os";
@@ -120,6 +121,14 @@ test("chat file positions and Files actions open VS Code with the reader's conne
       await lastTarget(expected("Dockerfile", 3, 1), ++count);
       await page.locator('a[href="./Worker.cpp#L6C2"]').first().click();
       await lastTarget(expected("src/Worker.cpp", 6, 2), ++count);
+      const range = page.locator('a[href="./Worker.cpp#L785C1"]').first();
+      await expect(range).toHaveText("Worker.cpp:785-795");
+      await range.click();
+      await lastTarget(expected("src/Worker.cpp", 785, 1), ++count);
+      await page.locator('a[href="./viewer.ts#L40C1"]').first().click();
+      await lastTarget(expected("viewer.ts", 40, 1), ++count);
+      await page.locator('a[href="./viewer.ts#L20C3"]').first().click();
+      await lastTarget(expected("viewer.ts", 20, 3), ++count);
       const pick = page.getByTestId("dock-pick-workspace");
       const toggle = page.getByTestId("dock-toggle-right");
       if ((await toggle.getAttribute("aria-expanded")) !== "true") await toggle.click();
