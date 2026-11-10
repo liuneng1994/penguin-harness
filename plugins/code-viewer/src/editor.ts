@@ -5,11 +5,21 @@ import {
   keymap,
   lineNumbers,
   highlightSpecialChars,
+  drawSelection,
 } from "@codemirror/view";
 import type { DecorationSet } from "@codemirror/view";
 import { HighlightStyle, syntaxHighlighting, StreamLanguage } from "@codemirror/language";
 import { search, searchKeymap, openSearchPanel } from "@codemirror/search";
+import { defaultKeymap } from "@codemirror/commands";
 import { tags } from "@lezer/highlight";
+
+export interface CodeSelection {
+  line: number;
+  column: number;
+  endLine: number;
+  endColumn: number;
+  text: string;
+}
 
 export interface PreviewOptions {
   text: string;
@@ -17,11 +27,14 @@ export interface PreviewOptions {
   line?: number;
   column?: number;
   endLine?: number;
+  endColumn?: number;
   codeLabel: string;
   phrases?: Record<string, string>;
+  onSelection?: (selection: CodeSelection) => void;
   onWindow: (from: number, to: number, total: number) => void;
 }
 export interface PreviewEditor {
+  selection(): CodeSelection;
   expand: (direction: "up" | "down" | "all") => void;
   wrap: (enabled: boolean) => void;
   search: () => void;
@@ -47,10 +60,13 @@ async function language(path: string) {
 }
 
 const codeStyle = HighlightStyle.define([
-  { tag: [tags.keyword, tags.operator], color: "var(--ui-accent)" },
-  { tag: [tags.comment], color: "var(--ui-fg-muted)", fontStyle: "italic" },
-  { tag: [tags.string, tags.number, tags.bool], color: "var(--ui-fg-secondary)" },
-  { tag: [tags.function(tags.variableName), tags.typeName], fontWeight: "600" },
+  { tag: [tags.keyword, tags.operator], class: "cv-keyword" },
+  { tag: tags.comment, class: "cv-comment" },
+  { tag: [tags.string, tags.regexp], class: "cv-string" },
+  { tag: [tags.number, tags.bool, tags.null], class: "cv-number" },
+  { tag: tags.typeName, class: "cv-type" },
+  { tag: tags.function(tags.variableName), class: "cv-function" },
+  { tag: [tags.propertyName, tags.definition(tags.variableName)], class: "cv-property" },
 ]);
 
 /** Keep the whole document for syntax parsing and real line numbers; hide only its surroundings. */
@@ -94,6 +110,28 @@ export async function createPreviewEditor(
     },
     provide: (field) => EditorView.decorations.from(field),
   });
+  const selectedCode = (state: EditorState): CodeSelection => {
+    const selection = state.selection.main;
+    const start = selection.empty
+      ? doc.line(first).from +
+        Math.min(doc.line(first).length, Math.max(0, (options.column ?? 1) - 1))
+      : selection.from;
+    const end = selection.empty
+      ? doc.line(last).from +
+        (options.endColumn === undefined
+          ? doc.line(last).length
+          : Math.min(doc.line(last).length, Math.max(0, options.endColumn - 1)))
+      : selection.to;
+    const a = doc.lineAt(start),
+      b = doc.lineAt(end);
+    return {
+      line: a.number,
+      column: start - a.from + 1,
+      endLine: b.number,
+      endColumn: end - b.from + 1,
+      text: doc.sliceString(start, end),
+    };
+  };
   const wrapping = new Compartment();
   const view = new EditorView({
     parent,
@@ -111,10 +149,11 @@ export async function createPreviewEditor(
         EditorView.contentAttributes.of({ "aria-label": options.codeLabel, tabindex: "0" }),
         lineNumbers(),
         highlightSpecialChars(),
+        drawSelection(),
         lang,
         syntaxHighlighting(codeStyle),
         search({ top: true }),
-        keymap.of(searchKeymap),
+        keymap.of([...searchKeymap, ...defaultKeymap]),
         windowField,
         wrapping.of([]),
         EditorView.theme({
@@ -152,6 +191,7 @@ export async function createPreviewEditor(
         }),
         EditorView.updateListener.of((update) => {
           if (!update.selectionSet) return;
+          options.onSelection?.(selectedCode(update.state));
           const a = doc.lineAt(update.state.selection.main.from).number;
           const b = doc.lineAt(update.state.selection.main.to).number;
           // Search can select outside the snippet; reveal its result without changing the citation.
@@ -173,11 +213,28 @@ export async function createPreviewEditor(
     }),
   });
   let destroyed = false;
+  let measuredHeight = -1;
+  // The question area grows below the code; keep the selected code in view as its pane shrinks.
+  const resize = new ResizeObserver(([entry]) => {
+    if (!entry || entry.contentRect.height === measuredHeight) return;
+    measuredHeight = entry.contentRect.height;
+    queueMicrotask(() => {
+      if (!destroyed)
+        view.dispatch({
+          effects: EditorView.scrollIntoView(view.state.selection.main, { y: "center" }),
+        });
+    });
+  });
+  resize.observe(parent);
   options.onWindow(from, to, doc.lines);
+  options.onSelection?.(selectedCode(view.state));
   view.dispatch({
     effects: EditorView.scrollIntoView(view.state.selection.main.head, { y: "center" }),
   });
   return {
+    selection() {
+      return selectedCode(view.state);
+    },
     expand(direction) {
       view.dispatch({
         effects: windowEffect.of({
@@ -198,13 +255,11 @@ export async function createPreviewEditor(
       openSearchPanel(view);
     },
     copy() {
-      const selection = view.state.selection.main;
-      return selection.empty
-        ? doc.sliceString(doc.line(first).from, doc.line(last).to)
-        : doc.sliceString(selection.from, selection.to);
+      return selectedCode(view.state).text;
     },
     destroy() {
       destroyed = true;
+      resize.disconnect();
       view.destroy();
     },
   };

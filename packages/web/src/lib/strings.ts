@@ -5068,6 +5068,8 @@ Benchmark：
   },
 
   files: {
+    codeModification: (path: string, range: string, code: string, comment: string) =>
+      `修改文件 ${path} 的 ${range} 处代码。\n\n${code}\n\n修改意见：${comment}\n\n请先读取文件最新内容，按意见修改，并进行适当验证。`,
     viewCode: "查看代码",
     openInVSCode: "在 VS Code 中打开",
     editorSettings: "VS Code 连接设置",

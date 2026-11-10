@@ -4827,6 +4827,8 @@ Scenarios:
   },
 
   files: {
+    codeModification: (path: string, range: string, code: string, comment: string) =>
+      `Modify the code in ${path} at ${range}.\n\n${code}\n\nRequested change: ${comment}\n\nRead the current file before editing and validate the change.`,
     viewCode: "View code",
     openInVSCode: "Open in VS Code",
     editorSettings: "VS Code connection settings",

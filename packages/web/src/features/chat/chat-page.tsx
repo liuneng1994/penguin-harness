@@ -86,6 +86,8 @@ import { useAuth } from "../../state/auth";
 import { isDesktopShellWindow } from "../../lib/account-menu";
 import { openFileInVSCode } from "./open-in-editor";
 import { CodePreview } from "./code-preview";
+import { modificationCode } from "../../lib/code-modification";
+import type { CodeModification } from "../../lib/code-modification";
 import { useMachines } from "../../state/machines";
 import type { FileLocation } from "../../lib/file-location";
 import { useLocale } from "../../state/locale";
@@ -2067,6 +2069,20 @@ export function ChatPage() {
   // model the table no longer has keeps the catalog price the server costs it at (turnPricing).
   const pricingOf = (ref: ModelRefDto | null) => turnPricing(models?.models, ref);
   const modelPricing = pricingOf(activeModelRef);
+  const modifyPreviewCode = useCallback(
+    async (data: CodeModification) => {
+      if (!selected) throw new Error("No Session is selected.");
+      const range = `${data.selection.line}:${data.selection.column}-${data.selection.endLine}:${data.selection.endColumn}`;
+      const text = S.files.codeModification(data.path, range, modificationCode(data), data.comment);
+      const result = await api.postTask(selected.sessionId, {
+        input: [{ type: "text", text }],
+        queueIfBusy: true,
+      });
+      await syncHealedSessionId(selected.sessionId, result.sessionId);
+      return result;
+    },
+    [selected?.sessionId, syncHealedSessionId],
+  );
   const [codePreview, setCodePreview] = useState<FileLocation | null>(null);
   useEffect(() => setCodePreview(null), [selected?.sessionId]);
   // A Workbench opting into this key accepts a citation as URL context.
@@ -2370,6 +2386,7 @@ export function ChatPage() {
           tab={codePreviewTab}
           onClose={() => setCodePreview(null)}
           onOpenEditor={openVSCode}
+          onModify={modifyPreviewCode}
           onChanged={() => void workbenchTabs.refresh()}
         />
       )}

@@ -1,4 +1,7 @@
 /** The code-preview Workbench receives a chat citation in the shared central dialog. */
+import { useCallback } from "react";
+import { codeModification } from "../../lib/code-modification";
+import type { CodeModification } from "../../lib/code-modification";
 import { Button, Modal } from "@prismshadow/penguin-ui";
 import type { FileLocation } from "../../lib/file-location";
 import type { WorkbenchTab } from "../../lib/workbench-tabs";
@@ -15,6 +18,7 @@ export function CodePreview({
   onClose,
   onOpenEditor,
   onChanged,
+  onModify,
 }: {
   projectId: string;
   agentId: string;
@@ -24,8 +28,45 @@ export function CodePreview({
   onClose: () => void;
   onOpenEditor: (location: FileLocation) => void;
   onChanged: () => void;
+  onModify: (data: CodeModification) => Promise<{ queued?: boolean }>;
 }) {
   const { locale } = useLocale();
+  const receive = useCallback(
+    (event: MessageEvent) => {
+      const message = event.data;
+      if (message?.type === "penguin:code-close") {
+        onClose();
+        return;
+      }
+      if (
+        message?.type !== "penguin:code-modify" ||
+        typeof message.id !== "string" ||
+        message.id.length > 64
+      )
+        return;
+      const data = codeModification(message);
+      if (!data) return;
+      const source = event.source as Window;
+      void onModify(data)
+        .then((result) =>
+          source.postMessage(
+            { type: "penguin:code-modify-result", id: message.id, queued: result.queued === true },
+            event.origin,
+          ),
+        )
+        .catch((error) =>
+          source.postMessage(
+            {
+              type: "penguin:code-modify-result",
+              id: message.id,
+              error: error instanceof Error ? error.message : String(error),
+            },
+            event.origin,
+          ),
+        );
+    },
+    [onModify, onClose],
+  );
   const context: Record<string, string> = { session: sessionId, path: location.path, locale };
   for (const key of ["line", "column", "endLine", "endColumn"] as const) {
     const n = location[key];
@@ -56,6 +97,7 @@ export function CodePreview({
           agentId={agentId}
           tab={tab}
           context={context}
+          onMessage={receive}
           bare
           onChanged={onChanged}
           onRemoved={onClose}

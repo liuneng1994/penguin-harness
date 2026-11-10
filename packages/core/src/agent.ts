@@ -353,7 +353,7 @@ interface SessionRuntime {
   /** The composition layer's half of an in-session model switch (see SessionConfig.modelSwitch). */
   modelSwitch: ModelSwitchSupport;
 
-  createBareLLM: () => GenerativeModel;
+  createBareLLM: (options?: { maxTokens?: number }) => GenerativeModel;
   /** The child-session runner the run_subagent tool uses; sessionHooks' subagent spawner shares it. */
   subagentRunner: SubagentRunner;
 }
@@ -1007,10 +1007,10 @@ export class Agent {
         ? {}
         : {
             bootstrap: async () => ({ llm: unreachableModel(reason) }),
-            createBareLLM: () =>
+            createBareLLM: (options) =>
               sameModelRef({ provider: session.provider, model_id: session.modelId }, ref)
                 ? unreachableModel(reason)
-                : rt.createBareLLM(),
+                : rt.createBareLLM(options),
           };
     const session = this.newSession(spec, context, rt, trace, {
       bootstrap,
@@ -1582,14 +1582,17 @@ export class Agent {
     // Bare LLM for one-off out-of-band requests (meta requests like generateTitle): the
     // running context's Model/credentials (or the given entry's), no tools, no system prompt,
     // thinking disabled, a small output cap, and an independent timeout.
-    const createBareLLM = (entry: ModelEntry = current.modelEntry): GenerativeModel =>
+    const createBareLLM = (
+      entry: ModelEntry = current.modelEntry,
+      options?: { maxTokens?: number },
+    ): GenerativeModel =>
       new GenerativeModel({
         modelId: entry.model_id,
         ...credentialsFor(entry),
         tools: [],
         thinkingLevel: "none",
         // The meta budget, tightened by the entry's pinned per-model cap when smaller.
-        maxTokens: metaMaxTokens(300, entry.max_tokens),
+        maxTokens: metaMaxTokens(options?.maxTokens ?? 300, entry.max_tokens),
         // Same window derivation as ordinary requests (a formality here: the meta budget
         // is far below any real window, so the clamp never binds).
         ...(entry.context_window !== undefined ? { contextWindow: entry.context_window } : {}),
@@ -1645,7 +1648,7 @@ export class Agent {
       contextWindow: () => current.modelEntry.context_window,
       modelSwitch,
 
-      createBareLLM,
+      createBareLLM: (options) => createBareLLM(undefined, options),
       subagentRunner,
     };
   }

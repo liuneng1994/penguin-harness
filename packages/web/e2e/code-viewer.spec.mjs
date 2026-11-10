@@ -83,7 +83,7 @@ test("chat code preview and errors across themes", async ({ page }, testInfo) =>
   expect(viewer?.error, JSON.stringify(workbenches)).toBeNull();
   const created = await (
     await page.request.post(`${base}/sessions`, {
-      data: { provider: "custom", modelId: "claude-4-8", workspace },
+      data: { provider: "custom", modelId: "claude-4-8", workspace, approvalMode: "allow-all" },
     })
   ).json();
   const sessionId = created.session.sessionId;
@@ -131,6 +131,24 @@ test("chat code preview and errors across themes", async ({ page }, testInfo) =>
     expect(box.width).toBeGreaterThan(1050);
     expect(Math.abs(box.x + box.width / 2 - 720)).toBeLessThan(3);
     await page.screenshot({ path: testInfo.outputPath(`${themeId}-code-preview.png`) });
+    await frame.getByRole("button", { name: "btw Q&A", exact: true }).click();
+    await frame.locator("[data-fold]").evaluate((node) => {
+      for (const animation of node.getAnimations({ subtree: true })) {
+        const duration = animation.effect?.getTiming().duration;
+        if (typeof duration === "number" && duration > 0) {
+          animation.pause();
+          animation.currentTime = duration / 2;
+        }
+      }
+    });
+    await page.screenshot({
+      path: testInfo.outputPath(`${themeId}-btw-opening.png`),
+      animations: "allow",
+    });
+    await frame.locator("[data-fold]").evaluate((node) => {
+      for (const animation of node.getAnimations({ subtree: true })) animation.finish();
+    });
+    await frame.getByRole("button", { name: "Modify code", exact: true }).click();
     await frame.getByRole("button", { name: "Copy code", exact: true }).click();
     expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
       lines.slice(784, 795).join("\n"),
@@ -191,6 +209,72 @@ test("chat code preview and errors across themes", async ({ page }, testInfo) =>
     await page.screenshot({ path: testInfo.outputPath(`phone-${lang}-code-preview.png`) });
     await page.keyboard.press("Escape");
   }
+  await setAccountPrefs(page.request, { lang: "en", textSize: "md", themeId: "github" });
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.goto(`${BASE}/chat/${sessionId}`);
+  const codeLink = page.getByRole("link", { name: "Expr.cpp:785-795", exact: true });
+  await codeLink.click();
+  const codeDialog = page.getByRole("dialog");
+  const codeFrame = codeDialog.frameLocator("iframe");
+  await expect(codeFrame.locator(".cv-keyword").first()).toBeVisible();
+  const syntax = await codeFrame
+    .locator(".cv-keyword")
+    .first()
+    .evaluate((node) => ({
+      token: getComputedStyle(node).color,
+      text: getComputedStyle(node.parentElement).color,
+    }));
+  expect(syntax.token).not.toBe(syntax.text);
+  await codeFrame.locator(".cm-content").press("Shift+End");
+  await expect(codeFrame.getByText("Line 785", { exact: true })).toBeVisible();
+  const historyBefore = await (
+    await page.request.get(`${BASE}/api/sessions/${sessionId}/messages`)
+  ).json();
+  await codeFrame.getByRole("button", { name: "btw Q&A", exact: true }).click();
+  const question = codeFrame.getByRole("textbox", { name: "Ask about this code…", exact: true });
+  await question.fill("private-question-one");
+  await codeFrame.getByRole("button", { name: "Ask", exact: true }).click();
+  await expect(codeFrame.getByRole("log")).toContainText("First private answer");
+  await expect(question).toHaveValue("");
+  await question.fill("private-question-follow-up");
+  await codeFrame.getByRole("button", { name: "Ask", exact: true }).click();
+  await expect(codeFrame.getByRole("log")).toContainText("Follow-up private answer");
+  await expect(
+    codeFrame.locator(".cm-line").filter({ hasText: "const int doubled" }),
+  ).toBeInViewport();
+  const historyAfter = await (
+    await page.request.get(`${BASE}/api/sessions/${sessionId}/messages`)
+  ).json();
+  expect(historyAfter).toEqual(historyBefore);
+  await page.screenshot({ path: testInfo.outputPath("code-btw-questions.png") });
+  await page.keyboard.press("Escape");
+  await codeLink.click();
+  await codeFrame.getByRole("button", { name: "btw Q&A", exact: true }).click();
+  await expect(codeFrame.getByRole("log")).toHaveCount(0);
+  await codeFrame.getByRole("button", { name: "Modify code", exact: true }).click();
+  await codeFrame
+    .getByRole("textbox", { name: "Describe the change to this code…", exact: true })
+    .fill("Change multiplier to 3");
+  await codeFrame.getByRole("button", { name: "Send edit", exact: true }).click();
+  await expect(codeFrame.getByRole("status")).toContainText("Edit sent to the main conversation");
+  await expect
+    .poll(() => fs.readFile(path.join(workspace, "bolt/expression/Expr.cpp"), "utf8"))
+    .toContain("value * 3");
+  await codeFrame.getByRole("button", { name: "Reload code", exact: true }).click();
+  await expect(codeFrame.locator(".cm-line").filter({ hasText: "value * 3" })).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath("code-modification.png") });
+  await page.keyboard.press("Escape");
+  await expect(
+    page.getByText("Requested change: Change multiplier to 3", { exact: false }),
+  ).toBeVisible();
+  await setAccountPrefs(page.request, { themeMode: "dark" });
+  await page.reload();
+  await codeLink.click();
+  await expect(codeFrame.locator("html")).toHaveClass(/dark/);
+  await expect(codeFrame.locator(".cv-keyword").first()).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath("code-dark-highlighting.png") });
+  await page.keyboard.press("Escape");
+  await setAccountPrefs(page.request, { themeMode: "system" });
   // The development preview keeps one actual chat ready for the user.
   console.log(`Code preview demo: ${BASE}/chat/${sessionId}`);
 });

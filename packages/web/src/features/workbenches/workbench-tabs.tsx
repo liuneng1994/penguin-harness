@@ -196,6 +196,7 @@ export function WorkbenchFrame({
   tab,
   bare = false,
   context,
+  onMessage,
   onChanged,
   onRemoved,
 }: {
@@ -206,6 +207,8 @@ export function WorkbenchFrame({
   bare?: boolean;
   /** Read-only page context supplied by the host, encoded in the frame URL. */
   context?: Record<string, string>;
+  /** Messages from this frame only, checked against its source and same origin. */
+  onMessage?: (event: MessageEvent) => void;
   /** The workbench was reloaded or restored; the caller refetches the list. */
   onChanged: (workbench: WorkbenchInfo) => void;
   /** The workbench and its versions are gone; the caller drops the tab (the list refetch confirms). */
@@ -213,6 +216,18 @@ export function WorkbenchFrame({
 }) {
   const { dark, themeId, accent, textSize, fontLatin, fontCjk } = useTheme();
   const frameRef = useRef<HTMLIFrameElement | null>(null);
+  useEffect(() => {
+    if (!onMessage) return;
+    const receive = (event: MessageEvent) => {
+      if (
+        event.origin === window.location.origin &&
+        event.source === frameRef.current?.contentWindow
+      )
+        onMessage(event);
+    };
+    window.addEventListener("message", receive);
+    return () => window.removeEventListener("message", receive);
+  }, [onMessage]);
   const [busy, setBusy] = useState<"reload" | "rollback" | "remove" | null>(null);
   // Removal is armed by a first click and sent by the second; the arm drops when the tab changes.
   const [removeArmed, setRemoveArmed] = useState(false);

@@ -2,7 +2,7 @@
 
 - **Date:** 2026-11-10
 - **Type:** feature
-- **Scope:** `web`, `server`, `plugins`
+- **Scope:** `web`, `server`, `core`, `plugins`
 - **PR:** [#6](https://github.com/liuneng1994/penguin-harness/pull/6)
 
 [中文版](2026-11-10-code-viewer.zh.md)
@@ -24,3 +24,17 @@ resolver's error. Binary files and text over 2 MB stay available through VS Code
 
 The plugin is available in the library and is not preinstalled. Agents without it keep their
 existing file-opening behavior. No conversation records or stored configuration change format.
+
+## Interacting with code
+
+Syntax tokens use a light and dark color palette. Select code to work on a precise range:
+
+- **Modify code** submits the selection and requested change as a normal task in the main
+  conversation, queuing it when busy. The Agent edits through its existing tools and approvals.
+  Reload the preview after it finishes to read the new code.
+- **btw Q&A** uses an independent, tool-free model request with selected code and its own
+  follow-up history. Questions and answers never enter the main conversation or its Trace.
+  Usage is still metered; closing, reloading or clearing the preview discards the side history.
+
+The selected code stays visible when the question area grows. File-version checks refuse an
+answer about changed code until the reader reloads the preview.

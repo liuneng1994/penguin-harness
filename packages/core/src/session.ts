@@ -58,6 +58,7 @@ import type {
   BackgroundTaskDoneEvent,
   EnvironmentInterface,
   LLMInterface,
+  LLMOutcome,
   ThinkingLevelName,
   ToolDetachResult,
   ToolPermission,
@@ -144,7 +145,7 @@ export interface SessionConfig {
    * the session; no tools, no system prompt, thinking off): used for meta-requests such as
    * `generateTitle`; if not provided, `generateTitle` returns null.
    */
-  createBareLLM?: () => LLMInterface;
+  createBareLLM?: (options?: { maxTokens?: number }) => LLMInterface;
   /** The first context's compaction settings (defaults are filled in by the composition layer); only takes effect when provided together with `openNextContext`, and a context that one opens brings its own. */
   compaction?: CompactionSettings;
   /** Live compaction settings, re-read at every compaction checkpoint (see ContextEngineDeps.readCompaction): what lets a threshold, mode or prompt edited on disk reach the conversation that is running. Session-lifetime, so a rotation does not replace it. */
@@ -386,7 +387,7 @@ export class Session {
   private readonly trace?: TraceSink;
   /** session_meta of the context that is running: the first context's at construction, re-stamped by each context `openNextContext` opens (see `metaMessage`); `provider` / `modelId` read from it. */
   private meta: SessionMetaMessage;
-  private readonly createBareLLM?: () => LLMInterface;
+  private readonly createBareLLM?: (options?: { maxTokens?: number }) => LLMInterface;
   /** The Session's thinking level — buffered here until the engine exists, engine state afterwards (see the `thinkingLevel` accessors). */
   private level?: ThinkingLevelName;
   private readonly imagesDir: string;
@@ -1256,6 +1257,15 @@ export class Session {
       ...material,
       ...(args?.signal ? { signal: args.signal } : {}),
     });
+  }
+
+  /** A fresh, tool-free model request. Its records never enter this Session's engine or Trace. */
+  async *streamAside(prompt: string, signal?: AbortSignal): AsyncGenerator<AmspRecord, LLMOutcome> {
+    if (signal?.aborted) return { status: "aborted" };
+    if (!this.createBareLLM)
+      return { status: "fatal", errorMessage: "Side questions are unavailable for this Session." };
+    const llm = this.createBareLLM({ maxTokens: 4096 });
+    return yield* llm.streamGenerate({ newMessages: [userText(prompt)], signal });
   }
 
   /**

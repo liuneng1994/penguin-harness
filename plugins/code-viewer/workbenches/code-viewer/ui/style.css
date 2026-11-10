@@ -30,3 +30,48 @@ body {
     flex: 0 0 100%;
   }
 }
+
+/* Syntax colors identify language tokens; the surrounding controls keep the host palette. */
+.cv-keyword {
+  color: #cf222e;
+}
+.cv-comment {
+  color: var(--ui-fg-muted);
+  font-style: italic;
+}
+.cv-string {
+  color: #0a3069;
+}
+.cv-number {
+  color: #0550ae;
+}
+.cv-type,
+.cv-function {
+  color: #8250df;
+}
+.cv-property {
+  color: #953800;
+}
+.dark .cv-keyword {
+  color: #ff7b72;
+}
+.dark .cv-string {
+  color: #a5d6ff;
+}
+.dark .cv-number {
+  color: #79c0ff;
+}
+.dark .cv-type,
+.dark .cv-function {
+  color: #d2a8ff;
+}
+.dark .cv-property {
+  color: #ffa657;
+}
+
+.code-preview-editor {
+  min-height: 100px;
+}
+.code-questions {
+  max-height: min(20vh, 180px);
+}

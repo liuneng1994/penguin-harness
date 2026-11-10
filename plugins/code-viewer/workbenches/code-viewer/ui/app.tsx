@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { Button, NoticeStrip, Switch } from "@prismshadow/penguin-ui";
 import { createPreviewEditor } from "./editor/editor.js";
-import type { PreviewEditor } from "./editor/editor.js";
+import { CodeInteraction } from "./interaction.js";
+import type { CodeSelection, PreviewEditor } from "./editor/editor.js";
 import { en, zh } from "./strings.js";
 
 const query = new URLSearchParams(location.search);
@@ -70,10 +71,16 @@ function App() {
   const [window, setWindow] = useState({ from: 1, to: 1, total: 1 });
   const [wrap, setWrap] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [selection, setSelection] = useState<CodeSelection | null>(null);
+  const [version, setVersion] = useState("");
+  const [reload, setReload] = useState(0);
   useEffect(() => {
     const session = query.get("session"),
       requested = query.get("path");
     if (!session || !requested) return;
+    setLoaded(false);
+    setError(null);
+    setSelection(null);
     const controller = new AbortController();
     void (async () => {
       try {
@@ -90,12 +97,12 @@ function App() {
         const workspace = target.workspace.replaceAll("\\", "/").replace(/\/$/, "");
         const relative = normalized.slice(workspace.length + 1);
         setPath(relative);
-        const text = await readText(
-          await checked(
-            `${base}/content?${new URLSearchParams({ path: relative })}`,
-            controller.signal,
-          ),
+        const response = await checked(
+          `${base}/content?${new URLSearchParams({ path: relative })}`,
+          controller.signal,
         );
+        setVersion(response.headers.get("ETag") ?? "");
+        const text = await readText(response);
         if (controller.signal.aborted || !mount.current) return;
         const preview = await createPreviewEditor(mount.current, {
           text,
@@ -105,6 +112,8 @@ function App() {
           line: position("line"),
           column: position("column"),
           endLine: position("endLine"),
+          endColumn: position("endColumn"),
+          onSelection: setSelection,
           onWindow: (from, to, total) => setWindow({ from, to, total }),
         });
         if (controller.signal.aborted) {
@@ -122,7 +131,7 @@ function App() {
       editor.current?.destroy();
       editor.current = null;
     };
-  }, []);
+  }, [reload]);
   const available = query.has("session") && query.has("path");
   return (
     <main className="flex h-full min-h-0 flex-col">
@@ -133,6 +142,9 @@ function App() {
         >
           {path || S.readOnly}
         </span>
+        <Button size="sm" disabled={!loaded} onClick={() => setReload((n) => n + 1)}>
+          {S.refresh}
+        </Button>
         <Button size="sm" disabled={!loaded} onClick={() => editor.current?.search()}>
           {S.search}
         </Button>
@@ -180,7 +192,7 @@ function App() {
           </Button>
         </div>
       )}
-      <div ref={mount} className="min-h-0 flex-1 overflow-hidden" />
+      <div ref={mount} className="code-preview-editor min-h-0 flex-1 overflow-hidden" />
       {loaded && (
         <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-line px-3 py-2">
           <span className="text-xs text-fg-muted">
@@ -203,6 +215,16 @@ function App() {
             </Button>
           </div>
         </div>
+      )}
+      {loaded && selection && (
+        <CodeInteraction
+          key={reload}
+          apiBase={apiBase}
+          session={query.get("session")!}
+          path={path}
+          selection={selection}
+          version={version}
+        />
       )}
     </main>
   );

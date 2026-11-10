@@ -34,6 +34,7 @@
  * `SessionLoader`: production uses the core SDK (createCoreSessionLoader), tests inject
  * a fake Session (issuing no real LLM requests).
  */
+import type { LLMOutcome } from "@prismshadow/penguin-core";
 import { randomUUID } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -267,6 +268,8 @@ export interface RuntimeSession {
   ): Promise<{ context?: string } | null>;
   /** A tool's permission level from the running context's toolset (core `Session.toolPermission`; strict-tier — rebuilt at rotation). */
   toolPermission(name: string): "r" | "rw" | undefined;
+  /** A tool-free side stream, isolated from the main Session history. */
+  streamAside?(prompt: string, signal?: AbortSignal): AsyncGenerator<AmspRecord, LLMOutcome>;
   /**
    * Out-of-band one-shot request for title generation (core `Session.generateTitle`,
    * writes no history/Trace). Material defaults to what the Session collects itself
@@ -470,7 +473,7 @@ function toUnrecoverableError(err: unknown): HttpError {
 }
 
 export interface UsageRecorderLike {
-  record(ctx: UsageContext, msg: AmspRecord): Promise<void>;
+  record(ctx: UsageContext, msg: AmspRecord, source?: "stream" | "standalone"): Promise<void>;
 }
 
 export interface SessionManagerDeps {
@@ -934,6 +937,40 @@ export class SessionManager {
         ...(resume ? { resume } : {}),
       })) ?? "gone"
     );
+  }
+
+  /** Side answers are metered but never published to the main Session channel. */
+  async *streamAside(
+    sessionId: string,
+    prompt: string,
+    signal?: AbortSignal,
+  ): AsyncGenerator<AmspRecord, LLMOutcome> {
+    const entry = await this.ensureEntry(sessionId);
+    if (!entry.session.streamAside)
+      throw new HttpError(
+        409,
+        "side_question_unavailable",
+        "Side questions are unavailable for this Session.",
+      );
+    const stream = entry.session.streamAside(prompt, signal);
+    const ctx: UsageContext = {
+      projectId: entry.projectId,
+      agentId: entry.agentId,
+      sessionId: entry.sessionId,
+      provider: entry.provider,
+      modelId: entry.modelId,
+    };
+    try {
+      for (;;) {
+        const step = await stream.next();
+        if (step.done) return step.value;
+        if ((step.value.payload as { type?: string }).type === "token_usage")
+          await this.deps.recorder.record(ctx, step.value, "standalone");
+        yield step.value;
+      }
+    } finally {
+      await stream.return({ status: "aborted" });
+    }
   }
 
   /**
@@ -2907,6 +2944,7 @@ export abstract class Sessions extends Interface<
     | "pendingSteeringOf"
     | "subagentsOf"
     | "sendToSubagent"
+    | "streamAside"
     | "abortSubagentRun"
     | "pendingFollowUpsOf"
     | "liveFragments"
