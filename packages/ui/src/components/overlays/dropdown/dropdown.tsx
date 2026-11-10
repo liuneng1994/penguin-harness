@@ -71,6 +71,8 @@ export function Dropdown({
   returnFocus,
   onEscape,
   focusOnOpen,
+  followAnchor = false,
+  allowFlip = true,
 }: {
   button: ReactNode;
   open: boolean;
@@ -124,6 +126,10 @@ export function Dropdown({
    * so merely sweeping the pointer past the trigger leaves a stray outline behind.
    */
   focusOnOpen?: boolean;
+  /** A caller that updates anchorRect as content moves keeps the popup attached on scroll. */
+  followAnchor?: boolean;
+  /** Constrain the panel to the requested side instead of flipping across its anchor. */
+  allowFlip?: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -259,7 +265,7 @@ export function Dropdown({
     const roomAbove = rect.top - PANEL_GAP - VIEWPORT_MARGIN;
     const wantUp = portal.direction === "up";
     const fits = wantUp ? panelHeight <= roomAbove : panelHeight <= roomBelow;
-    const up = fits ? wantUp : roomAbove > roomBelow;
+    const up = !allowFlip ? wantUp : fits ? wantUp : roomAbove > roomBelow;
     setPos({
       left,
       maxHeight: Math.max(0, up ? roomAbove : roomBelow),
@@ -273,6 +279,7 @@ export function Dropdown({
     portal?.direction,
     portal?.align,
     children,
+    allowFlip,
     anchorRect?.top,
     anchorRect?.left,
     anchorRect?.bottom,
@@ -295,7 +302,7 @@ export function Dropdown({
       // A pointer-anchored panel has nothing left to follow once the content under the
       // pointer moves, so it dismisses instead (the usual context-menu behavior) — but only
       // for a scroll that actually moved that content (see scrollMovesAnchor).
-      if (anchorRect) {
+      if (anchorRect && !followAnchor) {
         const currentOwner = anchorOwnerRef.current?.() ?? null;
         if (scrollMovesAnchor(e.target as Node | null, currentOwner)) {
           // Hidden overflow can emit a scroll while focus normalizes a border pixel. The
@@ -319,7 +326,7 @@ export function Dropdown({
     // the same reason a scroll does — and unconditionally, with no ownership test: every
     // anchor point on the page moves when the viewport changes size.
     const onResize = () => {
-      if (anchorRect) setOpenRef.current(false);
+      if (anchorRect && !followAnchor) setOpenRef.current(false);
       else place();
     };
     window.addEventListener("scroll", onScroll, true);
@@ -328,7 +335,7 @@ export function Dropdown({
       window.removeEventListener("scroll", onScroll, true);
       window.removeEventListener("resize", onResize);
     };
-  }, [open, portal, place, anchorRect]);
+  }, [open, portal, place, anchorRect, followAnchor]);
 
   // Portaled panels sit at z-[60], above a Modal's z-50 overlay (a body portal appended
   // after the overlay would otherwise paint UNDER it and be unclickable); in-flow panels

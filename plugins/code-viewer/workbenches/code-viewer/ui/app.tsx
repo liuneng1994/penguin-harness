@@ -3,7 +3,7 @@ import { createRoot } from "react-dom/client";
 import { Button, NoticeStrip, Switch } from "@prismshadow/penguin-ui";
 import { createPreviewEditor } from "./editor/editor.js";
 import { CodeInteraction } from "./interaction.js";
-import type { CodeSelection, PreviewEditor } from "./editor/editor.js";
+import type { CodeAnchor, CodeSelection, PreviewEditor } from "./editor/editor.js";
 import { en, zh } from "./strings.js";
 
 const query = new URLSearchParams(location.search);
@@ -71,6 +71,7 @@ function App() {
   const [window, setWindow] = useState({ from: 1, to: 1, total: 1 });
   const [wrap, setWrap] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [anchor, setAnchor] = useState<CodeAnchor | null>(null);
   const [selection, setSelection] = useState<CodeSelection | null>(null);
   const [version, setVersion] = useState("");
   const [reload, setReload] = useState(0);
@@ -114,6 +115,7 @@ function App() {
           endLine: position("endLine"),
           endColumn: position("endColumn"),
           onSelection: setSelection,
+          onAnchor: setAnchor,
           onWindow: (from, to, total) => setWindow({ from, to, total }),
         });
         if (controller.signal.aborted) {
@@ -181,24 +183,21 @@ function App() {
           {available ? S.loading : S.empty}
         </p>
       )}
-      {loaded && (
-        <div className="flex shrink-0 justify-center border-b border-line py-1">
-          <Button
-            size="sm"
-            disabled={window.from === 1}
-            onClick={() => editor.current?.expand("up")}
-          >
-            {S.up}
-          </Button>
-        </div>
-      )}
       <div ref={mount} className="code-preview-editor min-h-0 flex-1 overflow-hidden" />
       {loaded && (
         <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-line px-3 py-2">
-          <span className="text-xs text-fg-muted">
-            {S.range(window.from, window.to, window.total)} · {S.readOnly}
-          </span>
+          <div className="flex flex-wrap gap-2 text-xs text-fg-muted">
+            <span>{S.range(window.from, window.to, window.total)}</span>
+            <span>{S.readOnly}</span>
+          </div>
           <div className="flex flex-wrap gap-2">
+            <Button
+              size="sm"
+              disabled={window.from === 1}
+              onClick={() => editor.current?.expand("up")}
+            >
+              {S.up}
+            </Button>
             <Button
               size="sm"
               disabled={window.to === window.total}
@@ -219,6 +218,8 @@ function App() {
       {loaded && selection && (
         <CodeInteraction
           key={reload}
+          editor={editor.current!}
+          anchor={anchor}
           apiBase={apiBase}
           session={query.get("session")!}
           path={path}

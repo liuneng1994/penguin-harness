@@ -1,3 +1,10 @@
+export interface CodeAnchor {
+  top: number;
+  bottom: number;
+  left: number;
+  right: number;
+  triggerLeft: number;
+}
 export interface CodeSelection {
   line: number;
   column: number;
@@ -6,6 +13,8 @@ export interface CodeSelection {
   text: string;
 }
 export interface PreviewEditor {
+  revealSelection(): void;
+  focus(): void;
   selection(): CodeSelection;
   expand(direction: "up" | "down" | "all"): void;
   wrap(enabled: boolean): void;
@@ -24,6 +33,7 @@ export function createPreviewEditor(
     column?: number;
     endLine?: number;
     endColumn?: number;
+    onAnchor?: (anchor: CodeAnchor | null) => void;
     onSelection?: (selection: CodeSelection) => void;
     onWindow(from: number, to: number, total: number): void;
   },

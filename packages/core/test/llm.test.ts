@@ -8,6 +8,8 @@
  *      token_usage, tool_call_id passthrough).
  * As well as helper functions for token conversion, UniConfig construction, and retry
  * determination, and how streamGenerate releases the upstream when it is left before the stop.
+ * A read-only context snapshot includes current text and tool exchanges while excluding media,
+ * private thinking, transport fidelity and credentials; resetting main history updates it.
  */
 import { describe, expect, it } from "vitest";
 import {
@@ -1979,6 +1981,44 @@ describe("GenerativeModel.streamGenerate outcome classification (PRN-013)", () =
     setTimeout(() => controller.abort(), 20);
     const { outcome } = await p;
     expect(outcome.status).toBe("aborted");
+  });
+});
+
+describe("read-only main context snapshots", () => {
+  it("reads current text and tools without exposing media, reasoning, fidelity or credentials", () => {
+    const model = new GenerativeModel({
+      modelId: "test-model",
+      clientType: "ant-messages",
+      apiKey: "private-api-key",
+      tools: [],
+      systemPrompt: "main context instructions",
+    });
+    model.setHistory([
+      userText("current main question"),
+      imageUrlMessage("https://example.test/private-image.png"),
+      thinkingMessage("private thought", { signature: "private-signature" }),
+      assistantText("visible main answer", { signature: "private-signature" }),
+      toolCall({ name: "read_file", arguments: '{"path":"main.cpp"}', toolCallId: "read1" }),
+      toolCallOutput({ output: "current tool result", toolCallId: "read1", status: "completed" }),
+    ]);
+    const snapshot = model.contextSnapshot();
+    expect(snapshot).toContain("main context instructions");
+    expect(snapshot).toContain("current main question");
+    expect(snapshot).toContain("visible main answer");
+    expect(snapshot).toContain("read_file");
+    expect(snapshot).toContain("main.cpp");
+    expect(snapshot).toContain("current tool result");
+    for (const privateValue of [
+      "private-image",
+      "private thought",
+      "private-signature",
+      "private-api-key",
+    ])
+      expect(snapshot).not.toContain(privateValue);
+    expect(model.contextSnapshot()).toBe(snapshot);
+    model.setHistory([userText("new main context")]);
+    expect(model.contextSnapshot()).toContain("new main context");
+    expect(model.contextSnapshot()).not.toContain("current main question");
   });
 });
 

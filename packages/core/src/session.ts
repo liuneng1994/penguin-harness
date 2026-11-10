@@ -65,6 +65,7 @@ import type {
 } from "./interfaces/index.js";
 import { vetoForToolCall, withCommandPolicy } from "./internal/command-policy.js";
 import type { CommandPolicySource } from "./internal/command-policy.js";
+import { contextRecords } from "./internal/context-snapshot.js";
 import { generateTitleWithLLM } from "./internal/session-title.js";
 import type { SessionTitleResult } from "./internal/session-title.js";
 import { compactAvailability, ContextEngine } from "./engine/context-engine.js";
@@ -1259,13 +1260,24 @@ export class Session {
     });
   }
 
-  /** A fresh, tool-free model request. Its records never enter this Session's engine or Trace. */
+  /** Read current main context in a fresh, tool-free request without writing its engine or Trace. */
   async *streamAside(prompt: string, signal?: AbortSignal): AsyncGenerator<AmspRecord, LLMOutcome> {
     if (signal?.aborted) return { status: "aborted" };
     if (!this.createBareLLM)
       return { status: "fatal", errorMessage: "Side questions are unavailable for this Session." };
     const llm = this.createBareLLM({ maxTokens: 4096 });
-    return yield* llm.streamGenerate({ newMessages: [userText(prompt)], signal });
+    const context =
+      this.engine?.contextSnapshot() ??
+      JSON.stringify({
+        systemPrompt: this.meta.payload.system_prompt,
+        messages: contextRecords(this.resumedHistory ?? []),
+      });
+    return yield* llm.streamGenerate({
+      newMessages: [
+        userText(`Current main conversation (read-only context):\n${context}\n\n${prompt}`),
+      ],
+      signal,
+    });
   }
 
   /**

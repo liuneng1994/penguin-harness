@@ -7,18 +7,18 @@ The preview opens in the center of the screen with the cited lines highlighted a
 of context on either side. Expand in either direction or show the full file. Search also reveals
 matches outside the current snippet. Code is read only; select and copy text, or use **Copy code**
 to copy the cited lines when nothing is selected. **Open in VS Code** remains in the dialog footer.
-Escape closes the search panel first, then the preview, and returns to the same chat position.
+Escape closes the floating question panel or search first, then the preview, and returns to the
+same chat position.
 
-Select code and use the interaction area below it. **Modify code** sends the file, exact selected
-range, source text and your edit request to the main conversation; a busy conversation queues it.
-The Agent uses its normal tools and approvals to edit the file. Use **Reload code** after the task
-finishes, or **View main chat** to follow the task.
+Select code and click **Ask** beside the selection. A question panel floats below the selected
+line and follows it as you scroll, without changing the code viewport's height. **btw Q&A**
+streams answers using the selected code, the main conversation's current readable context and
+its own previous questions and answers. Each question reads the main context again, including
+new main-conversation messages. Images and private reasoning are excluded from that snapshot.
 
-**btw Q&A** streams answers about the selected code in a separate conversation. It receives only
-the selected code and its own previous questions and answers. No question or answer is appended
-to the main conversation or its Trace; usage is still metered against the Session. It has no
-tools and cannot edit files. Closing or reloading the preview clears this conversation; **Clear
-Q&A** starts over in place.
+No question or answer is appended to the main conversation or its Trace; usage is still metered
+against the Session. The question request has no tools and cannot edit files. Closing or
+reloading the preview clears this conversation; **Clear Q&A** starts over in place.
 
 C/C++, JavaScript/TypeScript, Python, JSON, Rust and shell load their syntax parsers on demand,
 with colored tokens for both light and dark mode.

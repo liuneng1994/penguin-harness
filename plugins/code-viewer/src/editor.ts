@@ -21,6 +21,14 @@ export interface CodeSelection {
   text: string;
 }
 
+export interface CodeAnchor {
+  top: number;
+  bottom: number;
+  left: number;
+  right: number;
+  triggerLeft: number;
+}
+
 export interface PreviewOptions {
   text: string;
   path: string;
@@ -30,10 +38,13 @@ export interface PreviewOptions {
   endColumn?: number;
   codeLabel: string;
   phrases?: Record<string, string>;
+  onAnchor?: (anchor: CodeAnchor | null) => void;
   onSelection?: (selection: CodeSelection) => void;
   onWindow: (from: number, to: number, total: number) => void;
 }
 export interface PreviewEditor {
+  revealSelection(): void;
+  focus(): void;
   selection(): CodeSelection;
   expand: (direction: "up" | "down" | "all") => void;
   wrap: (enabled: boolean) => void;
@@ -153,7 +164,11 @@ export async function createPreviewEditor(
         lang,
         syntaxHighlighting(codeStyle),
         search({ top: true }),
-        keymap.of([...searchKeymap, ...defaultKeymap]),
+        // Search owns Escape while open; otherwise the host closes the preview.
+        keymap.of([
+          ...searchKeymap,
+          ...defaultKeymap.filter((binding) => binding.key !== "Escape"),
+        ]),
         windowField,
         wrapping.of([]),
         EditorView.theme({
@@ -190,6 +205,7 @@ export async function createPreviewEditor(
           },
         }),
         EditorView.updateListener.of((update) => {
+          queueMicrotask(measureAnchor);
           if (!update.selectionSet) return;
           options.onSelection?.(selectedCode(update.state));
           const a = doc.lineAt(update.state.selection.main.from).number;
@@ -213,11 +229,39 @@ export async function createPreviewEditor(
     }),
   });
   let destroyed = false;
+  function measureAnchor() {
+    if (destroyed) return;
+    view.requestMeasure({
+      key: options,
+      read: () => {
+        const range = selectedCode(view.state);
+        const end =
+          doc.line(range.endLine).from +
+          Math.min(doc.line(range.endLine).length, range.endColumn - 1);
+        const rect = view.coordsAtPos(end);
+        const viewport = view.scrollDOM.getBoundingClientRect();
+        if (!rect || rect.bottom <= viewport.top || rect.top >= viewport.bottom) return null;
+        const gutter = view.dom.querySelector(".cm-gutters")?.getBoundingClientRect();
+        const left = Math.max(viewport.left + 8, (gutter?.right ?? viewport.left + 48) + 8);
+        return {
+          top: rect.top,
+          bottom: rect.bottom,
+          left,
+          right: left + 1,
+          triggerLeft: Math.max(left, Math.min(viewport.right - 64, rect.right + 12)),
+        };
+      },
+      write: (anchor) => options.onAnchor?.(anchor),
+    });
+  }
+  view.scrollDOM.addEventListener("scroll", measureAnchor, { passive: true });
+
   let measuredHeight = -1;
-  // The question area grows below the code; keep the selected code in view as its pane shrinks.
+  // Keep the selected code visible when the preview viewport changes size.
   const resize = new ResizeObserver(([entry]) => {
     if (!entry || entry.contentRect.height === measuredHeight) return;
     measuredHeight = entry.contentRect.height;
+    measureAnchor();
     queueMicrotask(() => {
       if (!destroyed)
         view.dispatch({
@@ -226,12 +270,25 @@ export async function createPreviewEditor(
     });
   });
   resize.observe(parent);
+  measureAnchor();
   options.onWindow(from, to, doc.lines);
   options.onSelection?.(selectedCode(view.state));
   view.dispatch({
     effects: EditorView.scrollIntoView(view.state.selection.main.head, { y: "center" }),
   });
   return {
+    revealSelection() {
+      const range = selectedCode(view.state);
+      const position =
+        (range.endLine - range.line + 1) * 24 < parent.clientHeight / 2
+          ? doc.line(range.line).from + range.column - 1
+          : doc.line(range.endLine).from + range.endColumn - 1;
+      view.dispatch({ effects: EditorView.scrollIntoView(position, { y: "start", yMargin: 24 }) });
+      measureAnchor();
+    },
+    focus() {
+      view.focus();
+    },
     selection() {
       return selectedCode(view.state);
     },
@@ -260,6 +317,7 @@ export async function createPreviewEditor(
     destroy() {
       destroyed = true;
       resize.disconnect();
+      view.scrollDOM.removeEventListener("scroll", measureAnchor);
       view.destroy();
     },
   };

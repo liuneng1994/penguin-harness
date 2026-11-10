@@ -1,5 +1,5 @@
 /**
- * - A code question and its follow-up use only selected Workspace code and supplied side turns;
+ * - A code question and its follow-up inherit current main context plus selected Workspace code and supplied side turns;
  *   the main trace is unchanged, its next model request excludes side text, and usage is metered.
  * - Invalid selections, an escaped path, another user's Session and excessive side history
  *   are refused before a model request. A changed file is refused until the preview reloads.
@@ -88,7 +88,7 @@ describe("code side questions", () => {
     expect(stream).toContain("event: done");
     const request = mock.requests.at(-1)!;
     expect(requestText(request)).toContain("int value = 1 + 2;");
-    expect(requestText(request)).not.toContain("main-context-only");
+    expect(requestText(request)).toContain("main-context-only");
     expect(requestText(request)).not.toContain("do not include");
     expect((request as { tools?: unknown[] }).tools ?? []).toEqual([]);
     const followup = await side({
@@ -111,6 +111,10 @@ describe("code side questions", () => {
     ).toBe(202);
     await waitFor(() => app.deps.manager.statusOf(sessionId) === "idle");
     expect(requestText(mock.requests.at(-1)!)).not.toContain("private-question");
+    expect(requestText(mock.requests.at(-1)!)).not.toContain("private-answer");
+    const latest = await side({ question: "latest-context" });
+    expect(await latest.text()).toContain("event: done");
+    expect(requestText(mock.requests.at(-1)!)).toContain("continue-main");
     expect(requestText(mock.requests.at(-1)!)).not.toContain("private-answer");
   });
   it.each([

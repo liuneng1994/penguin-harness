@@ -287,26 +287,6 @@ const server = http.createServer((req, res) => {
       messageStop(res, "end_turn", 30);
       return;
     }
-    const codeEditLast = JSON.stringify(messages.at(-1) ?? {});
-    if (codeEditLast.includes("Change multiplier to 3")) {
-      block(res, 0, { type: "tool_use", id: "toolu_code_edit", name: "exec_command", input: {} }, [
-        {
-          type: "input_json_delta",
-          partial_json: JSON.stringify({
-            cmd: 'python3 -c \'from pathlib import Path; p=Path("bolt/expression/Expr.cpp"); p.write_text(p.read_text().replace("value * 2", "value * 3"))\'',
-          }),
-        },
-      ]);
-      messageStop(res, "tool_use", 30);
-      return;
-    }
-    if (flat.includes("Change multiplier to 3") && codeEditLast.includes("tool_result")) {
-      block(res, 0, { type: "text", text: "" }, [
-        { type: "text_delta", text: "Updated multiplier to 3." },
-      ]);
-      messageStop(res, "end_turn", 20);
-      return;
-    }
     if (flat.includes("code viewer test")) {
       block(res, 0, { type: "text", text: "" }, [
         {

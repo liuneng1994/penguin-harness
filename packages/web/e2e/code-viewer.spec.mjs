@@ -2,6 +2,7 @@
  * Given an installed optional viewer, a chat range opens actual C++ code with real line numbers,
  * context, copy, search, read-only behavior and Escape back to the same chat in all three themes.
  * Missing and ambiguous references stay in the preview with a useful error. Phone layouts fit.
+ * Floating questions follow a scrolled selection without resizing code or changing main history.
  */
 import { test, expect } from "@playwright/test";
 import fs from "node:fs/promises";
@@ -132,8 +133,10 @@ test("chat code preview and errors across themes", async ({ page }, testInfo) =>
     expect(Math.abs(box.x + box.width / 2 - 720)).toBeLessThan(3);
     await page.screenshot({ path: testInfo.outputPath(`${themeId}-code-preview.png`) });
     await frame.getByRole("button", { name: "btw Q&A", exact: true }).click();
-    await frame.locator("[data-fold]").evaluate((node) => {
-      for (const animation of node.getAnimations({ subtree: true })) {
+    const popup = frame.getByRole("region", { name: "Private code Q&A", exact: true });
+    await expect(popup).toBeVisible();
+    await popup.evaluate((node) => {
+      for (const animation of node.parentElement.getAnimations({ subtree: true })) {
         const duration = animation.effect?.getTiming().duration;
         if (typeof duration === "number" && duration > 0) {
           animation.pause();
@@ -142,13 +145,14 @@ test("chat code preview and errors across themes", async ({ page }, testInfo) =>
       }
     });
     await page.screenshot({
-      path: testInfo.outputPath(`${themeId}-btw-opening.png`),
+      path: testInfo.outputPath(`${themeId}-floating-opening.png`),
       animations: "allow",
     });
-    await frame.locator("[data-fold]").evaluate((node) => {
-      for (const animation of node.getAnimations({ subtree: true })) animation.finish();
+    await popup.evaluate((node) => {
+      for (const animation of node.parentElement.getAnimations({ subtree: true }))
+        animation.finish();
     });
-    await frame.getByRole("button", { name: "Modify code", exact: true }).click();
+    await popup.getByRole("button", { name: "Collapse Q&A", exact: true }).click();
     await frame.getByRole("button", { name: "Copy code", exact: true }).click();
     expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
       lines.slice(784, 795).join("\n"),
@@ -226,11 +230,17 @@ test("chat code preview and errors across themes", async ({ page }, testInfo) =>
     }));
   expect(syntax.token).not.toBe(syntax.text);
   await codeFrame.locator(".cm-content").press("Shift+End");
-  await expect(codeFrame.getByText("Line 785", { exact: true })).toBeVisible();
+
   const historyBefore = await (
     await page.request.get(`${BASE}/api/sessions/${sessionId}/messages`)
   ).json();
+  // Leave scrollable context below the selection instead of testing at the snippet's bottom.
+  await codeFrame.getByRole("button", { name: "Show 40 lines below", exact: true }).click();
+  const heightBefore = await codeFrame
+    .locator(".cm-scroller")
+    .evaluate((node) => node.clientHeight);
   await codeFrame.getByRole("button", { name: "btw Q&A", exact: true }).click();
+  await expect(codeFrame.getByText("Line 785", { exact: true })).toBeVisible();
   const question = codeFrame.getByRole("textbox", { name: "Ask about this code…", exact: true });
   await question.fill("private-question-one");
   await codeFrame.getByRole("button", { name: "Ask", exact: true }).click();
@@ -246,27 +256,48 @@ test("chat code preview and errors across themes", async ({ page }, testInfo) =>
     await page.request.get(`${BASE}/api/sessions/${sessionId}/messages`)
   ).json();
   expect(historyAfter).toEqual(historyBefore);
-  await page.screenshot({ path: testInfo.outputPath("code-btw-questions.png") });
-  await page.keyboard.press("Escape");
+  expect(await codeFrame.locator(".cm-scroller").evaluate((node) => node.clientHeight)).toBe(
+    heightBefore,
+  );
+  const popupBox = await codeFrame
+    .getByRole("region", { name: "Private code Q&A", exact: true })
+    .boundingBox();
+  const selectedLine = await codeFrame
+    .locator(".cm-line")
+    .filter({ hasText: "const int doubled" })
+    .boundingBox();
+  expect(popupBox.y).toBeGreaterThanOrEqual(selectedLine.y + selectedLine.height);
+  const yBefore = popupBox.y;
+  const scrollDelta = await codeFrame.locator(".cm-scroller").evaluate((node) => {
+    const before = node.scrollTop;
+    node.scrollTop += 16;
+    return node.scrollTop - before;
+  });
+  expect(scrollDelta).toBeGreaterThan(8);
+  await expect
+    .poll(
+      async () =>
+        (
+          await codeFrame
+            .getByRole("region", { name: "Private code Q&A", exact: true })
+            .boundingBox()
+        ).y,
+    )
+    .toBeLessThan(yBefore - 8);
+  await page.screenshot({ path: testInfo.outputPath("code-floating-questions.png") });
+  await question.press("Escape");
+  await expect(
+    codeFrame.getByRole("region", { name: "Private code Q&A", exact: true }),
+  ).toHaveCount(0);
+  await expect(codeDialog).toBeVisible();
+  await codeFrame.locator(".cm-content").press("Escape");
+  await expect(codeDialog).toHaveCount(0);
   await codeLink.click();
   await codeFrame.getByRole("button", { name: "btw Q&A", exact: true }).click();
-  await expect(codeFrame.getByRole("log")).toHaveCount(0);
-  await codeFrame.getByRole("button", { name: "Modify code", exact: true }).click();
-  await codeFrame
-    .getByRole("textbox", { name: "Describe the change to this code…", exact: true })
-    .fill("Change multiplier to 3");
-  await codeFrame.getByRole("button", { name: "Send edit", exact: true }).click();
-  await expect(codeFrame.getByRole("status")).toContainText("Edit sent to the main conversation");
-  await expect
-    .poll(() => fs.readFile(path.join(workspace, "bolt/expression/Expr.cpp"), "utf8"))
-    .toContain("value * 3");
-  await codeFrame.getByRole("button", { name: "Reload code", exact: true }).click();
-  await expect(codeFrame.locator(".cm-line").filter({ hasText: "value * 3" })).toBeVisible();
-  await page.screenshot({ path: testInfo.outputPath("code-modification.png") });
-  await page.keyboard.press("Escape");
-  await expect(
-    page.getByText("Requested change: Change multiplier to 3", { exact: false }),
-  ).toBeVisible();
+  await expect(codeFrame.getByRole("log")).not.toContainText("First private answer");
+  await expect(codeFrame.getByRole("button", { name: "Send edit", exact: true })).toHaveCount(0);
+  await codeFrame.getByRole("button", { name: "Collapse Q&A", exact: true }).click();
+  await codeFrame.locator(".cm-content").press("Escape");
   await setAccountPrefs(page.request, { themeMode: "dark" });
   await page.reload();
   await codeLink.click();

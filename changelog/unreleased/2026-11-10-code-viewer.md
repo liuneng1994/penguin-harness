@@ -27,14 +27,14 @@ existing file-opening behavior. No conversation records or stored configuration 
 
 ## Interacting with code
 
-Syntax tokens use a light and dark color palette. Select code to work on a precise range:
+Syntax tokens received light and dark color palettes. Selecting code and clicking **Ask** opens
+**btw Q&A** in a floating panel below the selected line. The panel follows the line on scroll
+and leaves the code viewport's height unchanged. Escape closes the panel before the preview.
 
-- **Modify code** submits the selection and requested change as a normal task in the main
-  conversation, queuing it when busy. The Agent edits through its existing tools and approvals.
-  Reload the preview after it finishes to read the new code.
-- **btw Q&A** uses an independent, tool-free model request with selected code and its own
-  follow-up history. Questions and answers never enter the main conversation or its Trace.
-  Usage is still metered; closing, reloading or clearing the preview discards the side history.
+Each question uses an independent, tool-free model request with selected code, the main
+conversation's current readable context and its own follow-up history. The snapshot includes
+text, tool calls and results; it excludes images and private reasoning. Questions and answers
+never enter the main conversation or its Trace. Usage is still metered; closing, reloading or
+clearing the preview discards the side history.
 
-The selected code stays visible when the question area grows. File-version checks refuse an
-answer about changed code until the reader reloads the preview.
+File-version checks refuse an answer about changed code until the reader reloads the preview.

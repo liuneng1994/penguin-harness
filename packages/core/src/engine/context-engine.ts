@@ -29,6 +29,7 @@
  * (MMSP maintains the history); each turn the engine only hands it the "new" messages:
  * the user Prompt on the first turn, and the previous turn's tool_call_output afterward.
  */
+import { contextRecords } from "../internal/context-snapshot.js";
 import {
   abortEvent,
   approvalDecision,
@@ -602,6 +603,20 @@ export class ContextEngine {
       this.lastRequestTotal = init.lastRequestTotal ?? 0;
       this.pendingTraceRotation = init.pendingTraceRotation ?? false;
     }
+  }
+
+  /** Snapshot only: side requests must not append to, replay or otherwise change this LLM. */
+  contextSnapshot(): string | null {
+    const context = this.llm.contextSnapshot?.();
+    if (context === undefined) return null;
+    const pending = contextRecords([
+      ...new Set([
+        ...this.pendingCarryOver,
+        ...(this.pendingSummary ? [this.pendingSummary] : []),
+        ...(this.openingSummary ? [this.openingSummary] : []),
+      ]),
+    ]);
+    return `${context}\nPending main context: ${JSON.stringify(pending)}`;
   }
 
   /** Moves the Session's thinking level mid-context (see the `thinkingLevel` field); applies from the next request, turn or compaction. */
