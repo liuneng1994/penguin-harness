@@ -33,6 +33,8 @@ export async function resolveEditorFile(
     const { stdout } = await run(
       "git",
       [
+        "-c",
+        "core.fsmonitor=false",
         "ls-files",
         "-z",
         "--cached",

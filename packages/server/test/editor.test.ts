@@ -134,6 +134,35 @@ describe("Workspace editor targets", () => {
     expect(await response.json()).toMatchObject({ error: { code: "path_not_found" } });
   });
   it.skipIf(process.platform === "win32")(
+    "does not run a repository's filesystem-monitor hook during file lookup",
+    async () => {
+      const repo = path.join(workspace, "monitor-editor");
+      await fs.mkdir(path.join(repo, "src"), { recursive: true });
+      await fs.writeFile(path.join(repo, "src", "Monitored.cpp"), "Source");
+      execFileSync("git", ["init", "--quiet", repo]);
+      execFileSync("git", ["-C", repo, "add", "src"]);
+      const hook = path.join(repo, "monitor.sh");
+      const marker = path.join(repo, "monitor-ran");
+      await fs.writeFile(hook, '#!/bin/sh\nprintf invoked > "monitor-ran"\nprintf "\\0"\n');
+      await fs.chmod(hook, 0o755);
+      execFileSync("git", ["-C", repo, "config", "core.fsmonitor", "./monitor.sh"]);
+      const params = new URLSearchParams({ workspace: repo, path: "Monitored.cpp" });
+      const response = await owner.get(
+        `/api/projects/editor_owner-p/workspace-files/editor-target?${params}`,
+      );
+      expect(response.status).toBe(200);
+      expect(await response.json()).toMatchObject({
+        path: await fs.realpath(path.join(repo, "src", "Monitored.cpp")),
+      });
+      expect(
+        await fs.access(marker).then(
+          () => true,
+          () => false,
+        ),
+      ).toBe(false);
+    },
+  );
+  it.skipIf(process.platform === "win32")(
     "does not resolve an abbreviated name through an escaping symlink",
     async () => {
       const repo = path.join(workspace, "escaping-editor");
