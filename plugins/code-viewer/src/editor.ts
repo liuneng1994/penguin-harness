@@ -92,12 +92,13 @@ export async function createPreviewEditor(
   const last = clamp(Math.max(first, options.endLine ?? first));
   let from = Math.max(1, first - 12),
     to = Math.min(doc.lines, last + 12);
+  let selectionTouched = false;
   const windowEffect = StateEffect.define<{ from: number; to: number }>();
   const marks = (state: EditorState): DecorationSet => {
     const ranges = [];
     if (from > 1)
       ranges.push(Decoration.replace({ block: true }).range(0, state.doc.line(from).from));
-    if (options.line !== undefined) {
+    if (options.line !== undefined && !selectionTouched) {
       for (let line = first; line <= last; line++)
         ranges.push(Decoration.line({ class: "cm-cited-line" }).range(state.doc.line(line).from));
     }
@@ -110,6 +111,12 @@ export async function createPreviewEditor(
   const windowField = StateField.define<DecorationSet>({
     create: marks,
     update(value, tr) {
+      if (
+        tr.selection &&
+        (tr.isUserEvent("select.pointer") ||
+          (tr.isUserEvent("select") && !tr.startState.selection.eq(tr.state.selection)))
+      )
+        selectionTouched = true;
       for (const effect of tr.effects)
         if (effect.is(windowEffect)) {
           from = effect.value.from;
@@ -117,21 +124,23 @@ export async function createPreviewEditor(
           options.onWindow(from, to, doc.lines);
           return marks(tr.state);
         }
-      return value;
+      return tr.selection ? marks(tr.state) : value;
     },
     provide: (field) => EditorView.decorations.from(field),
   });
   const selectedCode = (state: EditorState): CodeSelection => {
     const selection = state.selection.main;
+    const startLine = selectionTouched ? doc.lineAt(selection.head) : doc.line(first);
+    const endLine = selectionTouched ? startLine : doc.line(last);
     const start = selection.empty
-      ? doc.line(first).from +
-        Math.min(doc.line(first).length, Math.max(0, (options.column ?? 1) - 1))
+      ? startLine.from +
+        (selectionTouched ? 0 : Math.min(startLine.length, Math.max(0, (options.column ?? 1) - 1)))
       : selection.from;
     const end = selection.empty
-      ? doc.line(last).from +
-        (options.endColumn === undefined
-          ? doc.line(last).length
-          : Math.min(doc.line(last).length, Math.max(0, options.endColumn - 1)))
+      ? endLine.from +
+        (selectionTouched || options.endColumn === undefined
+          ? endLine.length
+          : Math.min(endLine.length, Math.max(0, options.endColumn - 1)))
       : selection.to;
     const a = doc.lineAt(start),
       b = doc.lineAt(end);
@@ -238,11 +247,19 @@ export async function createPreviewEditor(
         const end =
           doc.line(range.endLine).from +
           Math.min(doc.line(range.endLine).length, range.endColumn - 1);
-        const rect = view.coordsAtPos(end);
         const viewport = view.scrollDOM.getBoundingClientRect();
-        if (!rect || rect.bottom <= viewport.top || rect.top >= viewport.bottom) return null;
         const gutter = view.dom.querySelector(".cm-gutters")?.getBoundingClientRect();
         const left = Math.max(viewport.left + 8, (gutter?.right ?? viewport.left + 48) + 8);
+        let rect = view.coordsAtPos(end);
+        if (!rect || rect.bottom > viewport.bottom || rect.top < viewport.top) {
+          const visible = view.posAtCoords({
+            x: left,
+            y: viewport.bottom - view.defaultLineHeight / 2,
+          });
+          const start = doc.line(range.line).from + range.column - 1;
+          rect = view.coordsAtPos(Math.max(start, Math.min(end, visible ?? end)));
+        }
+        if (!rect || rect.bottom <= viewport.top || rect.top >= viewport.bottom) return null;
         return {
           top: rect.top,
           bottom: rect.bottom,
@@ -280,7 +297,7 @@ export async function createPreviewEditor(
     revealSelection() {
       const range = selectedCode(view.state);
       const position =
-        (range.endLine - range.line + 1) * 24 < parent.clientHeight / 2
+        (range.endLine - range.line + 1) * view.defaultLineHeight < parent.clientHeight / 2
           ? doc.line(range.line).from + range.column - 1
           : doc.line(range.endLine).from + range.endColumn - 1;
       view.dispatch({ effects: EditorView.scrollIntoView(position, { y: "start", yMargin: 24 }) });

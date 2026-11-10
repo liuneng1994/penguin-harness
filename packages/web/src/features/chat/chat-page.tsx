@@ -2855,9 +2855,9 @@ export function ChatPage() {
                             be covered, and gives way as it grows. */}
                         <WallpaperSurface
                           ref={measureComposer}
-                          className="shrink-0 border-t border-gray-200 bg-canvas px-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-3 md:pb-3 dark:border-gray-800"
+                          className="shrink-0 border-t border-gray-200 bg-canvas px-4 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-3 md:px-6 md:pb-3 dark:border-gray-800"
                         >
-                          <div className="mx-auto max-w-3xl">
+                          <div className="chat-reading-column">
                             {/* Goal banner docked above the composer: an in-flight goal's progress
                                 (restored on load while still active), or the terminal state reached
                                 during this page's lifetime. The stop button is the composer's

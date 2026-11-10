@@ -6,11 +6,14 @@ Plugins page, then click a file reference in its chat, such as `Expr.cpp:785-795
 The preview opens in the center of the screen with the cited lines highlighted and twelve lines
 of context on either side. Expand in either direction or show the full file. Search also reveals
 matches outside the current snippet. Code is read only; select and copy text, or use **Copy code**
-to copy the cited lines when nothing is selected. **Open in VS Code** remains in the dialog footer.
+to copy the selection or the clicked line. Before choosing code, it copies the cited lines.
+**Open in VS Code** remains in the dialog footer.
 Escape closes the floating question panel or search first, then the preview, and returns to the
 same chat position.
 
-Select code and click **Ask** beside the selection. A question panel floats below the selected
+Drag the mouse to select any code, including part of a line or several lines outside the original
+citation, or click a line to ask about that whole line. The original citation highlight gives way
+to your selection. Click **Ask** beside the selection. A question panel floats below the selected
 line and follows it as you scroll, without changing the code viewport's height. **btw Q&A**
 streams answers using the selected code, the main conversation's current readable context and
 its own previous questions and answers. Each question reads the main context again, including

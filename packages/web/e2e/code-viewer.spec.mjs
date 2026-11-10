@@ -3,6 +3,8 @@
  * context, copy, search, read-only behavior and Escape back to the same chat in all three themes.
  * Missing and ambiguous references stay in the preview with a useful error. Phone layouts fit.
  * Floating questions follow a scrolled selection without resizing code or changing main history.
+ * Mouse drags select partial and multiline code outside the original citation for questions.
+ * A wide main chat uses the available width and aligns its messages with the composer.
  */
 import { test, expect } from "@playwright/test";
 import fs from "node:fs/promises";
@@ -14,6 +16,25 @@ import { setAccountPrefs } from "./account-prefs.mjs";
 const BASE = process.env.BASE_URL;
 const MOCK = process.env.MOCK_URL;
 let workspace;
+async function codePoint(frame, text, column) {
+  const line = frame.locator(".cm-line").filter({ hasText: text });
+  const box = await line.boundingBox();
+  const character = await line.evaluate((node) => {
+    const text = document.createTreeWalker(node, NodeFilter.SHOW_TEXT).nextNode();
+    const range = document.createRange();
+    range.setStart(text, 0);
+    range.setEnd(text, 1);
+    const rect = range.getBoundingClientRect();
+    return { width: rect.width, inset: rect.left - node.getBoundingClientRect().left };
+  });
+  return { x: box.x + character.inset + character.width * (column - 1), y: box.y + box.height / 2 };
+}
+async function dragCode(page, start, end) {
+  await page.mouse.move(start.x, start.y);
+  await page.mouse.down();
+  await page.mouse.move(end.x, end.y, { steps: 12 });
+  await page.mouse.up();
+}
 test.afterAll(async () => {
   if (workspace && !process.env.CODE_VIEWER_DEMO_ROOT)
     await fs.rm(workspace, { recursive: true, force: true });
@@ -96,7 +117,7 @@ test("chat code preview and errors across themes", async ({ page }, testInfo) =>
     ).ok(),
   ).toBe(true);
   for (const themeId of ["github", "modern", "geek"]) {
-    await setAccountPrefs(page.request, { lang: "en", themeId });
+    await setAccountPrefs(page.request, { lang: "en", themeId, textSize: "md" });
     await page.setViewportSize({ width: 1440, height: 1000 });
     await page.goto(`${BASE}/chat/${sessionId}`);
     const citation = page.getByRole("link", { name: "Expr.cpp:785-795", exact: true });
@@ -192,6 +213,24 @@ test("chat code preview and errors across themes", async ({ page }, testInfo) =>
     );
     await page.getByRole("dialog").getByRole("button", { name: "Close", exact: true }).click();
   }
+  await page.setViewportSize({ width: 2200, height: 1000 });
+  await page.reload();
+  await expect(page.getByRole("link", { name: "Expr.cpp:785-795", exact: true })).toBeVisible();
+  const reading = await page.locator(".chat-reading-column").evaluateAll((nodes) =>
+    nodes
+      .map((node) => {
+        const r = node.getBoundingClientRect();
+        return { x: r.x, width: r.width, right: r.right };
+      })
+      .filter((rect) => rect.width > 0),
+  );
+  const mainBox = await page.locator("main").first().boundingBox();
+  expect(reading).toHaveLength(2);
+  expect(reading[0].width).toBeGreaterThan(mainBox.width * 0.85);
+  expect(Math.abs(reading[0].x - reading[1].x)).toBeLessThan(2);
+  expect(Math.abs(reading[0].width - reading[1].width)).toBeLessThan(2);
+  expect(mainBox.x + mainBox.width - reading[0].right).toBeLessThan(140);
+  await page.screenshot({ path: testInfo.outputPath("wide-main-chat.png") });
   for (const lang of ["en", "zh"]) {
     await setAccountPrefs(page.request, { lang, textSize: "xl" });
     await page.setViewportSize({ width: 390, height: 844 });
@@ -296,6 +335,70 @@ test("chat code preview and errors across themes", async ({ page }, testInfo) =>
   await codeFrame.getByRole("button", { name: "btw Q&A", exact: true }).click();
   await expect(codeFrame.getByRole("log")).not.toContainText("First private answer");
   await expect(codeFrame.getByRole("button", { name: "Send edit", exact: true })).toHaveCount(0);
+  await codeFrame.getByRole("button", { name: "Collapse Q&A", exact: true }).click();
+  const mouseLine = codeFrame.locator(".cm-line").filter({ hasText: "int evaluateExpression" });
+  await mouseLine.scrollIntoViewIfNeeded();
+  await dragCode(
+    page,
+    await codePoint(codeFrame, "int evaluateExpression", 5),
+    await codePoint(codeFrame, "int evaluateExpression", 23),
+  );
+  await expect(codeFrame.locator(".cm-cited-line")).toHaveCount(0);
+  await codeFrame.getByRole("button", { name: "btw Q&A", exact: true }).click();
+  await expect(codeFrame.getByText("Line 784", { exact: true })).toBeVisible();
+  const mouseRequest = page.waitForRequest(
+    (request) => request.url().endsWith("/code-questions") && request.method() === "POST",
+  );
+  await question.fill("mouse-selection-question");
+  await codeFrame.getByRole("button", { name: "Ask", exact: true }).click();
+  expect((await mouseRequest).postDataJSON().selection).toEqual({
+    line: 784,
+    column: 5,
+    endLine: 784,
+    endColumn: 23,
+  });
+  await expect(question).toHaveValue("");
+  await codeFrame.getByRole("button", { name: "Collapse Q&A", exact: true }).click();
+  await mouseLine.scrollIntoViewIfNeeded();
+  // Reverse drag through several lines keeps the normalized start/end range.
+  await dragCode(
+    page,
+    await codePoint(codeFrame, "Preserve null semantics", 12),
+    await codePoint(codeFrame, "int evaluateExpression", 5),
+  );
+  await codeFrame.getByRole("button", { name: "btw Q&A", exact: true }).click();
+  await expect(codeFrame.getByText("Lines 784–786", { exact: true })).toBeVisible();
+  const multiRequest = page.waitForRequest(
+    (request) => request.url().endsWith("/code-questions") && request.method() === "POST",
+  );
+  await question.fill("multiline-mouse-question");
+  await codeFrame.getByRole("button", { name: "Ask", exact: true }).click();
+  expect((await multiRequest).postDataJSON().selection).toEqual({
+    line: 784,
+    column: 5,
+    endLine: 786,
+    endColumn: 12,
+  });
+  await expect(question).toHaveValue("");
+  await page.screenshot({ path: testInfo.outputPath("code-mouse-selection.png") });
+  await codeFrame.getByRole("button", { name: "Collapse Q&A", exact: true }).click();
+  await mouseLine.scrollIntoViewIfNeeded();
+  const clickedLine = await codePoint(codeFrame, "int evaluateExpression", 9);
+  await page.mouse.click(clickedLine.x, clickedLine.y);
+  await codeFrame.getByRole("button", { name: "btw Q&A", exact: true }).click();
+  await expect(codeFrame.getByText("Line 784", { exact: true })).toBeVisible();
+  const clickedRequest = page.waitForRequest(
+    (request) => request.url().endsWith("/code-questions") && request.method() === "POST",
+  );
+  await question.fill("clicked-line-question");
+  await codeFrame.getByRole("button", { name: "Ask", exact: true }).click();
+  expect((await clickedRequest).postDataJSON().selection).toEqual({
+    line: 784,
+    column: 1,
+    endLine: 784,
+    endColumn: lines[783].length + 1,
+  });
+  await expect(question).toHaveValue("");
   await codeFrame.getByRole("button", { name: "Collapse Q&A", exact: true }).click();
   await codeFrame.locator(".cm-content").press("Escape");
   await setAccountPrefs(page.request, { themeMode: "dark" });

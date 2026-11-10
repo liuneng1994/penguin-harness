@@ -38,3 +38,13 @@ never enter the main conversation or its Trace. Usage is still metered; closing,
 clearing the preview discards the side history.
 
 File-version checks refuse an answer about changed code until the reader reloads the preview.
+
+Mouse drags supported partial and multiline selections outside the original citation. Clicking
+another code line used that line for the next question; the original citation highlight cleared
+when a new selection was made.
+
+## Chat width
+
+The main chat's reading column expanded with the available width on wide screens, reducing the
+large side margins. Message and composer columns stayed aligned, including the subagent view.
+The conversation rail measured the actual reading-column gutter before appearing.

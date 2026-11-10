@@ -55,14 +55,11 @@ const READING_LINE_PX = 96;
 const FLASH_MS = 1000;
 
 /**
- * Minimum free gutter (stream-container width minus the max-w-3xl column, halved) for the
+ * Minimum free gutter beside the stream's reading column for the
  * rail to show: below this the ticks would sit on top of assistant text instead of blank
  * margin.
  */
 const GUTTER_MIN_PX = 56;
-
-/** The stream column cap the gutter derives from (Tailwind max-w-3xl = 48rem). */
-const COLUMN_MAX_REM = 48;
 
 /** The rail's hover-preview interaction needs a pointer that can hover. */
 const HOVER_QUERY = "(hover: hover) and (pointer: fine)";
@@ -101,16 +98,16 @@ export function useOutlineRailFit(
     const el = scrollRef.current;
     if (!el) return;
     const measure = () => {
-      // The column cap is rem-based: resolve it against the live root font size, so
-      // browser font scaling (which widens the real column without touching the
-      // container) can't leave the rail sitting on top of the prose.
-      const rem = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
-      const gutter = (el.clientWidth - COLUMN_MAX_REM * rem) / 2;
+      const column = el.firstElementChild;
+      const gutter = column
+        ? column.getBoundingClientRect().left - el.getBoundingClientRect().left
+        : 0;
       setFit({ gutterOk: gutter >= GUTTER_MIN_PX, height: el.clientHeight });
     };
     measure();
     const ro = new ResizeObserver(measure);
     ro.observe(el);
+    if (el.firstElementChild) ro.observe(el.firstElementChild);
     return () => ro.disconnect();
     // The element is read from the ref per run; `version` is the remount signal.
     // eslint-disable-next-line react-hooks/exhaustive-deps
