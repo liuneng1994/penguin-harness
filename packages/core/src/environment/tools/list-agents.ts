@@ -18,6 +18,47 @@ export function createListAgentsTool(
         return { status: "fatal", note: "Agent discovery is unavailable in this environment." };
       if (args.agent_id !== undefined && typeof args.agent_id !== "string")
         return { status: "fatal", note: "agent_id must be a string." };
+      if (args.node_id !== undefined && typeof args.node_id !== "string")
+        return { status: "fatal", note: "node_id must be a string." };
+      if (discovery.global) {
+        const catalog = await discovery.global({
+          ...(typeof args.node_id === "string" ? { nodeId: args.node_id } : {}),
+          ...(typeof args.agent_id === "string" ? { agentId: args.agent_id } : {}),
+        });
+        if (
+          args.agent_id !== undefined &&
+          catalog.agents.length === 0 &&
+          catalog.unavailableNodes.length === 0
+        )
+          return { status: "fatal", note: "Agent is not available on that node in this Project." };
+        yield partialToolCallOutput({
+          eventType: "delta",
+          toolCallId: ctx.toolCallId,
+          output: JSON.stringify({
+            project_id: catalog.projectId,
+            current_agent_id: discovery.agentId,
+            current_node_id: catalog.currentNodeId,
+            agents: catalog.agents.map((agent) => ({
+              node_id: agent.nodeId,
+              node_name: agent.nodeName,
+              agent_id: agent.agentId,
+              name: agent.name,
+              description: agent.description,
+              local: agent.local,
+              can_delegate: agent.canDelegate,
+              ...(agent.skills !== undefined ? { skills: agent.skills } : {}),
+            })),
+            unavailable_nodes: catalog.unavailableNodes.map((node) => ({
+              node_id: node.nodeId,
+              node_name: node.nodeName,
+              reason: node.reason,
+            })),
+          }),
+        });
+        return { status: "completed" };
+      }
+      if (args.node_id !== undefined)
+        return { status: "fatal", note: "Global Agent discovery is disabled for this Agent." };
       const catalog = await discovery.list();
       const agents =
         args.agent_id === undefined

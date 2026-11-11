@@ -42,6 +42,7 @@ export function machineApi(
   port: number,
   cookie: string,
   headers: Record<string, string> = {},
+  requestTimeoutMs = 30_000,
 ): MachineApi {
   /** One request, answered whole — so both shapes agree on Host, cookie and what a failure is. */
   const send = (
@@ -107,7 +108,7 @@ export function machineApi(
         path,
         body === undefined ? null : Buffer.from(JSON.stringify(body)),
         "application/json",
-        30_000,
+        requestTimeoutMs,
       ),
     postBytes: (path, contentType, body, timeoutMs, headers) =>
       send("POST", path, body, contentType, timeoutMs, headers),

@@ -135,6 +135,7 @@ import { traceCacheAt } from "./trace-cache.js";
 import type { TraceCache } from "./trace-cache.js";
 import { MachineEventHub } from "./event-hub.js";
 import { MachineSockets } from "./machine-sockets.js";
+import { AgentDirectoryTransport, MachineAgentDirectoryRelay } from "./agent-directory-relay.js";
 import type { StreamSettle } from "./machine-sockets.js";
 import { askHandshake, judgeHandshake } from "./handshake.js";
 import type { HandshakeReading } from "./handshake.js";
@@ -3652,6 +3653,7 @@ export class MachinesModule {
   /** This server's Projects: an analysis is priced here only for a Project it has config for. */
   @Use() private readonly projects?: Projects;
   @Provide() machines!: Machines;
+  @Provide() agentDirectoryTransport!: AgentDirectoryTransport;
   /** Session-level requests for a machine's Session, routed by its id (session-forward.ts). */
   @Provide() sessionForward!: MachineSessionForward;
   @Bind("MachinesModule.routes") routes!: Hono<AppEnv>;
@@ -3706,6 +3708,7 @@ export class MachinesModule {
     // The last answer of each machine read the proxy relayed, to revalidate (answer-cache.ts):
     // this generation's, in memory, as the sockets are.
     const answers = new MachineAnswers();
+    let directoryRelay: MachineAgentDirectoryRelay | null = null;
     const machines = new MachinesService(
       this.paths.root,
       repo.ownId(),
@@ -3715,7 +3718,10 @@ export class MachinesModule {
         // An installed release installs the image its build shipped, unless it was pushed to.
         shippedImage: shippedImage(),
         socketFact: (machineId) => sockets.fact(machineId),
-        announce: () => toAdmins({ type: "machines_changed" }),
+        announce: () => {
+          toAdmins({ type: "machines_changed" });
+          directoryRelay?.refresh();
+        },
         historyCache,
         answers,
       },
@@ -3723,6 +3729,12 @@ export class MachinesModule {
     );
     service = machines;
     this.machines = machines;
+    directoryRelay = new MachineAgentDirectoryRelay(
+      machines,
+      sockets,
+      () => this.projects?.listAll().map((project) => project.projectId) ?? [],
+    );
+    this.agentDirectoryTransport = directoryRelay;
     const { history, sync } = machineHistory({
       cache: historyCache,
       sockets,
@@ -3764,6 +3776,7 @@ export class MachinesModule {
       sync.close();
       events.close();
       sockets.close();
+      directoryRelay?.close();
     });
   }
 }

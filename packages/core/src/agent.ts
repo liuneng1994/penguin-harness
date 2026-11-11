@@ -187,6 +187,13 @@ export interface CreateAgentOptions {
  * in its config; this is what the HOSTING PROCESS adds on top, for every Agent.
  */
 export interface AgentAssembly {
+  /** Host transport for node-qualified child sessions; core enforces the depth limit first. */
+  remoteSubagents?(context: ControlEnvContext): SubagentRunner;
+  /** Extends a Session's local catalog through the host; node credentials stay outside core. */
+  agentDiscovery?(
+    context: ControlEnvContext,
+    local: import("./state/agent-catalog.js").AgentDiscovery,
+  ): import("./state/agent-catalog.js").AgentDiscovery;
   /**
    * Sections appended to the assembled system prompt, in order, each as `# <title>` +
    * text. Empty = the prompt is exactly the Agent's own.
@@ -363,6 +370,7 @@ interface SessionRuntime {
  * moment the context opened; immutable for the context's lifetime.
  */
 interface AssembledContext {
+  globalAgentDiscovery: boolean;
   /** The model this context runs on: its entry as resolved from the Project config when the context opened — reference, credentials, window and per-model annotations. */
   modelEntry: ModelEntry;
   systemPrompt: string;
@@ -644,7 +652,32 @@ export class Agent {
         defaultSystemConfig().tools!.builtin!.find((tool) => tool.name === LIST_AGENTS_NAME)!,
         opts.agentCatalog,
       );
+      if (state.systemConfig.global_agent_discovery === true) {
+        customTools = customTools.map((tool) => {
+          if (tool.name !== LIST_AGENTS_NAME && tool.name !== SUBAGENT_NAME) return tool;
+          const spawning = tool.name === SUBAGENT_NAME;
+          return {
+            ...tool,
+            description: `${tool.description} ${
+              spawning
+                ? "Pass node_id and agent_id from list_agents to delegate to another node in this Project. Remote tasks use an independent empty temporary workspace for data research; send the task and relevant information in prompt."
+                : "Global discovery is enabled: also lists Agents in this same Project on connected nodes. Pass node_id with agent_id to inspect a remote Agent."
+            }`,
+            parameters: {
+              ...tool.parameters,
+              properties: {
+                ...(tool.parameters?.properties as Record<string, unknown>),
+                node_id: {
+                  type: "string",
+                  description: "Optional node_id from list_agents; omit for this node.",
+                },
+              },
+            },
+          };
+        });
+      }
     }
+
     if (!canSpawn) {
       customTools = customTools.filter(
         (d) =>
@@ -690,6 +723,7 @@ export class Agent {
 
     return {
       modelEntry,
+      globalAgentDiscovery: state.systemConfig.global_agent_discovery === true,
       systemPrompt,
       vault,
       toolConfig,
@@ -926,7 +960,7 @@ export class Agent {
       creationRef: ref,
       credentialOverride: { apiKey: opts.apiKey, baseUrl: opts.baseUrl },
       thinkingLevel: undefined,
-      subagentDepth: 0,
+      subagentDepth: normalizeSessionSource(meta.source) === "subagent" ? MAX_SUBAGENT_DEPTH : 0,
       source: normalizeSessionSource(meta.source),
     };
     // The context follows the Trace. A context a completed compaction closed is opened here
@@ -1195,11 +1229,33 @@ export class Agent {
       // Spawn and run are separate: the same child Session can run for multiple turns
       // (continuing via input_subagent appending a prompt); resource cleanup is
       // consolidated in handle.dispose (called by the managing ManagedSubagentSession).
-      async spawn({ agentId, modelId, provider, thinkingLevel: spawnThinkingLevel }) {
+      async spawn({ nodeId, agentId, modelId, provider, thinkingLevel: spawnThinkingLevel }) {
         if (subagentDepth >= MAX_SUBAGENT_DEPTH) {
           throw new Error(
             `subagent depth limit ${MAX_SUBAGENT_DEPTH} reached; not spawning another subagent`,
           );
+        }
+        if (nodeId !== undefined) {
+          if (!current.globalAgentDiscovery || !parentAgent.assembly?.remoteSubagents)
+            throw new Error(
+              "Global Agent discovery or remote delegation is unavailable for this Agent.",
+            );
+          if (!agentId) throw new Error("Remote delegation requires agent_id from list_agents.");
+          if ((modelId === undefined) !== (provider === undefined))
+            throw new Error("Remote model requires modelId and provider together.");
+          const parentLevel =
+            spec.thinkingLevel === undefined ? current.thinkingLevel : spec.thinkingLevel;
+          return parentAgent.assembly
+            .remoteSubagents({ projectId, agentId: parentAgentId, sessionId })
+            .spawn({
+              nodeId,
+              agentId,
+              modelId: modelId ?? current.modelEntry.model_id,
+              provider: provider ?? current.modelEntry.provider,
+              ...((spawnThinkingLevel ?? parentLevel)
+                ? { thinkingLevel: spawnThinkingLevel ?? parentLevel! }
+                : {}),
+            });
         }
         if (agentId !== undefined && agentId !== parentAgentId) {
           try {
@@ -1264,7 +1320,16 @@ export class Agent {
       // id alike. The owning Agent comes from the caller's record (the host's session
       // registry, or the spawn-time tombstone); omitted or self-owned reuses the parent
       // Agent instance.
-      async resume({ agentId, sessionId }) {
+      async resume({ nodeId, agentId, sessionId: childId }) {
+        if (nodeId !== undefined) {
+          const runner = parentAgent.assembly?.remoteSubagents?.({
+            projectId,
+            agentId: parentAgentId,
+            sessionId,
+          });
+          if (!runner?.resume) throw new Error("Remote subagent revival is unavailable.");
+          return runner.resume({ nodeId, agentId, sessionId: childId });
+        }
         if (agentId !== undefined) assertValidId("agent_id", agentId);
         const childAgent =
           agentId === undefined || agentId === parentAgentId
@@ -1279,7 +1344,7 @@ export class Agent {
                 ...(parentAgent.confineSpawn ? { confineSpawn: parentAgent.confineSpawn } : {}),
                 ...(parentAgent.assembly ? { assembly: parentAgent.assembly } : {}),
               });
-        const childSession = await childAgent.resumeSession({ sessionId });
+        const childSession = await childAgent.resumeSession({ sessionId: childId });
         return subagentHandleFor(childSession);
       },
     };
@@ -1409,6 +1474,15 @@ export class Agent {
       };
     };
     const visionDescriber = visionDescriberFor(initial.modelEntry);
+    const localDiscovery = createAgentDiscovery(root, projectId, parentAgentId);
+    const hostDiscovery = this.assembly?.agentDiscovery?.(
+      { projectId, agentId: parentAgentId, sessionId },
+      localDiscovery,
+    );
+    Object.defineProperty(localDiscovery, "global", {
+      get: () =>
+        current.globalAgentDiscovery ? hostDiscovery?.global?.bind(hostDiscovery) : undefined,
+    });
 
     // Environment binds the Workspace for the Session's lifetime and is equipped with the
     // initial context's tool config and vault (a later context re-equips it, see
@@ -1431,7 +1505,7 @@ export class Agent {
       ),
       services: {
         subagentRunner,
-        agentDiscovery: createAgentDiscovery(root, projectId, parentAgentId),
+        agentDiscovery: localDiscovery,
         ...(visionDescriber ? { visionDescriber } : {}),
       },
       ...(Object.keys(initial.vault).length > 0 ? { vault: initial.vault } : {}),

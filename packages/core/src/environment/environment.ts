@@ -439,7 +439,7 @@ export class Environment implements EnvironmentInterface {
     const session = this.subagentSessions.bySessionId(childSessionId);
     if (!session) return this.resumeAndRun(childSessionId, messages, opts);
     this.attachHostTap(session);
-    if (session.steer(messages)) return "steered";
+    if (await session.steer(messages)) return "steered";
     if (session.running) return "busy";
     try {
       // A host round is the user's own conversation with the child, not work the model
@@ -462,7 +462,9 @@ export class Environment implements EnvironmentInterface {
     messages: AmspRecord[],
     opts?: SubagentMessageOptions,
   ): Promise<SubagentMessageOutcome> {
-    const agentId = opts?.resume?.agentId;
+    const clue = this.subagentSessions.resumeInfoBySessionId(childSessionId);
+    const agentId = clue?.nodeId ? clue.agentId : opts?.resume?.agentId;
+    const nodeId = clue?.nodeId;
     const runner = this.subagentRunner;
     if (agentId === undefined || !runner?.resume || this.subagentSessions.isDisposed) {
       return "gone";
@@ -472,8 +474,12 @@ export class Environment implements EnvironmentInterface {
     let session: ManagedSubagentSession;
     try {
       session = new ManagedSubagentSession(
-        await runner.resume({ agentId, sessionId: childSessionId }),
-        { resumeAgentId: agentId },
+        await runner.resume({
+          agentId,
+          ...(nodeId !== undefined ? { nodeId } : {}),
+          sessionId: childSessionId,
+        }),
+        { resumeAgentId: agentId, resumeNodeId: nodeId },
       );
     } catch {
       return "gone"; // No trace to resume from, or the agent is gone: nothing to revive.

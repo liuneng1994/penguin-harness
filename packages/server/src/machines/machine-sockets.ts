@@ -510,6 +510,7 @@ export class MachineSockets {
   async socketFor(
     machineId: string,
     target: MachineSocketTarget,
+    options: { repair?: boolean } = {},
   ): Promise<{ socket: MachineSocket } | { answer: Response }> {
     if (this.#closed) return { answer: unavailable(503, "unavailable", "The App was replaced.") };
     const refused = this.#refusedUntil.get(machineId);
@@ -607,14 +608,14 @@ export class MachineSockets {
       if (this.#closed) return { answer: unavailable(503, "unavailable", "The App was replaced.") };
       if (socket.closed) {
         if (this.#sockets.get(machineId) === cached) this.#sockets.delete(machineId);
-        return this.socketFor(machineId, target);
+        return this.socketFor(machineId, target, options);
       }
       return { socket };
     } catch (err) {
       // One action is asked for before the stream is answered: a machine whose process is on
       // another build is brought onto this hub's, and the stream says where it stands — never
       // the same 502 that says neither.
-      const settling = this.#settle?.(machineId) ?? null;
+      const settling = options.repair === false ? null : (this.#settle?.(machineId) ?? null);
       if (settling !== null) {
         return {
           answer:

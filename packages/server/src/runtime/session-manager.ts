@@ -49,6 +49,7 @@ import {
   normalizeSessionSource,
   parseUserSteeringText,
   tracesDir,
+  systemConfigPath,
   userText,
 } from "@prismshadow/penguin-core";
 import type {
@@ -103,6 +104,11 @@ import { SANDBOX_GROUP } from "../sandbox/settings-store.js";
 import { sandboxEnabledOf, sandboxPresetsOf, sandboxStartOf } from "../sandbox/settings-policy.js";
 import { PluginConfig } from "../plugin/config.js";
 import { SessionService } from "../services/session-service.js";
+import { AgentDelegationHost } from "../services/agent-delegation-host.js";
+import {
+  AgentDelegationBinding,
+  AgentDirectoryBinding,
+} from "../services/agent-directory-registry.js";
 import { ModelScopeAuth } from "../services/modelscope-auth-service.js";
 import { TitleGenerator } from "./title-generator.js";
 import { loopbackHostRoles } from "../services/preview-token.js";
@@ -477,6 +483,8 @@ export interface UsageRecorderLike {
 }
 
 export interface SessionManagerDeps {
+  /** Remote child metadata must not create a local row with a foreign workspace path. */
+  isRemoteSubagent?(sessionId: string): boolean;
   /** The in-memory state this manager works on (see agent-state.ts). Optional: a manager built without one — unit tests — gets an empty state of its own. */
   state?: AgentState;
   sessions: SessionIndex;
@@ -2725,6 +2733,12 @@ export class SessionManager {
     if (!isSessionMeta(msg)) return null;
     const childSid = msg.origin![msg.origin!.length - 1]!;
     if (children.has(childSid)) return null;
+    if (this.deps.isRemoteSubagent?.(childSid)) {
+      // The target owns its Trace and temporary workspace. Live control still rides the
+      // parent's managed handle; registering a local row would make recovery use foreign paths.
+      children.set(childSid, { sessionId: childSid, agentId: "", prompt: "" });
+      return null;
+    }
     const p = msg.payload as SessionMetaPayload;
     const agentId = path.basename(path.dirname(p.agent_state));
     if (!agentId || agentId === "." || agentId === "..") return null;
@@ -3023,6 +3037,8 @@ export abstract class SessionEnv {
   },
 })
 export class SessionsModule {
+  @Use() private readonly agentDirectory!: AgentDirectoryBinding;
+  @Use() private readonly agentDelegation!: AgentDelegationBinding;
   @Use() private readonly config!: Config;
   @Use() private readonly channels!: Channels;
   @Use() private readonly authState!: AuthState;
@@ -3050,7 +3066,7 @@ export class SessionsModule {
   @Provide() manager!: Sessions;
   @Provide() sessionService!: SessionServiceIface;
   @Provide() env!: SessionEnv;
-  setup() {
+  setup({ effect }: ClassCtx) {
     const { config, settings, authState } = this;
     const log = (line: string) => this.log.line(line);
     const channels = this.channels as ChannelHub;
@@ -3065,6 +3081,11 @@ export class SessionsModule {
     const modelScopeAuth = this.modelScopeAuth;
 
     const assembly: AgentAssembly = {
+      remoteSubagents: (ctx) => this.agentDelegation.runner(ctx),
+      agentDiscovery: (ctx, local) => ({
+        ...local,
+        global: (target) => this.agentDirectory.discover(ctx.projectId, ctx.agentId, target),
+      }),
       // ModelScope's group key is an access token the bridge refreshes, so each request reads
       // it fresh. A model with a key of its own keeps that key (undefined = the credential
       // the client was built with stands); the rest use the group key, refreshed first, and a
@@ -3133,6 +3154,36 @@ export class SessionsModule {
         }),
     };
 
+    const delegationHost = new AgentDelegationHost(async (projectId, request) => {
+      if (!request.agentId) throw new Error("Remote Agent is required.");
+      await fs.access(systemConfigPath(config.root, projectId, request.agentId));
+      const agent = await createAgent({
+        root: config.root,
+        projectId,
+        agentId: request.agentId,
+        proxyEnv: env.proxyEnv,
+        controlEnv: env.controlEnv,
+        pathPrepend: env.pathPrepend,
+        confineSpawn: env.confineSpawn,
+        assembly,
+      });
+      if (request.operation === "resume" && request.sessionId)
+        return agent.resumeSession({ sessionId: request.sessionId });
+      return agent.createSession({
+        ...(request.modelId ? { modelId: request.modelId, provider: request.provider } : {}),
+        thinkingLevel: request.thinkingLevel ?? null,
+        subagentDepth: 1,
+        source: "subagent",
+      });
+    });
+    this.agentDelegation.bindHost((projectId, request) =>
+      delegationHost.execute(projectId, request),
+    );
+    effect(() => {
+      this.agentDelegation.bindHost(null);
+      delegationHost.close();
+    });
+
     const notifyProjectUsers = (projectId: string, event: ServerEvent): void =>
       this.projectEvents.notifyProjectUsers(projectId, event);
     const titles = this.titleGenerators.create({
@@ -3144,6 +3195,7 @@ export class SessionsModule {
       notifyProjectUsers,
     });
     const manager = new SessionManager({
+      isRemoteSubagent: (sessionId) => this.agentDelegation.isRemote(sessionId),
       state: this.state,
       sessions: sessionsRepo,
       channels,

@@ -22,6 +22,7 @@
  *   without a person; an organization's Session denies what would wait for a person, while a
  *   development Session under the same mode still waits; a mode PATCHed mid-run applies to the
  *   next decision; an abort collapses pending approvals to deny before the signal fires.
+ * - A remote child streams without creating a local Session row with a foreign workspace.
  * - A sub-session inherits its parent's organization stamp and persists its session_meta.
  *
  * Lifecycle:
@@ -979,6 +980,49 @@ describe("session-manager", () => {
     expect(recorded.some((m) => (m.payload as { text?: string }).text === "decision=deny")).toBe(
       true,
     );
+  });
+
+  it("streams remote child metadata without creating a local Session with a foreign workspace", async () => {
+    const remoteId = "remote-research";
+    const session = fakeSession("session-1", {
+      async *run() {
+        yield withOrigin(
+          sessionMeta({
+            session_id: remoteId,
+            provider: "custom",
+            model_id: "m1",
+            model_context_window: 1000,
+            system_prompt: "Research data",
+            agent_state: "/remote/project/researcher/agent_state",
+            workspace: "/remote/temporary/research",
+            source: "subagent",
+          }),
+          remoteId,
+        );
+        yield withOrigin(assistantText("Remote research result"), remoteId);
+        yield assistantText("The data research is complete");
+      },
+    });
+    const events = capture("session-1");
+    const manager = new SessionManager({
+      sessions,
+      channels,
+      sources,
+      loader: loaderOf(session),
+      recorder: {
+        record: async (_ctx, msg) => {
+          recorded.push(msg);
+        },
+      },
+      isRemoteSubagent: (id) => id === remoteId,
+    });
+    await manager.startTask("session-1", [userText("Research the data remotely")]);
+    await waitFor(() => manager.statusOf("session-1") === "idle");
+    expect(sessions.findById(remoteId)).toBeNull();
+    expect(events.some((event) => JSON.stringify(event).includes("Remote research result"))).toBe(
+      true,
+    );
+    await manager.shutdown();
   });
 
   it("a sub-session registered under an organization's Session inherits its org stamp; one under an ordinary Session stays unmarked", async () => {
