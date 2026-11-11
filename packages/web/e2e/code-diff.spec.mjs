@@ -4,6 +4,9 @@
  * staged code is read from the index, and questions inherit nearby diff context.
  * Auxiliary actions live in More; change navigation reflects zero, one or multiple edits.
  * Copy, refresh, show/hide, three themes and phone layouts remain usable.
+ * Loading preserves changed display settings; inconsistent snapshots block questions.
+ * Nested menus respect Escape order, stopping permits another question, and deleted
+ * files reopen through their complete chat reference.
  */
 import { test, expect } from "@playwright/test";
 import fs from "node:fs/promises";
@@ -207,7 +210,44 @@ test("current-file Git diff and code questions", async ({ page }, info) => {
     expect(await (await page.request.get(`${BASE}/api/sessions/${sid}/messages`)).json()).toEqual(
       historyBefore,
     );
-    await frame.getByRole("button", { name: "Collapse Q&A", exact: true }).click();
+    // Keyboard access to More leaves Q&A open; Escape must close the newer layer first.
+    await frame.getByRole("button", { name: "More", exact: true }).press("Space");
+    await expect(
+      frame.getByRole("region", { name: "Private code Q&A", exact: true }),
+    ).toBeVisible();
+    await frame.getByRole("menuitem", { name: "Copy diff", exact: true }).press("Escape");
+    await expect(frame.getByRole("menu")).toHaveCount(0);
+    await expect(
+      frame.getByRole("region", { name: "Private code Q&A", exact: true }),
+    ).toBeVisible();
+    if (themeId === "github") {
+      const question = frame.getByRole("textbox", { name: "Ask about this code…", exact: true });
+      const cancelledRequests = [];
+      const record = (request) => {
+        if (
+          request.url().endsWith("/code-questions") &&
+          request.method() === "POST" &&
+          request.postDataJSON().question === "cancel-this-question"
+        )
+          cancelledRequests.push(request);
+      };
+      page.on("request", record);
+      await question.fill("cancel-this-question");
+      await frame.getByRole("button", { name: "Ask", exact: true }).click();
+      await expect(frame.getByRole("log")).toContainText("Waiting for cancellation");
+      await frame.getByRole("button", { name: "Stop", exact: true }).click();
+      await expect(frame.getByRole("button", { name: "Ask", exact: true })).toBeEnabled();
+      await question.fill("ask-again-after-stop");
+      await frame.getByRole("button", { name: "Ask", exact: true }).click();
+      await expect(frame.getByRole("log")).toContainText("Follow-up private answer");
+      expect(cancelledRequests).toHaveLength(1);
+      page.off("request", record);
+    }
+    await frame.getByRole("textbox", { name: "Ask about this code…", exact: true }).press("Escape");
+    await expect(frame.getByRole("region", { name: "Private code Q&A", exact: true })).toHaveCount(
+      0,
+    );
+    await expect(dialog).toBeVisible();
     await frame.locator(".cm-content").press("Escape");
   }
   for (const lang of ["en", "zh"]) {
@@ -272,6 +312,24 @@ test("current-file Git diff and code questions", async ({ page }, info) => {
   await frame.getByRole("menuitem", { name: "Show full file", exact: true }).press("Escape");
   await expect(frame.getByRole("menu")).toHaveCount(0);
   await expect(page.getByRole("dialog")).toBeVisible();
+  await write(4);
+  const pattern = "**/files/git-diff?*";
+  const inconsistent = async (route) => {
+    const response = await route.fetch();
+    const data = await response.json();
+    await route.fulfill({
+      response,
+      json: { ...data, text: data.text.replace("value * 4;", "value * 5;") },
+    });
+  };
+  await page.route(pattern, inconsistent);
+  await frame.getByRole("button", { name: "Reload code", exact: true }).click();
+  await expect(frame.getByRole("alert")).toContainText(
+    "The file changed. Reload code before asking about it.",
+  );
+  await expect(frame.locator(".cm-content")).toHaveCount(0);
+  await expect(frame.getByRole("button", { name: "btw Q&A", exact: true })).toHaveCount(0);
+  await page.unroute(pattern, inconsistent);
   await fs.writeFile(file, Buffer.from([0, 1, 2]));
   await frame.getByRole("button", { name: "Reload code", exact: true }).click();
   await expect(frame.getByRole("alert")).toContainText("not text");
@@ -280,8 +338,25 @@ test("current-file Git diff and code questions", async ({ page }, info) => {
   await frame.getByRole("button", { name: "Reload code", exact: true }).click();
   await expect(frame.locator(".cm-git-modify")).toContainText("value * 4;");
   await page.setViewportSize({ width: 390, height: 844 });
-  await frame.getByRole("switch", { name: "Wrap lines", exact: true }).click();
+  let release;
+  const pending = new Promise((resolve) => {
+    release = resolve;
+  });
+  const hold = async (route) => {
+    await pending;
+    await route.continue();
+  };
+  await page.route(pattern, hold);
+  const loading = page.waitForRequest(
+    (r) => r.url().includes("/files/git-diff?") && r.method() === "GET",
+  );
   await frame.getByRole("button", { name: "Reload code", exact: true }).click();
+  await loading;
+  await expect(frame.getByRole("button", { name: "More", exact: true })).toBeDisabled();
+  await frame.getByRole("switch", { name: "Wrap lines", exact: true }).click();
+  release();
+  await expect(frame.locator(".cm-git-modify")).toContainText("value * 4;");
+  await page.unroute(pattern, hold);
   await expect(frame.locator(".cm-git-modify")).toContainText("value * 4;");
   const longLine = await frame
     .locator(".cm-line")
@@ -294,6 +369,9 @@ test("current-file Git diff and code questions", async ({ page }, info) => {
   expect(longLine.height).toBeGreaterThan(shortLine.height * 2);
   await fs.rm(file);
   await frame.getByRole("button", { name: "Reload code", exact: true }).click();
+  await expect(frame.getByRole("table")).toContainText("value * 2;");
+  await page.getByRole("dialog").getByRole("button", { name: "Close", exact: true }).click();
+  await page.getByRole("link", { name: "bolt/expression/Expr.cpp:785-795", exact: true }).click();
   await expect(frame.getByRole("table")).toContainText("value * 2;");
   await frame.getByRole("button", { name: "btw Q&A", exact: true }).click();
   await frame

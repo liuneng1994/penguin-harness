@@ -34,3 +34,13 @@ The standalone Code tab was hidden; chat file references continued to open the p
 More held Show full file and Copy diff. The footer omitted the repeated source-version label.
 One edit had Locate change, multiple edits had Previous and Next change, and hiding changes
 hid their navigation. Files without edits had no change controls.
+
+## Refresh and popup behavior
+
+Display settings changed while code was loading remained applied to the loaded editor.
+Only the current request's snapshot enabled source and diff actions; inconsistent source
+and patch data required a reload before questions. Selection changes reused the existing
+code highlights. Question popups and More followed the shared Escape order, and stopping
+an answer allowed another question without resubmitting the cancelled one. Missing files returned an error instead of empty code;
+deleted files could reopen through their complete chat path. Binary Git changes were
+distinguished from file metadata changes.

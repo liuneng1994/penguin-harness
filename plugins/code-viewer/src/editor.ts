@@ -191,17 +191,20 @@ export async function createPreviewEditor(
           (tr.isUserEvent("select") && !tr.startState.selection.eq(tr.state.selection)))
       )
         selectionTouched = true;
-      for (const effect of tr.effects) if (effect.is(changeEffect)) changes = effect.value;
-      for (const effect of tr.effects)
+      let changed = false;
+      for (const effect of tr.effects) {
+        if (effect.is(changeEffect)) {
+          changes = effect.value;
+          changed = true;
+        }
         if (effect.is(windowEffect)) {
           from = effect.value.from;
           to = effect.value.to;
           options.onWindow(from, to, doc.lines);
-          return marks(tr.state);
+          changed = true;
         }
-      return tr.selection || tr.effects.some((effect) => effect.is(changeEffect))
-        ? marks(tr.state)
-        : value;
+      }
+      return changed ? marks(tr.state) : value;
     },
     provide: (field) => EditorView.decorations.from(field),
   });

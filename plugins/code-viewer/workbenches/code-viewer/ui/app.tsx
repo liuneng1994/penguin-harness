@@ -33,7 +33,23 @@ type Snapshot = {
   binary: boolean;
   untracked: boolean;
 };
-async function checked(url: string, signal: AbortSignal) {
+type Preview = {
+  scope: Scope;
+  reload: number;
+  snapshot: Snapshot;
+  path: string;
+  changes: GitChange[];
+  editor: PreviewEditor | null;
+};
+function snapshotStatus(snapshot: Snapshot) {
+  if (!snapshot.available) return S.notGit;
+  if (snapshot.binary) return S.binaryDiff;
+  if (/^@@ /m.test(snapshot.patch)) return null;
+  if (snapshot.patch) return S.metadataDiff;
+  if (snapshot.untracked && snapshot.scope === "working" && !snapshot.text) return S.emptyNewFile;
+  return snapshot.scope === "staged" ? S.noStaged : S.noUnstaged;
+}
+async function read<T>(url: string, signal: AbortSignal): Promise<T> {
   const response = await fetch(url, { signal, credentials: "same-origin" });
   if (!response.ok) {
     const error = await response.json().catch(() => null);
@@ -46,45 +62,49 @@ async function checked(url: string, signal: AbortSignal) {
     };
     throw new Error(
       errors[error?.error?.code] ?? error?.error?.message ?? `${S.failed} (${response.status})`,
+      { cause: error?.error?.code },
     );
   }
-  return response;
+  return response.json();
 }
 
 function App() {
   const mount = useRef<HTMLDivElement>(null);
-  const editor = useRef<PreviewEditor | null>(null);
   const resolved = useRef<string | null>(null);
-  const changes = useRef<GitChange[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [loaded, setLoaded] = useState(false);
-  const [path, setPath] = useState(query.get("path") ?? "");
   const [window, setWindow] = useState({ from: 1, to: 1, total: 1 });
   const [wrap, setWrap] = useState(false);
   const [showChanges, setShowChanges] = useState(true);
   const [scope, setScope] = useState<Scope>("working");
-  const [copied, setCopied] = useState(false);
-  const [copiedDiff, setCopiedDiff] = useState(false);
+  const [copied, setCopied] = useState<"code" | "diff" | null>(null);
   const [more, setMore] = useState(false);
   const [anchor, setAnchor] = useState<CodeAnchor | null>(null);
   const [selection, setSelection] = useState<CodeSelection | null>(null);
-  const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
+  const [preview, setPreview] = useState<Preview | null>(null);
   const [reload, setReload] = useState(0);
+  const current = preview?.scope === scope && preview.reload === reload ? preview : null;
+  const editor = current?.editor;
+  const loaded = !!editor;
+  const snapshot = current?.snapshot;
+  const path = preview?.path ?? query.get("path") ?? "";
+  const changes = current?.changes ?? [];
   useEffect(() => {
-    editor.current?.changes(showChanges ? changes.current : []);
-  }, [showChanges]);
+    editor?.changes(showChanges ? changes : []);
+  }, [editor, showChanges]);
+  useEffect(() => {
+    editor?.wrap(wrap);
+  }, [editor, wrap]);
   useEffect(() => {
     const session = query.get("session"),
       requested = query.get("path");
     if (!session || !requested) return;
-    setLoaded(false);
     setError(null);
     setSelection(null);
     setAnchor(null);
-    setCopied(false);
-    setCopiedDiff(false);
+    setCopied(null);
     setMore(false);
     const controller = new AbortController();
+    let created: PreviewEditor | null = null;
     void (async () => {
       try {
         const base = `${apiBase}/sessions/${encodeURIComponent(session)}/files`;
@@ -95,31 +115,45 @@ function App() {
             const n = position(key);
             if (n) params.set(key, String(n));
           }
-          const target = (await (
-            await checked(`${base}/editor-target?${params}`, controller.signal)
-          ).json()) as { path: string; workspace: string };
-          relative = target.path
-            .replaceAll("\\", "/")
-            .slice(target.workspace.replaceAll("\\", "/").replace(/\/$/, "").length + 1);
+          try {
+            const target = await read<{ path: string; workspace: string }>(
+              `${base}/editor-target?${params}`,
+              controller.signal,
+            );
+            relative = target.path
+              .replaceAll("\\", "/")
+              .slice(target.workspace.replaceAll("\\", "/").replace(/\/$/, "").length + 1);
+          } catch (err) {
+            // A deleted file still has a Git diff; abbreviated names need the live path resolver.
+            if (
+              !(err instanceof Error) ||
+              err.cause !== "path_not_found" ||
+              !/[/\\]/.test(requested)
+            )
+              throw err;
+            relative = requested.replaceAll("\\", "/");
+          }
           resolved.current = relative;
         }
-        setPath(relative);
-        const data = (await (
-          await checked(
-            `${base}/git-diff?${new URLSearchParams({ path: relative, scope })}`,
-            controller.signal,
-          )
-        ).json()) as Snapshot;
+        const data = await read<Snapshot>(
+          `${base}/git-diff?${new URLSearchParams({ path: relative, scope })}`,
+          controller.signal,
+        );
         if (controller.signal.aborted || !mount.current) return;
-        setSnapshot(data);
-        if (data.text === null) throw new Error(S.binary);
-        try {
-          changes.current = data.binary ? [] : codeChanges(data.patch, data.text);
-        } catch (err) {
-          changes.current = [];
-          setError(err instanceof Error ? err.message : S.fileChanged);
+        const result: Preview = {
+          scope,
+          reload,
+          snapshot: data,
+          path: relative,
+          changes: [],
+          editor: null,
+        };
+        if (data.text === null) {
+          setPreview(result);
+          throw new Error(S.binary);
         }
-        const preview = await createPreviewEditor(mount.current, {
+        result.changes = data.binary ? [] : codeChanges(data.patch, data.text);
+        created = await createPreviewEditor(mount.current, {
           text: data.text,
           path: relative,
           codeLabel: S.codeLabel,
@@ -128,7 +162,7 @@ function App() {
           column: position("column"),
           endLine: position("endLine"),
           endColumn: position("endColumn"),
-          changes: showChanges ? changes.current : [],
+          changes: showChanges ? result.changes : [],
           changeLabels: { add: S.addedCode, modify: S.modifiedCode, delete: S.deletedCode },
           renderRemoved: (parent, change) => {
             const root = createRoot(parent);
@@ -140,37 +174,34 @@ function App() {
           onWindow: (from, to, total) => setWindow({ from, to, total }),
         });
         if (controller.signal.aborted) {
-          preview.destroy();
+          created.destroy();
+          created = null;
           return;
         }
-        editor.current = preview;
-        preview.wrap(wrap);
-        setLoaded(true);
+        setPreview({ ...result, editor: created });
       } catch (err) {
         if (!controller.signal.aborted) setError(err instanceof Error ? err.message : S.failed);
       }
     })();
     return () => {
       controller.abort();
-      editor.current?.destroy();
-      editor.current = null;
+      created?.destroy();
     };
   }, [reload, scope]);
   const available = query.has("session") && query.has("path");
-  const status =
-    loaded && snapshot
-      ? !snapshot.available
-        ? S.notGit
-        : !/^@@ /m.test(snapshot.patch)
-          ? snapshot.patch
-            ? S.metadataDiff
-            : snapshot.untracked && scope === "working" && !snapshot.text
-              ? S.emptyNewFile
-              : scope === "staged"
-                ? S.noStaged
-                : S.noUnstaged
-          : null
-      : null;
+  const status = loaded && snapshot ? snapshotStatus(snapshot) : null;
+  const navigation =
+    showChanges && changes.length > 0
+      ? changes.length > 1
+        ? ([-1, 1] as const)
+        : ([1] as const)
+      : [];
+  const copy = (text: string, kind: "code" | "diff") => {
+    void navigator.clipboard
+      .writeText(text)
+      .then(() => setCopied(kind))
+      .catch(() => setError(S.copyFailed));
+  };
   return (
     <main
       className="flex h-full min-h-0 flex-col"
@@ -186,7 +217,7 @@ function App() {
         >
           {path || S.readOnly}
         </span>
-        {snapshot?.available && (
+        {preview?.snapshot.available && (
           <Segmented
             cols={2}
             value={scope}
@@ -200,29 +231,14 @@ function App() {
         <Button size="sm" disabled={!available} onClick={() => setReload((n) => n + 1)}>
           {S.refresh}
         </Button>
-        <Button size="sm" disabled={!loaded} onClick={() => editor.current?.search()}>
+        <Button size="sm" disabled={!loaded} onClick={() => editor?.search()}>
           {S.search}
         </Button>
-        <Button
-          size="sm"
-          disabled={!loaded}
-          onClick={() => {
-            void navigator.clipboard
-              .writeText(editor.current?.copy() ?? "")
-              .then(() => setCopied(true))
-              .catch(() => setError(S.copyFailed));
-          }}
-        >
-          {copied ? S.copied : S.copy}
+        <Button size="sm" disabled={!loaded} onClick={() => copy(editor?.copy() ?? "", "code")}>
+          {copied === "code" ? S.copied : S.copy}
         </Button>
         <label className="flex items-center gap-2 whitespace-nowrap text-xs text-fg-secondary">
-          <Switch
-            checked={wrap}
-            onChange={(value) => {
-              setWrap(value);
-              editor.current?.wrap(value);
-            }}
-          />
+          <Switch checked={wrap} onChange={setWrap} />
           {S.wrap}
         </label>
         <Dropdown
@@ -232,7 +248,7 @@ function App() {
           button={
             <Button
               size="sm"
-              disabled={!loaded && !snapshot?.available}
+              disabled={!current}
               aria-haspopup="menu"
               aria-expanded={more}
               onClick={() => setMore(!more)}
@@ -247,20 +263,17 @@ function App() {
               disabled={!loaded || (window.from === 1 && window.to === window.total)}
               onSelect={() => {
                 setMore(false);
-                editor.current?.expand("all");
+                editor?.expand("all");
               }}
             />
             {snapshot?.available && (
               <MenuItem
-                label={copiedDiff ? S.copied : S.copyDiff}
+                label={copied === "diff" ? S.copied : S.copyDiff}
                 aria-label={S.copyDiff}
-                disabled={!snapshot.patch || snapshot.scope !== scope}
+                disabled={!snapshot.patch}
                 onSelect={() => {
                   setMore(false);
-                  void navigator.clipboard
-                    .writeText(snapshot.patch)
-                    .then(() => setCopiedDiff(true))
-                    .catch(() => setError(S.copyFailed));
+                  copy(snapshot.patch, "diff");
                 }}
               />
             )}
@@ -287,7 +300,7 @@ function App() {
         <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-line px-3 py-2">
           <div className="flex flex-wrap items-center gap-2 text-xs text-fg-muted">
             <span>{S.range(window.from, window.to, window.total)}</span>
-            {changes.current.length > 0 && (
+            {changes.length > 0 && (
               <label className="flex items-center gap-2 whitespace-nowrap">
                 <Switch checked={showChanges} onChange={setShowChanges} />
                 {S.showChanges}
@@ -295,32 +308,22 @@ function App() {
             )}
           </div>
           <div className="flex flex-wrap gap-2">
-            {showChanges && changes.current.length > 1 && (
-              <>
-                <Button size="sm" onClick={() => editor.current?.nextChange(-1)}>
-                  {S.previousChange}
-                </Button>
-                <Button size="sm" onClick={() => editor.current?.nextChange(1)}>
-                  {S.nextChange}
-                </Button>
-              </>
-            )}
-            {showChanges && changes.current.length === 1 && (
-              <Button size="sm" onClick={() => editor.current?.nextChange(1)}>
-                {S.locateChange}
+            {navigation.map((direction) => (
+              <Button key={direction} size="sm" onClick={() => editor?.nextChange(direction)}>
+                {changes.length === 1
+                  ? S.locateChange
+                  : direction === -1
+                    ? S.previousChange
+                    : S.nextChange}
               </Button>
-            )}
-            <Button
-              size="sm"
-              disabled={window.from === 1}
-              onClick={() => editor.current?.expand("up")}
-            >
+            ))}
+            <Button size="sm" disabled={window.from === 1} onClick={() => editor?.expand("up")}>
               {S.up}
             </Button>
             <Button
               size="sm"
               disabled={window.to === window.total}
-              onClick={() => editor.current?.expand("down")}
+              onClick={() => editor?.expand("down")}
             >
               {S.down}
             </Button>
@@ -330,7 +333,7 @@ function App() {
       {loaded && selection && snapshot && (
         <CodeInteraction
           key={`${scope}:${reload}`}
-          editor={editor.current!}
+          editor={editor!}
           anchor={anchor}
           apiBase={apiBase}
           session={query.get("session")!}
@@ -338,7 +341,7 @@ function App() {
           selection={selection}
           version={snapshot.version ?? ""}
           gitScope={snapshot.available ? scope : undefined}
-          hasChanges={/^@@ /m.test(snapshot.patch)}
+          hasChanges={changes.length > 0}
         />
       )}
     </main>

@@ -38,12 +38,11 @@ export function CodeInteraction({
   const controller = useRef<AbortController | null>(null);
   const log = useRef<HTMLDivElement>(null);
   const input = useRef<HTMLDivElement>(null);
-  const mounted = useRef(true);
   useEffect(() => {
-    mounted.current = true;
     return () => {
-      mounted.current = false;
-      controller.current?.abort();
+      const pending = controller.current;
+      controller.current = null;
+      pending?.abort();
     };
   }, []);
   useEffect(() => {
@@ -54,21 +53,8 @@ export function CodeInteraction({
     const frame = requestAnimationFrame(() =>
       input.current?.querySelector("input")?.focus({ preventScroll: true }),
     );
-    // The iframe's document forwards unhandled keys to the outer preview; consume Escape here.
-    const escape = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      event.preventDefault();
-      event.stopPropagation();
-      window.removeEventListener("keydown", escape, true);
-      setOpen(false);
-      editor.focus();
-    };
-    window.addEventListener("keydown", escape, true);
-    return () => {
-      cancelAnimationFrame(frame);
-      window.removeEventListener("keydown", escape, true);
-    };
-  }, [open, editor]);
+    return () => cancelAnimationFrame(frame);
+  }, [open]);
   useEffect(() => {
     if (log.current) log.current.scrollTop = log.current.scrollHeight;
   }, [partial, turns, open]);
@@ -83,9 +69,10 @@ export function CodeInteraction({
     setOpen(true);
   };
   const chosen = pinned ?? selection;
+  const canSubmit =
+    !!text.trim() && (!!chosen.text.trim() || hasChanges) && chosen.text.length <= 24000;
   const submit = async () => {
-    if (busy || !text.trim() || (!chosen.text.trim() && !hasChanges) || chosen.text.length > 24000)
-      return;
+    if (busy || !canSubmit) return;
     const abort = new AbortController();
     controller.current = abort;
     setBusy(true);
@@ -112,7 +99,7 @@ export function CodeInteraction({
           if (!abort.signal.aborted) setPartial((prev) => prev + fragment);
         },
       );
-      if (!mounted.current || abort.signal.aborted) return;
+      if (abort.signal.aborted) return;
       setTurns((prev) => [
         ...prev,
         { question: text, answer: answer.answer, prompt: answer.question },
@@ -120,11 +107,12 @@ export function CodeInteraction({
       setPartial("");
       setText("");
     } catch (err) {
-      if (mounted.current && !(err instanceof Error && err.name === "AbortError"))
-        setError(err instanceof Error ? err.message : S.answerFailed);
+      if (!abort.signal.aborted) setError(err instanceof Error ? err.message : S.answerFailed);
     } finally {
-      if (mounted.current) setBusy(false);
-      controller.current = null;
+      if (controller.current === abort) {
+        controller.current = null;
+        setBusy(false);
+      }
     }
   };
   if (!anchor) return null;
@@ -132,6 +120,10 @@ export function CodeInteraction({
     <Dropdown
       open={open}
       setOpen={setOpen}
+      onEscape={() => {
+        setOpen(false);
+        editor.focus();
+      }}
       portal={{ direction: "down", align: "left" }}
       anchorRect={anchor}
       followAnchor
@@ -153,7 +145,14 @@ export function CodeInteraction({
         </Button>
       }
     >
-      <section aria-label={S.privateConversation} className="code-floating-content">
+      <section
+        aria-label={S.privateConversation}
+        className="code-floating-content"
+        onKeyDown={(event) => {
+          // Keep handled keys inside the iframe; Dropdown owns Escape order and focus.
+          if (event.key === "Escape") event.preventDefault();
+        }}
+      >
         <div className="flex shrink-0 items-center justify-between gap-2 border-b border-line px-3 py-2">
           <span className="text-xs text-fg-muted">{S.selection(chosen.line, chosen.endLine)}</span>
           <Button
@@ -216,7 +215,17 @@ export function CodeInteraction({
             />
           </div>
           {busy ? (
-            <Button size="sm" onClick={() => controller.current?.abort()}>
+            <Button
+              size="sm"
+              onClick={(event) => {
+                // This DOM button becomes a submit button as busy clears; consume the click.
+                event.preventDefault();
+                const pending = controller.current;
+                controller.current = null;
+                pending?.abort();
+                setBusy(false);
+              }}
+            >
               {S.stop}
             </Button>
           ) : (
@@ -224,9 +233,7 @@ export function CodeInteraction({
               size="sm"
               type="submit"
               variant="primary"
-              disabled={
-                !text.trim() || (!chosen.text.trim() && !hasChanges) || chosen.text.length > 24000
-              }
+              disabled={!canSubmit}
               data-tooltip={chosen.text.length > 24000 ? S.smallerSelection : undefined}
             >
               {S.sendQuestion}

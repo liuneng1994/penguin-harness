@@ -1,6 +1,7 @@
 export const en = {
   showChanges: "Show changes",
   oldCode: "Old code",
+  binaryDiff: "Git cannot show text changes for this binary diff. Open it in VS Code.",
   addedCode: "Added code",
   modifiedCode: "Modified code",
   deletedCode: "Deleted code",
@@ -68,6 +69,7 @@ export const en = {
 export const zh: typeof en = {
   showChanges: "显示改动",
   oldCode: "原代码",
+  binaryDiff: "该文件的 Git 改动包含二进制内容，请在 VS Code 中打开。",
   addedCode: "新增代码",
   modifiedCode: "修改代码",
   deletedCode: "删除代码",

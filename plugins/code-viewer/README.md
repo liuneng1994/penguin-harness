@@ -44,7 +44,8 @@ side questions. Questions use the displayed version and nearby Git hunks; a chan
 requires a reload before asking.
 
 New text files appear as additions; deleted files retain their removed lines and support
-questions about that diff. Binary, empty, metadata-only and unchanged files have explicit states.
+questions about that diff. A complete chat path can reopen a deleted file; abbreviated names
+require an existing file to resolve. Binary, empty, metadata-only and unchanged files have explicit states.
 A non-Git Workspace still shows ordinary code. Diff reads are confined to the current Workspace
 file, bounded to 2 MB and leave the Git index unchanged. The preview does not run external diff
 drivers or clean/process filters.

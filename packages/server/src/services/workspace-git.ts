@@ -88,6 +88,7 @@ async function workingSource(
     source(result, file.data, result.available ? undefined : file.version);
   } catch (error) {
     if (!(error instanceof HttpError) || error.code !== "path_not_found") throw error;
+    if (!result.patch) throw error;
     source(result, Buffer.alloc(0));
   }
 }
@@ -123,10 +124,12 @@ export async function readWorkspaceGit(
 ): Promise<WorkspaceGitDiff> {
   const base = await files.resolvePath(workspace, "");
   await visible(files, base, rel);
+  let exists = false;
   try {
     const canonical = await files.resolvePath(base, rel);
     if (!(await fs.stat(canonical)).isFile())
       throw new HttpError(400, "invalid_path", "Select a file to preview Git changes.");
+    exists = true;
   } catch (error) {
     if (!(error instanceof HttpError) || error.code !== "path_not_found") throw error;
   }
@@ -238,6 +241,8 @@ export async function readWorkspaceGit(
       .find((match) => match?.[2] === "0");
     if (entries.length && !entry)
       throw new HttpError(409, "git_unmerged", "The staged file has unresolved conflicts.");
+    if (!entries.length && !exists && !result.patch)
+      throw new HttpError(404, "path_not_found", "File does not exist.");
     source(
       result,
       entry ? await gitBytes(base, ["cat-file", "blob", entry[1]!], config) : Buffer.alloc(0),

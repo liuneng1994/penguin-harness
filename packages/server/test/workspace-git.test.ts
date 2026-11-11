@@ -4,6 +4,7 @@
  * - Nested workspaces and literal filenames stay confined; symlink/path escapes are refused.
  * - Repository-configured diff and clean filters never execute during a preview.
  * - Session routes authorize before reading Git and reject invalid scopes and missing paths.
+ * - Missing files are refused in either Git scope and in non-Git Workspaces.
  */
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -47,6 +48,20 @@ describe("current-file Git previews", () => {
   });
   afterEach(async () => {
     await fs.rm(root, { recursive: true, force: true });
+  });
+  it("refuses nonexistent paths instead of inventing empty source in Git or ordinary Workspaces", async () => {
+    for (const scope of ["working", "staged"] as const)
+      await expect(readWorkspaceGit(files, root, "missing.cpp", scope)).rejects.toMatchObject({
+        code: "path_not_found",
+      });
+    const outside = await makeTempRoot();
+    try {
+      await expect(
+        readWorkspaceGit(files, outside, "missing.cpp", "working"),
+      ).rejects.toMatchObject({ code: "path_not_found" });
+    } finally {
+      await fs.rm(outside, { recursive: true, force: true });
+    }
   });
   it("separates staged and working changes without other files or index writes", async () => {
     await fs.writeFile(path.join(root, "file.cpp"), "int value = 2;\n");
@@ -107,6 +122,7 @@ describe("current-file Git previews", () => {
   it("reports non-Git directories and binary files instead of drawing text hunks", async () => {
     const other = await makeTempRoot();
     try {
+      await fs.writeFile(path.join(other, "file.cpp"), "ordinary source\n");
       expect((await readWorkspaceGit(files, other, "file.cpp", "working")).available).toBe(false);
     } finally {
       await fs.rm(other, { recursive: true, force: true });
@@ -186,6 +202,7 @@ describe("Git preview routes", () => {
   it("authorizes the Session and validates scope/path before reading Git", async () => {
     const client = apiClient(app.app, (await loginAdmin(app.app)).cookie);
     const workspace = await fs.mkdtemp(path.join(app.root, "git-workspace-"));
+    await fs.writeFile(path.join(workspace, "file.cpp"), "ordinary source\n");
     await client.put("/api/projects/default_project/models", {
       defaultModel: { provider: "anthropic", modelId: "claude-sonnet-4-6" },
       models: [{ provider: "anthropic", modelId: "claude-sonnet-4-6", contextWindow: 128000 }],
@@ -199,6 +216,7 @@ describe("Git preview routes", () => {
       .sessionId;
     const url = `/api/sessions/${sessionId}/files/git-diff`;
     expect((await client.get(`${url}?path=file.cpp`)).status).toBe(200);
+    expect((await client.get(`${url}?path=missing.cpp`)).status).toBe(404);
     expect((await client.get(`${url}?path=file.cpp&scope=wrong`)).status).toBe(400);
     expect((await client.get(url)).status).toBe(400);
     const other = apiClient(
