@@ -113,6 +113,12 @@ for (const app of dirs) {
   // failing. Each one is its manifest (package.json) beside the skills or hooks it ships.
   const pluginFiles = pluginNames.map((name) => `node_modules/${name}/package.json`);
   for (const name of pluginNames) {
+    // Workbenches are compiled after installation, so their declarations are runtime
+    // inputs. Compare against the package we packed rather than a list of known plugins.
+    const source = path.join(pkgDir, "node_modules", name, "workbenches");
+    for (const rel of fs.existsSync(source) ? fs.readdirSync(source, { recursive: true }) : []) {
+      if (rel.endsWith(".d.ts")) pluginFiles.push(`node_modules/${name}/workbenches/${rel}`);
+    }
     const content = ["skills", "hooks", "workbenches"].map((sub) =>
       path.join(app, "node_modules", name, sub),
     );
