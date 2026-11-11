@@ -276,6 +276,34 @@ const server = http.createServer((req, res) => {
     // missing-report.pdf doesn't exist; the card should only list the former. This branch
     // must be checked before hasToolResult (the same session's history already has a
     // first-round tool_result).
+    if (flat.includes("pure Q&A")) {
+      if (flat.includes("cancel-this-question")) {
+        // Keep the response streaming until the caller cancels; a later question is independent.
+        block(res, 0, { type: "text", text: "" }, [
+          { type: "text_delta", text: "Waiting for cancellation." },
+        ]);
+        return;
+      }
+      const answer = flat.includes("First private answer")
+        ? "Follow-up private answer: the result still uses the selected input."
+        : "First private answer: this code doubles its input.";
+      block(res, 0, { type: "text", text: "" }, [
+        { type: "text_delta", text: answer.slice(0, 20) },
+        { type: "text_delta", text: answer.slice(20) },
+      ]);
+      messageStop(res, "end_turn", 30);
+      return;
+    }
+    if (flat.includes("code viewer test")) {
+      block(res, 0, { type: "text", text: "" }, [
+        {
+          type: "text_delta",
+          text: "Read Expr.cpp:785-795, `Expr.h:108–120`, and [the implementation](Expr.cpp:785:3-795:7). Also check `missing.cpp:10`, `duplicate.cpp:5`, `binary.cpp:1`, and `large.cpp:1`. Full path: `bolt/expression/Expr.cpp:785-795`.",
+        },
+      ]);
+      messageStop(res, "end_turn", 30);
+      return;
+    }
     if (flat.includes("files card test")) {
       block(res, 0, { type: "text", text: "" }, [
         {

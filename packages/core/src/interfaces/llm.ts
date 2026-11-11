@@ -188,6 +188,8 @@ export function isInterruptedToolCall(record: AmspRecord): boolean {
  * Docs: /docs/interfaces § "LLMInterface".
  */
 export interface LLMInterface {
+  /** Read-only text/tool context for an independent question; never includes credentials. */
+  contextSnapshot?(): string;
   streamGenerate(parameters: GenerativeModelParameters): AsyncGenerator<AmspRecord, LLMOutcome>;
   /**
    * The level this object sends when a request names none (its construction default). The

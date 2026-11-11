@@ -5470,6 +5470,7 @@ Benchmark：
   },
 
   files: {
+    viewCode: "查看代码",
     openInVSCode: "在 VS Code 中打开",
     editorSettings: "VS Code 连接设置",
     editorSshAlias: "SSH 连接名",

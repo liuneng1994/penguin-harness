@@ -99,7 +99,10 @@ test("minimap ticks + hover preview + jump, five-turn gate, sticky group header,
   await page.getByTestId("dock-pick-workspace").click();
   await page.waitForFunction(() => {
     const c = document.querySelector("[data-outline-anchor]")?.closest(".overflow-y-auto");
-    return c ? (c.clientWidth - 768) / 2 < 56 : false;
+    const column = c?.firstElementChild;
+    return c && column
+      ? column.getBoundingClientRect().left - c.getBoundingClientRect().left < 56
+      : false;
   });
   await page.evaluate(
     () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))),
@@ -172,10 +175,8 @@ test("minimap ticks + hover preview + jump, five-turn gate, sticky group header,
   await page.setViewportSize({ width: 1440, height: 860 });
   await expect(ticks).toHaveCount(5);
 
-  // Scaled root font (browser font-size preference): the max-w-3xl column is rem-based,
-  // so at 20px root font it becomes 960px — on a 1000px stream a fixed 768px assumption
-  // would still call the gutter wide enough and leave the ticks ON the prose. The fit
-  // must track the real column width: rail hidden, toolbar fallback in its place.
+  // A larger text setting and a narrow viewport leave no gutter for the rail.
+  // The fit follows the measured reading column, with the toolbar index in its place.
   await page.evaluate(() => (document.documentElement.style.fontSize = "20px"));
   await page.setViewportSize({ width: 1000, height: 860 });
   await expect(ticks).toHaveCount(0);
@@ -203,6 +204,8 @@ test("minimap ticks + hover preview + jump, five-turn gate, sticky group header,
   await ta.fill("");
 
   // --- session 2: long tool output -> sticky header ---
+  // Give the transcript a scrollable viewport even when the wider prose wraps into fewer lines.
+  await page.setViewportSize({ width: 1440, height: 600 });
   await page.goto(`${BASE}/chat/${await newSession()}`);
   await ta.waitFor();
   await send("slow stream test", 1);
@@ -211,42 +214,63 @@ test("minimap ticks + hover preview + jump, five-turn gate, sticky group header,
   const header = page.locator("[data-group-header]");
   await expect(header).toHaveCount(1);
   await header.click();
-  await page.locator("button[aria-expanded]").filter({ hasText: "执行命令" }).first().click();
+  const toolRow = page.locator("button[aria-expanded]").filter({ hasText: "执行命令" }).first();
+  await toolRow.click();
   await expect(page.getByText("line 40")).toBeVisible();
+  await page.waitForFunction(() =>
+    document
+      .getAnimations()
+      .every(
+        (animation) =>
+          animation.effect?.getComputedTiming().endTime === Infinity ||
+          animation.playState !== "running",
+      ),
+  );
 
-  // Scrolled into the middle of the tool output, the two sticky levels stack: the group
-  // header flush at the scrollport top (-top-4 cancels the container's own py-4), and the
-  // tool row pinned right below it (top-4 = the header's offset plus its height) — the bar
-  // directly above the content is the section being read, never a skipped level.
-  const stuck = await page.evaluate(() => {
-    const container = document.querySelector("[data-outline-anchor]").closest(".overflow-y-auto");
-    const head = document.querySelector("[data-group-header]");
-    const card = head.parentElement;
-    container.scrollTop = card.offsetTop + 400;
-    const ct = container.getBoundingClientRect().top;
-    const row = [...document.querySelectorAll("button[aria-expanded]")].find((b) =>
-      b.textContent.includes("exec_command"),
-    );
-    return {
-      delta: Math.abs(head.getBoundingClientRect().top - ct),
-      rowDelta: row.getBoundingClientRect().top - ct,
-      headerHeight: head.getBoundingClientRect().height,
-      cardAboveFold: card.getBoundingClientRect().top < ct,
-    };
-  });
+  // The group and tool labels remain readable and stationary as the transcript scrolls.
+  const stuck = await page.evaluate(
+    (row) => {
+      const container = document.querySelector("[data-outline-anchor]").closest(".overflow-y-auto");
+      const head = document.querySelector("[data-group-header]");
+      const card = head.parentElement;
+      container.scrollTop = card.offsetTop + head.clientHeight + 40;
+      const ct = container.getBoundingClientRect().top;
+      const before = row.getBoundingClientRect().top;
+      const scrollBefore = container.scrollTop;
+      container.scrollTop += 20;
+      return {
+        delta: Math.abs(head.getBoundingClientRect().top - ct),
+        rowMovement: Math.abs(row.getBoundingClientRect().top - before),
+        scrollDelta: container.scrollTop - scrollBefore,
+        labelGap:
+          row.querySelector('[data-slot="label"]').getBoundingClientRect().top -
+          head.querySelector('[data-slot="label"]').getBoundingClientRect().bottom,
+        cardAboveFold: card.getBoundingClientRect().top < ct,
+      };
+    },
+    await toolRow.elementHandle(),
+  );
   expect(stuck.delta).toBeLessThan(2);
-  expect(Math.abs(stuck.rowDelta - stuck.headerHeight)).toBeLessThan(2); // stacked right below
+  expect(stuck.scrollDelta).toBeGreaterThan(8);
+  expect(stuck.rowMovement).toBeLessThan(2);
+  expect(stuck.labelGap).toBeGreaterThanOrEqual(0);
   expect(stuck.cardAboveFold).toBeTruthy();
 
   // Collapsing from the stuck header lands the view back on the group, not on unrelated content.
   await header.click();
-  const landed = await page.evaluate(() => {
-    const container = document.querySelector("[data-outline-anchor]").closest(".overflow-y-auto");
-    const card = document.querySelector("[data-group-header]").parentElement;
-    return card.getBoundingClientRect().top - container.getBoundingClientRect().top;
-  });
-  expect(landed).toBeGreaterThan(-5);
-  expect(landed).toBeLessThan(300);
+  await expect(header).toHaveAttribute("aria-expanded", "false");
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const container = document
+          .querySelector("[data-outline-anchor]")
+          .closest(".overflow-y-auto");
+        const card = document.querySelector("[data-group-header]").parentElement;
+        const delta = card.getBoundingClientRect().top - container.getBoundingClientRect().top;
+        return delta > -5 && delta < 300;
+      }),
+    )
+    .toBe(true);
 });
 
 test("the tick rail windows to the turns around the reading position on long conversations", async ({

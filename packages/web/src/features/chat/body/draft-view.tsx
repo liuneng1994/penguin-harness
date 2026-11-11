@@ -962,7 +962,7 @@ export function DraftView({
        */}
       <div className="flex-1" />
 
-      <div className="mx-auto w-full max-w-3xl">
+      <div className="chat-reading-column">
         <StartDashboard
           projectId={projectId}
           composer={composer}

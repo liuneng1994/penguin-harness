@@ -3,7 +3,7 @@
  * - Given Windows, spaced, Unicode and percent-bearing names, preserve the actual file and position.
  * - Given foreign paths, URLs or invalid positions, do not offer an editor target.
  * - Given root or trailing-slash Workspaces, absolute citations still resolve inside them.
- * - Given line and column ranges, open their start and reject invalid or reversed endpoints.
+ * - Given line and column ranges, preserve endpoints and reject invalid or reversed endpoints.
  */
 import { describe, expect, it } from "vitest";
 import { fileLocation, fileLocationHref } from "../src/lib/file-location";
@@ -15,13 +15,24 @@ describe("file locations", () => {
   it.each(["Expr.cpp:785-795", "Expr.cpp:785–795", "Expr.cpp:785—795"])(
     "opens the first line of %s",
     (text) => {
-      expect(fileLocation(text, WS)).toEqual({ path: "Expr.cpp", line: 785, column: 1 });
+      expect(fileLocation(text, WS)).toEqual({
+        path: "Expr.cpp",
+        line: 785,
+        column: 1,
+        endLine: 795,
+      });
     },
   );
   it.each(["src/a.ts:42:3-50:7", "src/a.ts#L42C3-L50C7"])(
     "opens the first position of %s",
     (text) => {
-      expect(fileLocation(text, WS)).toEqual({ path: "src/a.ts", line: 42, column: 3 });
+      expect(fileLocation(text, WS)).toEqual({
+        path: "src/a.ts",
+        line: 42,
+        column: 3,
+        endLine: 50,
+        endColumn: 7,
+      });
     },
   );
   it("preserves ranges in explicit links and Windows paths", () => {
@@ -29,16 +40,20 @@ describe("file locations", () => {
       path: "src/报告 #100%.ts",
       line: 12,
       column: 1,
+      endLine: 15,
     });
     expect(fileLocation("C:\\repo\\src\\a.ts:9-12", "c:/repo")).toEqual({
       path: "src/a.ts",
       line: 9,
       column: 1,
+      endLine: 12,
     });
     expect(fileLocation("./src/a.ts:42:3%E2%80%9450:7", WS, true)).toEqual({
       path: "src/a.ts",
       line: 42,
       column: 3,
+      endLine: 50,
+      endColumn: 7,
     });
   });
   it.each([
@@ -55,8 +70,27 @@ describe("file locations", () => {
     },
   );
   it("uses the start of a line range and keeps file-only references usable", () => {
-    expect(fileLocation("src/a.ts#L42-L50", WS)).toEqual({ path: "src/a.ts", line: 42, column: 1 });
+    expect(fileLocation("src/a.ts#L42-L50", WS)).toEqual({
+      path: "src/a.ts",
+      line: 42,
+      column: 1,
+      endLine: 50,
+    });
     expect(fileLocation("src/a.ts", WS)).toEqual({ path: "src/a.ts" });
+  });
+  it("keeps range endpoints through Markdown hrefs and into the click action", () => {
+    const location = fileLocation("Expr.cpp:785:3-795:7", WS)!;
+    const href = fileLocationHref(location);
+    expect(fileLocation(href, WS, true)).toEqual(location);
+    const opened: unknown[] = [];
+    replyLinkBehavior(href, {
+      workspace: WS,
+      openFile: () => {
+        throw new Error("unexpected file panel");
+      },
+      openEditor: (target) => opened.push(target),
+    }).onClick!({ preventDefault() {} } as unknown as MouseEvent<HTMLAnchorElement>);
+    expect(opened).toEqual([{ kind: "file", ...location }]);
   });
   it("preserves literal percent and fragment characters through href encoding", () => {
     const location = fileLocation("src/报告 #100%.ts:12:3", WS)!;

@@ -25,7 +25,7 @@ export function WorkspaceLinksProvider({
   onOpenEditor?: (location: FileLocation) => void;
   children: ReactNode;
 }) {
-  const editorLabel = S.files.openInVSCode;
+  const editorLabel = S.files.viewCode;
   const resolve = useMemo<ProseLinkResolver | null>(
     () =>
       onOpenFile === undefined

@@ -25,6 +25,7 @@ export function renderMainChatDialogs(scope: MainChatView) {
   } = scope;
   return (
     <>
+      {scope.codePreviewDialog}
       <Modal
         open={credentialGuide}
         title={S.project.noCredentialTitle}

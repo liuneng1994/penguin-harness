@@ -6,6 +6,8 @@ export interface FileLocation {
   path: string;
   line?: number;
   column?: number;
+  endLine?: number;
+  endColumn?: number;
 }
 
 export function fileLocation(
@@ -18,7 +20,10 @@ export function fileLocation(
   let file = encoded ? text.trim().replace(/\?[^#]*/, "") : text.trim();
   // Markdown encodes Unicode range separators; keep encoded colons and hashes literal.
   if (encoded) file = file.replace(/%2d|%e2%80%9[34]/gi, (part) => decodeURIComponent(part));
-  let line: number | undefined, column: number | undefined;
+  let line: number | undefined,
+    column: number | undefined,
+    endLine: number | undefined,
+    endColumn: number | undefined;
   const match =
     /^(?<file>.*?)(?::(?<line>\d+)(?::(?<column>\d+))?(?:[-–—](?<endLine>\d+)(?::(?<endColumn>\d+))?)?|#L(?<hashLine>\d+)(?:C(?<hashColumn>\d+))?(?:[-–—]L(?<hashEndLine>\d+)(?:C(?<hashEndColumn>\d+))?)?)$/.exec(
       file,
@@ -34,9 +39,8 @@ export function fileLocation(
       const end = fields.endLine ?? fields.hashEndLine;
       const lastColumn = fields.endColumn ?? fields.hashEndColumn;
       if (end !== undefined) {
-        const endLine = editorPosition(end, "endLine");
-        const endColumn =
-          lastColumn === undefined ? undefined : editorPosition(lastColumn, "endColumn");
+        endLine = editorPosition(end, "endLine");
+        endColumn = lastColumn === undefined ? undefined : editorPosition(lastColumn, "endColumn");
         if (endLine < line || (endLine === line && endColumn !== undefined && endColumn < column))
           return null;
       }
@@ -64,7 +68,12 @@ export function fileLocation(
       path.includes("/") ||
       /\.[a-z][a-z0-9_-]*$|^(?:Dockerfile|Makefile|README|LICENSE|Jenkinsfile)$/i.test(path));
   if (!positioned && !hasKnownFileExtension(path)) return null;
-  return { path, ...(line !== undefined ? { line, column } : {}) };
+  return {
+    path,
+    ...(line !== undefined
+      ? { line, column, ...(endLine !== undefined ? { endLine, endColumn } : {}) }
+      : {}),
+  };
 }
 
 /** A safe relative href avoids browser URL-scheme handling for drive names and file:line syntax. */
@@ -72,6 +81,8 @@ export function fileLocationHref(location: FileLocation): string {
   return (
     "./" +
     location.path.split("/").map(encodeURIComponent).join("/") +
-    (location.line === undefined ? "" : `#L${location.line}C${location.column ?? 1}`)
+    (location.line === undefined
+      ? ""
+      : `#L${location.line}C${location.column ?? 1}${location.endLine === undefined ? "" : `-L${location.endLine}${location.endColumn === undefined ? "" : `C${location.endColumn}`}`}`)
   );
 }

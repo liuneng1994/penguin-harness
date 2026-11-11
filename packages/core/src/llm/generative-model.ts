@@ -1145,6 +1145,26 @@ export class GenerativeModel implements LLMInterface {
     return { status: "completed" };
   }
 
+  /** Project visible conversation content without fidelity blobs, images or private thinking. */
+  contextSnapshot(): string {
+    const messages = this.client.getHistory().map((message) => ({
+      role: message.role,
+      content: message.content_items.flatMap((item): Array<{ type: string; text: string }> => {
+        if (item.type === "text.done" || item.type === "tool_result.done")
+          return [{ type: item.type, text: item.text }];
+        if (item.type === "tool_call.done")
+          return [
+            {
+              type: item.type,
+              text: JSON.stringify({ name: item.name, arguments: item.arguments }),
+            },
+          ];
+        return [];
+      }),
+    }));
+    return JSON.stringify({ systemPrompt: this.uniConfig.system_prompt ?? "", messages });
+  }
+
   /**
    * Injects the replayed history in one shot when resuming a Session: converts the complete
    * AmspRecord history, grouped by adjacent same role, into

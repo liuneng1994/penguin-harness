@@ -5212,6 +5212,7 @@ Scenarios:
   },
 
   files: {
+    viewCode: "View code",
     openInVSCode: "Open in VS Code",
     editorSettings: "VS Code connection settings",
     editorSshAlias: "SSH connection name",

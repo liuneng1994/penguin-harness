@@ -1,0 +1,94 @@
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+body {
+  background: var(--ui-surface);
+  color: var(--ui-fg);
+}
+.cm-editor {
+  height: 100%;
+}
+.cm-button {
+  color: var(--ui-fg);
+  background: var(--ui-surface);
+  border: 1px solid var(--ui-line);
+  font: inherit;
+  cursor: pointer;
+}
+.cm-search input {
+  accent-color: var(--ui-accent);
+}
+.cm-search button {
+  cursor: pointer;
+}
+
+@media (max-width: 600px) {
+  .preview-path {
+    flex: 0 0 100%;
+  }
+}
+
+/* Syntax colors identify language tokens; the surrounding controls keep the host palette. */
+.cv-keyword {
+  color: #cf222e;
+}
+.cv-comment {
+  color: var(--ui-fg-muted);
+  font-style: italic;
+}
+.cv-string {
+  color: #0a3069;
+}
+.cv-number {
+  color: #0550ae;
+}
+.cv-type,
+.cv-function {
+  color: #8250df;
+}
+.cv-property {
+  color: #953800;
+}
+.dark .cv-keyword {
+  color: #ff7b72;
+}
+.dark .cv-string {
+  color: #a5d6ff;
+}
+.dark .cv-number {
+  color: #79c0ff;
+}
+.dark .cv-type,
+.dark .cv-function {
+  color: #d2a8ff;
+}
+.dark .cv-property {
+  color: #ffa657;
+}
+
+.code-preview-editor {
+  min-height: 100px;
+}
+.code-removed-block {
+  padding: 0.25rem 0.5rem;
+  white-space: normal;
+  background: var(--ui-diff-del-bg);
+}
+/* Floating questions do not consume any editor height. */
+.code-question-trigger {
+  z-index: 40;
+}
+.code-question-popup {
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+}
+.code-floating-content {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  max-height: min(40vh, 280px);
+}

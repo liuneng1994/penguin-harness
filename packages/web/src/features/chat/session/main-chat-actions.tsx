@@ -1,4 +1,4 @@
-import { useFileEditor } from "../use-file-editor";
+import { useCodePreview } from "../use-code-preview";
 import { useCallback, useState } from "react";
 import type { ModelRefDto } from "@prismshadow/penguin-server/api";
 import { toastError } from "@prismshadow/penguin-ui";
@@ -100,7 +100,7 @@ export function useMainChatActions(scope: ReturnType<typeof useMainChatControls>
   // (a Session can switch models between Tasks), else on the Session's own.
   const pricingOf = (ref: ModelRefDto | null) => turnPricing(models?.models, ref);
   const modelPricing = pricingOf(activeModelRef);
-  const openEditorFile = useFileEditor(selected?.sessionId ?? null);
+  const { openEditorFile, codePreviewDialog } = useCodePreview(projectId, scope.pageAgentId, selected?.sessionId ?? null);
   const ctx: StreamRenderContext = {
     pendingApprovals: stream.pendingApprovals,
     bodies: stream.bodies,
@@ -171,5 +171,6 @@ export function useMainChatActions(scope: ReturnType<typeof useMainChatControls>
     anySubagentPending,
     failureShown,
     setFailureShown,
+    codePreviewDialog,
   };
 }

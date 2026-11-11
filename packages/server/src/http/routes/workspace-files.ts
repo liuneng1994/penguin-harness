@@ -30,6 +30,7 @@ import type { FileReveal, WorkspaceFiles } from "../../mechanisms/workspace.js";
 import { MAX_UPLOAD_BYTES } from "../../services/workspace-files-service.js";
 import { resolveEditorFile } from "../../services/editor-file.js";
 import { assertWorkspaceAllowed } from "../../services/workspace-guard.js";
+import { readWorkspaceGit } from "../../services/workspace-git.js";
 import { HttpError } from "../errors.js";
 import {
   badRequest,
@@ -63,6 +64,17 @@ export function registerWorkspaceFileRoutes(
   resolve: WorkspaceResolver,
 ): void {
   const at = (suffix: string): string => `${base}${suffix}` || "/";
+
+  app.get(at("/git-diff"), async (c) => {
+    const workspace = await resolve(c);
+    const scope = c.req.query("scope") ?? "working";
+    const rel = c.req.query("path");
+    if (!rel) throw badRequest("path is required.");
+    if (scope !== "working" && scope !== "staged")
+      throw badRequest("scope must be working or staged.");
+    c.header("Cache-Control", "no-store");
+    return c.json(await readWorkspaceGit(deps.workspaceFiles, workspace, rel, scope));
+  });
 
   app.get(at("/editor-target"), async (c) => {
     const workspace = await resolve(c);

@@ -83,6 +83,21 @@ describe("workbench tabs", () => {
     );
   });
 
+  it("preserves the machine and safely encodes citation context without overwriting the revision", () => {
+    const url = new URL(
+      workbenchUiUrl(
+        { src: `/server/m-1${UI}/index.html?mode=read`, uiRev: "current" },
+        { path: "src/报告 #100%.cpp", session: "session-1", endLine: "795", rev: "stale" },
+      ),
+      "http://localhost",
+    );
+    expect(url.pathname).toBe(`/server/m-1${UI}/index.html`);
+    expect(url.searchParams.get("path")).toBe("src/报告 #100%.cpp");
+    expect(url.searchParams.get("session")).toBe("session-1");
+    expect(url.searchParams.get("endLine")).toBe("795");
+    expect(url.searchParams.get("rev")).toBe("current");
+    expect(url.searchParams.get("mode")).toBe("read");
+  });
   it("names a full page by workbench and, optionally, tab", () => {
     expect(workbenchAppPath("p 1", "a", "demo")).toBe("/app/p%201/a/demo");
     expect(workbenchAppPath("p 1", "a", "demo", "stats")).toBe("/app/p%201/a/demo/stats");
