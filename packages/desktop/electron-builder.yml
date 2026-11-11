@@ -69,6 +69,12 @@ extraResources:
     to: app/dist/node_modules/typescript/lib
     filter:
       - "lib.*.d.ts"
+  # Code Viewer's TSX source is checked at runtime against its bundled editor's types.
+  # Start inside the package: globbing across pnpm's symlinked scope skips its contents.
+  - from: node_modules/@penguinharness/code-viewer/workbenches
+    to: app/node_modules/@penguinharness/code-viewer/workbenches
+    filter:
+      - "**/*.d.ts"
 # The app's own metadata, which the workspace package.json cannot carry: deb and AppImage
 # derive package and executable names from `name`, where "@prismshadow/…" is invalid, and
 # fpm refuses to build without a homepage. It does NOT decide the app data directory: the

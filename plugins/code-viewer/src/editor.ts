@@ -51,7 +51,6 @@ export interface PreviewOptions {
   renderRemoved?: (parent: HTMLElement, change: GitChange) => () => void;
   onAnchor?: (anchor: CodeAnchor | null) => void;
   onSelection?: (selection: CodeSelection) => void;
-  onWindow: (from: number, to: number, total: number) => void;
 }
 export interface PreviewEditor {
   revealSelection(): void;
@@ -59,7 +58,6 @@ export interface PreviewEditor {
   selection(): CodeSelection;
   changes(changes: GitChange[]): void;
   nextChange(direction: -1 | 1): void;
-  expand: (direction: "up" | "down" | "all") => void;
   wrap: (enabled: boolean) => void;
   search: () => void;
   copy: () => string;
@@ -93,7 +91,7 @@ const codeStyle = HighlightStyle.define([
   { tag: [tags.propertyName, tags.definition(tags.variableName)], class: "cv-property" },
 ]);
 
-/** Keep the whole document for syntax parsing and real line numbers; hide only its surroundings. */
+/** Show the whole document while keeping citations and Git changes on their source lines. */
 export async function createPreviewEditor(
   parent: HTMLElement,
   options: PreviewOptions,
@@ -103,11 +101,8 @@ export async function createPreviewEditor(
   const clamp = (n: number) => Math.max(1, Math.min(doc.lines, n));
   const first = clamp(options.line ?? 1);
   const last = clamp(Math.max(first, options.endLine ?? first));
-  let from = Math.max(1, first - 12),
-    to = Math.min(doc.lines, last + 12);
   let selectionTouched = false;
   let changes = options.changes ?? [];
-  const windowEffect = StateEffect.define<{ from: number; to: number }>();
   const changeEffect = StateEffect.define<GitChange[]>();
   const widgetMounts = new WeakMap<
     HTMLElement,
@@ -138,15 +133,12 @@ export async function createPreviewEditor(
     state.doc.line(Math.max(1, Math.min(state.doc.lines, line))).from;
   const marks = (state: EditorState): DecorationSet => {
     const ranges = [];
-    if (from > 1)
-      ranges.push(Decoration.replace({ block: true }).range(0, state.doc.line(from).from));
     if (options.line !== undefined) {
       for (let line = first; line <= last; line++)
         ranges.push(Decoration.line({ class: "cm-cited-line" }).range(state.doc.line(line).from));
     }
     for (const change of changes) {
       for (const added of change.added) {
-        if (added.line < from || added.line > to) continue;
         const start = position(added.line, state);
         ranges.push(
           Decoration.line({ class: change.removed.length ? "cm-git-modify" : "cm-git-add" }).range(
@@ -157,7 +149,7 @@ export async function createPreviewEditor(
           if (b > a)
             ranges.push(Decoration.mark({ class: "cm-git-word" }).range(start + a, start + b));
       }
-      if (change.removed.length && change.line >= from && change.line <= to + 1) {
+      if (change.removed.length) {
         const lastAdded = change.added.at(-1)?.line;
         const atEnd = change.line > state.doc.lines;
         const after = lastAdded !== undefined || atEnd;
@@ -176,13 +168,9 @@ export async function createPreviewEditor(
         );
       }
     }
-    if (to < state.doc.lines)
-      ranges.push(
-        Decoration.replace({ block: true }).range(state.doc.line(to).to, state.doc.length),
-      );
     return Decoration.set(ranges, true);
   };
-  const windowField = StateField.define<DecorationSet>({
+  const decorationField = StateField.define<DecorationSet>({
     create: marks,
     update(value, tr) {
       if (
@@ -195,12 +183,6 @@ export async function createPreviewEditor(
       for (const effect of tr.effects) {
         if (effect.is(changeEffect)) {
           changes = effect.value;
-          changed = true;
-        }
-        if (effect.is(windowEffect)) {
-          from = effect.value.from;
-          to = effect.value.to;
-          options.onWindow(from, to, doc.lines);
           changed = true;
         }
       }
@@ -293,7 +275,7 @@ export async function createPreviewEditor(
           ...searchKeymap,
           ...defaultKeymap.filter((binding) => binding.key !== "Escape"),
         ]),
-        windowField,
+        decorationField,
         wrapping.of([]),
         EditorView.theme({
           "&": { height: "100%", color: "var(--ui-fg)", backgroundColor: "var(--ui-surface)" },
@@ -337,22 +319,6 @@ export async function createPreviewEditor(
           queueMicrotask(measureAnchor);
           if (!update.selectionSet) return;
           options.onSelection?.(selectedCode(update.state));
-          const a = doc.lineAt(update.state.selection.main.from).number;
-          const b = doc.lineAt(update.state.selection.main.to).number;
-          // Search can select outside the snippet; reveal its result without changing the citation.
-          if (a < from || b > to)
-            queueMicrotask(() => {
-              if (!destroyed)
-                view.dispatch({
-                  effects: [
-                    windowEffect.of({
-                      from: Math.min(from, Math.max(1, a - 12)),
-                      to: Math.max(to, Math.min(doc.lines, b + 12)),
-                    }),
-                    EditorView.scrollIntoView(update.state.selection.main, { y: "center" }),
-                  ],
-                });
-            });
         }),
       ],
     }),
@@ -411,7 +377,6 @@ export async function createPreviewEditor(
   });
   resize.observe(parent);
   measureAnchor();
-  options.onWindow(from, to, doc.lines);
   options.onSelection?.(selectedCode(view.state));
   view.dispatch({
     effects: EditorView.scrollIntoView(view.state.selection.main.head, { y: "center" }),
@@ -446,27 +411,8 @@ export async function createPreviewEditor(
       const at = Math.max(1, Math.min(doc.lines, target.line));
       view.dispatch({
         selection: { anchor: doc.line(at).from },
-        effects: [
-          windowEffect.of({
-            from: Math.min(from, Math.max(1, at - 12)),
-            to: Math.max(to, Math.min(doc.lines, at + 12)),
-          }),
-          EditorView.scrollIntoView(doc.line(at).from, { y: "center" }),
-        ],
+        effects: EditorView.scrollIntoView(doc.line(at).from, { y: "center" }),
         userEvent: "select",
-      });
-    },
-    expand(direction) {
-      view.dispatch({
-        effects: windowEffect.of({
-          from: direction === "all" ? 1 : direction === "up" ? Math.max(1, from - 40) : from,
-          to:
-            direction === "all"
-              ? doc.lines
-              : direction === "down"
-                ? Math.min(doc.lines, to + 40)
-                : to,
-        }),
       });
     },
     wrap(enabled) {

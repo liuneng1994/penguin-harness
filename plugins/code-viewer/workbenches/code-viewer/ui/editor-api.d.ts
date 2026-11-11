@@ -23,7 +23,6 @@ export interface PreviewEditor {
   selection(): CodeSelection;
   changes(changes: GitChange[]): void;
   nextChange(direction: -1 | 1): void;
-  expand(direction: "up" | "down" | "all"): void;
   wrap(enabled: boolean): void;
   search(): void;
   copy(): string;
@@ -45,6 +44,5 @@ export function createPreviewEditor(
     endColumn?: number;
     onAnchor?: (anchor: CodeAnchor | null) => void;
     onSelection?: (selection: CodeSelection) => void;
-    onWindow(from: number, to: number, total: number): void;
   },
 ): Promise<PreviewEditor>;

@@ -40,6 +40,7 @@ type Preview = {
   path: string;
   changes: GitChange[];
   editor: PreviewEditor | null;
+  lines: number;
 };
 function snapshotStatus(snapshot: Snapshot) {
   if (!snapshot.available) return S.notGit;
@@ -72,7 +73,6 @@ function App() {
   const mount = useRef<HTMLDivElement>(null);
   const resolved = useRef<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [window, setWindow] = useState({ from: 1, to: 1, total: 1 });
   const [wrap, setWrap] = useState(false);
   const [showChanges, setShowChanges] = useState(true);
   const [scope, setScope] = useState<Scope>("working");
@@ -147,6 +147,7 @@ function App() {
           path: relative,
           changes: [],
           editor: null,
+          lines: data.text?.split(/\r\n?|\n/).length ?? 0,
         };
         if (data.text === null) {
           setPreview(result);
@@ -171,7 +172,6 @@ function App() {
           },
           onSelection: setSelection,
           onAnchor: setAnchor,
-          onWindow: (from, to, total) => setWindow({ from, to, total }),
         });
         if (controller.signal.aborted) {
           created.destroy();
@@ -241,44 +241,38 @@ function App() {
           <Switch checked={wrap} onChange={setWrap} />
           {S.wrap}
         </label>
-        <Dropdown
-          open={more}
-          setOpen={setMore}
-          portal={{ direction: "down", align: "right" }}
-          button={
-            <Button
-              size="sm"
-              disabled={!current}
-              aria-haspopup="menu"
-              aria-expanded={more}
-              onClick={() => setMore(!more)}
-            >
-              {S.more}
-            </Button>
-          }
-        >
-          <Menu density="sm" label={S.more}>
-            <MenuItem
-              label={S.all}
-              disabled={!loaded || (window.from === 1 && window.to === window.total)}
-              onSelect={() => {
-                setMore(false);
-                editor?.expand("all");
-              }}
-            />
-            {snapshot?.available && (
-              <MenuItem
-                label={copied === "diff" ? S.copied : S.copyDiff}
-                aria-label={S.copyDiff}
-                disabled={!snapshot.patch}
-                onSelect={() => {
-                  setMore(false);
-                  copy(snapshot.patch, "diff");
-                }}
-              />
-            )}
-          </Menu>
-        </Dropdown>
+        {preview?.snapshot.available && (
+          <Dropdown
+            open={more}
+            setOpen={setMore}
+            portal={{ direction: "down", align: "right" }}
+            button={
+              <Button
+                size="sm"
+                disabled={!current}
+                aria-haspopup="menu"
+                aria-expanded={more}
+                onClick={() => setMore(!more)}
+              >
+                {S.more}
+              </Button>
+            }
+          >
+            <Menu density="sm" label={S.more}>
+              {snapshot?.available && (
+                <MenuItem
+                  label={copied === "diff" ? S.copied : S.copyDiff}
+                  aria-label={S.copyDiff}
+                  disabled={!snapshot.patch}
+                  onSelect={() => {
+                    setMore(false);
+                    copy(snapshot.patch, "diff");
+                  }}
+                />
+              )}
+            </Menu>
+          </Dropdown>
+        )}
       </div>
       {error && (
         <NoticeStrip tone="attention" role="alert" className="px-3 py-2">
@@ -297,9 +291,9 @@ function App() {
       )}
       <div ref={mount} className="code-preview-editor min-h-0 flex-1 overflow-hidden" />
       {loaded && (
-        <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-line px-3 py-2">
+        <div className="code-preview-footer flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-line px-3 py-2">
           <div className="flex flex-wrap items-center gap-2 text-xs text-fg-muted">
-            <span>{S.range(window.from, window.to, window.total)}</span>
+            <span>{S.range(1, current!.lines, current!.lines)}</span>
             {changes.length > 0 && (
               <label className="flex items-center gap-2 whitespace-nowrap">
                 <Switch checked={showChanges} onChange={setShowChanges} />
@@ -317,16 +311,6 @@ function App() {
                     : S.nextChange}
               </Button>
             ))}
-            <Button size="sm" disabled={window.from === 1} onClick={() => editor?.expand("up")}>
-              {S.up}
-            </Button>
-            <Button
-              size="sm"
-              disabled={window.to === window.total}
-              onClick={() => editor?.expand("down")}
-            >
-              {S.down}
-            </Button>
           </div>
         </div>
       )}
