@@ -29,6 +29,16 @@ Other text files use plain text. UTF-8 text up to 2 MB is previewed; larger or b
 be opened in VS Code. Files use the Session's existing Workspace access and path resolver,
 including unique abbreviated names, on its own server.
 
+Switch to **Git diff** to inspect the current file's **Unstaged** or **Staged** changes. The
+shared diff viewer shows old/new line numbers, additions, deletions and changed words in a
+unified view or side by side. **Copy diff** copies the patch, and **Reload code** also refreshes
+the diff. Switch back to **Code** to select code and ask questions.
+
+New text files appear as additions; deleted files retain their removed lines. Binary, empty,
+metadata-only and unchanged files have explicit states. A non-Git Workspace shows a notice.
+Diff reads are confined to the current Workspace file, bounded to 2 MB and leave the Git index
+unchanged. The preview does not run external diff drivers or clean/process filters.
+
 The Workbench tab key `code-preview` is the host's preview entry. The iframe receives `session`,
 `path`, optional `line`, `column`, `endLine`, `endColumn` and `locale` query parameters. Opening
 its tab without a citation shows an instruction to open a file in chat. No Skill is installed,

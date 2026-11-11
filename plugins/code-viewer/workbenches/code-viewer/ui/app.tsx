@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { Button, NoticeStrip, Switch } from "@prismshadow/penguin-ui";
+import { Button, NoticeStrip, Segmented, Switch } from "@prismshadow/penguin-ui";
 import { createPreviewEditor } from "./editor/editor.js";
 import { CodeInteraction } from "./interaction.js";
+import { GitChanges } from "./git-changes.js";
 import type { CodeAnchor, CodeSelection, PreviewEditor } from "./editor/editor.js";
 import { en, zh } from "./strings.js";
 
@@ -75,6 +76,7 @@ function App() {
   const [selection, setSelection] = useState<CodeSelection | null>(null);
   const [version, setVersion] = useState("");
   const [reload, setReload] = useState(0);
+  const [view, setView] = useState<"code" | "diff">("code");
   useEffect(() => {
     const session = query.get("session"),
       requested = query.get("path");
@@ -123,6 +125,7 @@ function App() {
           return;
         }
         editor.current = preview;
+        preview.wrap(wrap);
         setLoaded(true);
       } catch (err) {
         if (!controller.signal.aborted) setError(err instanceof Error ? err.message : S.failed);
@@ -144,15 +147,32 @@ function App() {
         >
           {path || S.readOnly}
         </span>
-        <Button size="sm" disabled={!loaded} onClick={() => setReload((n) => n + 1)}>
+        <Segmented
+          cols={2}
+          value={view}
+          onChange={setView}
+          options={[
+            { value: "code", label: S.code },
+            { value: "diff", label: S.gitDiff },
+          ]}
+        />
+        <Button
+          size="sm"
+          disabled={!available || (view === "code" && !loaded)}
+          onClick={() => setReload((n) => n + 1)}
+        >
           {S.refresh}
         </Button>
-        <Button size="sm" disabled={!loaded} onClick={() => editor.current?.search()}>
+        <Button
+          size="sm"
+          disabled={!loaded || view !== "code"}
+          onClick={() => editor.current?.search()}
+        >
           {S.search}
         </Button>
         <Button
           size="sm"
-          disabled={!loaded}
+          disabled={!loaded || view !== "code"}
           onClick={() => {
             void navigator.clipboard
               .writeText(editor.current?.copy() ?? "")
@@ -173,18 +193,31 @@ function App() {
           {S.wrap}
         </label>
       </div>
-      {error && (
+      {error && view === "code" && (
         <NoticeStrip tone="attention" role="alert" className="px-3 py-2">
           {error}
         </NoticeStrip>
       )}
-      {!loaded && !error && (
+      {!loaded && !error && view === "code" && (
         <p role="status" className="px-4 py-4 text-sm text-fg-muted">
           {available ? S.loading : S.empty}
         </p>
       )}
-      <div ref={mount} className="code-preview-editor min-h-0 flex-1 overflow-hidden" />
-      {loaded && (
+      <div
+        ref={mount}
+        hidden={view !== "code"}
+        className="code-preview-editor min-h-0 flex-1 overflow-hidden"
+      />
+      {view === "diff" && query.has("session") && (
+        <GitChanges
+          apiBase={apiBase}
+          session={query.get("session")!}
+          path={path}
+          wrap={wrap}
+          reload={reload}
+        />
+      )}
+      {loaded && view === "code" && (
         <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-line px-3 py-2">
           <div className="flex flex-wrap gap-2 text-xs text-fg-muted">
             <span>{S.range(window.from, window.to, window.total)}</span>
@@ -215,7 +248,7 @@ function App() {
           </div>
         </div>
       )}
-      {loaded && selection && (
+      {loaded && selection && view === "code" && (
         <CodeInteraction
           key={reload}
           editor={editor.current!}
