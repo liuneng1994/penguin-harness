@@ -3,6 +3,7 @@
 - **Date:** 2026-11-11
 - **Type:** fix
 - **Scope:** `desktop`
+- **PR:** [#8](https://github.com/liuneng1994/penguin-harness/pull/8)
 
 [English](2026-11-11-workbench-declarations.md)
 
