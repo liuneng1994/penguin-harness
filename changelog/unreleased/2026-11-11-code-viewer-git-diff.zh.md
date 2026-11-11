@@ -2,7 +2,7 @@
 
 - **Date:** 2026-11-11
 - **Type:** feature
-- **Scope:** `server`, `plugins`
+- **Scope:** `server`, `web`, `plugins`
 - **PR:** [#6](https://github.com/liuneng1994/penguin-harness/pull/6)
 
 [English](2026-11-11-code-viewer-git-diff.md)
@@ -24,3 +24,9 @@
 没有改动的文件分别显示对应状态；非 Git Workspace 保留普通代码预览。读取沿用了已有
 Workspace 权限检查，按字面匹配路径，并将源码和补丁限制在 2 MB 内。预览禁用了外部 diff
 驱动和 clean/process 过滤器，没有改变 Git 索引。
+
+## 预览操作
+
+独立的代码标签页已隐藏，聊天中的文件引用仍然可以打开预览。查看完整文件和复制 diff
+收进了更多菜单，底栏去掉了重复的源码版本文字。单个改动显示定位改动，多个改动显示
+上一个和下一个改动；关闭改动显示后，跳转按钮也随之隐藏。没有改动的文件不显示改动控件。

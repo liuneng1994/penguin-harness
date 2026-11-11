@@ -2,7 +2,7 @@
 
 - **Date:** 2026-11-11
 - **Type:** feature
-- **Scope:** `server`, `plugins`
+- **Scope:** `server`, `web`, `plugins`
 - **PR:** [#6](https://github.com/liuneng1994/penguin-harness/pull/6)
 
 [中文版](2026-11-11-code-viewer-git-diff.zh.md)
@@ -27,3 +27,10 @@ binary, metadata-only and unchanged files had explicit states, and non-Git Works
 ordinary code previews. Reads kept the existing Workspace access checks, treated paths literally
 and limited source and patches to 2 MB. The preview disabled external diff drivers and
 clean/process filters, and left the Git index unchanged.
+
+## Preview controls
+
+The standalone Code tab was hidden; chat file references continued to open the preview.
+More held Show full file and Copy diff. The footer omitted the repeated source-version label.
+One edit had Locate change, multiple edits had Previous and Next change, and hiding changes
+hid their navigation. Files without edits had no change controls.

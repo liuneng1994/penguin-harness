@@ -1,6 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { Button, NoticeStrip, Segmented, Switch } from "@prismshadow/penguin-ui";
+import {
+  Button,
+  Dropdown,
+  Menu,
+  MenuItem,
+  NoticeStrip,
+  Segmented,
+  Switch,
+} from "@prismshadow/penguin-ui";
 import { createPreviewEditor } from "./editor/editor.js";
 import { CodeInteraction } from "./interaction.js";
 import { codeChanges, RemovedCode } from "./inline-changes.js";
@@ -57,6 +65,7 @@ function App() {
   const [scope, setScope] = useState<Scope>("working");
   const [copied, setCopied] = useState(false);
   const [copiedDiff, setCopiedDiff] = useState(false);
+  const [more, setMore] = useState(false);
   const [anchor, setAnchor] = useState<CodeAnchor | null>(null);
   const [selection, setSelection] = useState<CodeSelection | null>(null);
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
@@ -74,6 +83,7 @@ function App() {
     setAnchor(null);
     setCopied(false);
     setCopiedDiff(false);
+    setMore(false);
     const controller = new AbortController();
     void (async () => {
       try {
@@ -162,7 +172,13 @@ function App() {
           : null
       : null;
   return (
-    <main className="flex h-full min-h-0 flex-col">
+    <main
+      className="flex h-full min-h-0 flex-col"
+      onKeyDown={(event) => {
+        // Let the menu close locally before the iframe host forwards unhandled keys.
+        if (more && event.key === "Escape") event.preventDefault();
+      }}
+    >
       <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-line px-3 py-2">
         <span
           className="preview-path min-w-0 flex-1 truncate font-mono text-xs"
@@ -199,20 +215,6 @@ function App() {
         >
           {copied ? S.copied : S.copy}
         </Button>
-        {snapshot?.available && (
-          <Button
-            size="sm"
-            disabled={!snapshot.patch || snapshot.scope !== scope}
-            onClick={() => {
-              void navigator.clipboard
-                .writeText(snapshot.patch)
-                .then(() => setCopiedDiff(true))
-                .catch(() => setError(S.copyFailed));
-            }}
-          >
-            {copiedDiff ? S.copied : S.copyDiff}
-          </Button>
-        )}
         <label className="flex items-center gap-2 whitespace-nowrap text-xs text-fg-secondary">
           <Switch
             checked={wrap}
@@ -223,6 +225,47 @@ function App() {
           />
           {S.wrap}
         </label>
+        <Dropdown
+          open={more}
+          setOpen={setMore}
+          portal={{ direction: "down", align: "right" }}
+          button={
+            <Button
+              size="sm"
+              disabled={!loaded && !snapshot?.available}
+              aria-haspopup="menu"
+              aria-expanded={more}
+              onClick={() => setMore(!more)}
+            >
+              {S.more}
+            </Button>
+          }
+        >
+          <Menu density="sm" label={S.more}>
+            <MenuItem
+              label={S.all}
+              disabled={!loaded || (window.from === 1 && window.to === window.total)}
+              onSelect={() => {
+                setMore(false);
+                editor.current?.expand("all");
+              }}
+            />
+            {snapshot?.available && (
+              <MenuItem
+                label={copiedDiff ? S.copied : S.copyDiff}
+                aria-label={S.copyDiff}
+                disabled={!snapshot.patch || snapshot.scope !== scope}
+                onSelect={() => {
+                  setMore(false);
+                  void navigator.clipboard
+                    .writeText(snapshot.patch)
+                    .then(() => setCopiedDiff(true))
+                    .catch(() => setError(S.copyFailed));
+                }}
+              />
+            )}
+          </Menu>
+        </Dropdown>
       </div>
       {error && (
         <NoticeStrip tone="attention" role="alert" className="px-3 py-2">
@@ -244,14 +287,7 @@ function App() {
         <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-line px-3 py-2">
           <div className="flex flex-wrap items-center gap-2 text-xs text-fg-muted">
             <span>{S.range(window.from, window.to, window.total)}</span>
-            <span>
-              {snapshot?.available
-                ? scope === "staged"
-                  ? S.stagedCode
-                  : S.workingCode
-                : S.readOnly}
-            </span>
-            {snapshot?.available && (
+            {changes.current.length > 0 && (
               <label className="flex items-center gap-2 whitespace-nowrap">
                 <Switch checked={showChanges} onChange={setShowChanges} />
                 {S.showChanges}
@@ -259,7 +295,7 @@ function App() {
             )}
           </div>
           <div className="flex flex-wrap gap-2">
-            {changes.current.length > 0 && (
+            {showChanges && changes.current.length > 1 && (
               <>
                 <Button size="sm" onClick={() => editor.current?.nextChange(-1)}>
                   {S.previousChange}
@@ -268,6 +304,11 @@ function App() {
                   {S.nextChange}
                 </Button>
               </>
+            )}
+            {showChanges && changes.current.length === 1 && (
+              <Button size="sm" onClick={() => editor.current?.nextChange(1)}>
+                {S.locateChange}
+              </Button>
             )}
             <Button
               size="sm"
@@ -282,13 +323,6 @@ function App() {
               onClick={() => editor.current?.expand("down")}
             >
               {S.down}
-            </Button>
-            <Button
-              size="sm"
-              disabled={window.from === 1 && window.to === window.total}
-              onClick={() => editor.current?.expand("all")}
-            >
-              {S.all}
             </Button>
           </div>
         </div>

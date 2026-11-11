@@ -2070,7 +2070,7 @@ export function ChatPage() {
   const [codePreview, setCodePreview] = useState<FileLocation | null>(null);
   useEffect(() => setCodePreview(null), [selected?.sessionId]);
   // A Workbench opting into this key accepts a citation as URL context.
-  const codePreviewTab = workbenchTabs.tabs.find((tab) => tab.key === "code-preview");
+  const codePreviewTab = workbenchTabs.codePreviewTab;
   const openVSCode = useCallback(
     (location: FileLocation) => {
       if (!selected || !user) return;

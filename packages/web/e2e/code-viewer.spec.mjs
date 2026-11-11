@@ -193,7 +193,9 @@ test("chat code preview and errors across themes", async ({ page }, testInfo) =>
     ).toBeVisible();
     await frame.getByRole("textbox", { name: "Find" }).press("Escape");
     await expect(dialog).toBeVisible();
-    await frame.getByRole("button", { name: "Show full file", exact: true }).click();
+    await expect(frame.getByRole("button", { name: "Show full file", exact: true })).toHaveCount(0);
+    await frame.getByRole("button", { name: "More", exact: true }).click();
+    await frame.getByRole("menuitem", { name: "Show full file", exact: true }).click();
     await expect(frame.getByText("Lines 1–900 of 900", { exact: false })).toBeVisible();
     await frame.locator(".cm-content").press("Escape");
     await expect(dialog).toHaveCount(0);

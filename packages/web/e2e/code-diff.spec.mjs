@@ -2,7 +2,8 @@
  * Code and Git changes share one editor. Source line numbers and selections stay intact;
  * changed lines and words are marked, old code appears below its corresponding location,
  * staged code is read from the index, and questions inherit nearby diff context.
- * Copy, refresh, navigation, show/hide, three themes and phone layouts remain usable.
+ * Auxiliary actions live in More; change navigation reflects zero, one or multiple edits.
+ * Copy, refresh, show/hide, three themes and phone layouts remain usable.
  */
 import { test, expect } from "@playwright/test";
 import fs from "node:fs/promises";
@@ -100,6 +101,7 @@ test("current-file Git diff and code questions", async ({ page }, info) => {
     await page.setViewportSize({ width: 1440, height: 1000 });
     await page.goto(`${BASE}/chat/${sid}`);
     await page.getByRole("link", { name: "Expr.cpp:785-795", exact: true }).click();
+    await expect(page.getByRole("tab", { name: "Code", exact: true })).toHaveCount(0);
     const dialog = page.getByRole("dialog");
     const frame = dialog.frameLocator("iframe");
     const source = frame.locator(".cm-content");
@@ -139,16 +141,41 @@ test("current-file Git diff and code questions", async ({ page }, info) => {
         `${BASE}/api/sessions/${sid}/files/git-diff?path=bolt/expression/Expr.cpp`,
       )
     ).json();
-    await frame.getByRole("button", { name: "Copy diff", exact: true }).click();
+    await expect(frame.getByRole("button", { name: "Copy diff", exact: true })).toHaveCount(0);
+    await frame.getByRole("button", { name: "More", exact: true }).click();
+    await frame.getByRole("menu").evaluate((node) => {
+      for (const animation of node.parentElement.getAnimations({ subtree: true })) {
+        const duration = animation.effect?.getTiming().duration;
+        if (typeof duration === "number" && duration > 0) {
+          animation.pause();
+          animation.currentTime = duration / 2;
+        }
+      }
+    });
+    await page.screenshot({
+      path: info.outputPath(`${themeId}-more-opening.png`),
+      animations: "allow",
+    });
+    await frame.getByRole("menu").evaluate((node) => {
+      for (const animation of node.parentElement.getAnimations({ subtree: true }))
+        animation.finish();
+    });
+    await frame.getByRole("menuitem", { name: "Copy diff", exact: true }).click();
     expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(expected.patch);
     await frame.getByRole("switch", { name: "Show changes", exact: true }).click();
     await expect(frame.locator(".cm-git-modify")).toHaveCount(0);
+    await expect(
+      frame.getByRole("button", { name: /^(Locate change|Next change|Previous change)$/ }),
+    ).toHaveCount(0);
     await expect(frame.locator(".code-removed-block")).toHaveCount(0);
     await expect(source).toContainText("value * 3;");
     expect(await frame.locator(".cm-scroller").evaluate((node) => node.clientHeight)).toBe(height);
     await frame.getByRole("switch", { name: "Show changes", exact: true }).click();
-    await frame.getByRole("button", { name: "Next change", exact: true }).click();
-    await frame.getByRole("button", { name: "Previous change", exact: true }).click();
+    await expect(frame.getByRole("button", { name: "Next change", exact: true })).toHaveCount(0);
+    await expect(frame.getByRole("button", { name: "Previous change", exact: true })).toHaveCount(
+      0,
+    );
+    await frame.getByRole("button", { name: "Locate change", exact: true }).click();
     await frame.getByRole("button", { name: "Staged", exact: true }).click();
     await expect(frame.locator(".cm-git-modify")).toContainText("value * 2;");
     await expect(source).not.toContainText("value * 3;");
@@ -194,7 +221,15 @@ test("current-file Git diff and code questions", async ({ page }, info) => {
     expect(
       await frame.locator("body").evaluate((node) => node.scrollWidth <= node.clientWidth),
     ).toBe(true);
+    await frame.getByRole("button", { name: lang === "en" ? "More" : "更多", exact: true }).click();
+    await expect(
+      frame.getByRole("menuitem", { name: lang === "en" ? "Copy diff" : "复制 diff", exact: true }),
+    ).toBeInViewport();
     await page.screenshot({ path: info.outputPath(`phone-${lang}-inline-diff.png`) });
+    await frame
+      .getByRole("menuitem", { name: lang === "en" ? "Copy diff" : "复制 diff", exact: true })
+      .press("Escape");
+    await expect(frame.getByRole("menu")).toHaveCount(0);
     await page
       .getByRole("dialog")
       .getByRole("button", { name: lang === "en" ? "Close" : "关闭", exact: true })
@@ -209,6 +244,34 @@ test("current-file Git diff and code questions", async ({ page }, info) => {
   await write(4);
   await frame.getByRole("button", { name: "Reload code", exact: true }).click();
   await expect(frame.locator(".cm-git-modify")).toContainText("value * 4;");
+  // A distant second edit makes previous/next useful and reveals its source context.
+  await fs.writeFile(
+    file,
+    (await fs.readFile(file, "utf8")).replace("// line 50", "// another edit"),
+  );
+  await frame.getByRole("button", { name: "Reload code", exact: true }).click();
+  await expect(frame.getByRole("button", { name: "Locate change", exact: true })).toHaveCount(0);
+  await frame.getByRole("button", { name: "Next change", exact: true }).click();
+  await expect(frame.locator(".cm-line").filter({ hasText: "// another edit" })).toBeInViewport();
+  await frame.getByRole("switch", { name: "Show changes", exact: true }).click();
+  await expect(
+    frame.getByRole("button", { name: /^(Locate change|Next change|Previous change)$/ }),
+  ).toHaveCount(0);
+  await frame.getByRole("switch", { name: "Show changes", exact: true }).click();
+  await frame.getByRole("button", { name: "Previous change", exact: true }).click();
+  await expect(frame.locator(".cm-line").filter({ hasText: "value * 4;" })).toBeInViewport();
+  await write(2);
+  await frame.getByRole("button", { name: "Reload code", exact: true }).click();
+  await expect(frame.getByText("No unstaged changes in this file.", { exact: true })).toBeVisible();
+  await expect(
+    frame.getByRole("button", { name: /^(Locate change|Next change|Previous change)$/ }),
+  ).toHaveCount(0);
+  await expect(frame.getByRole("switch", { name: "Show changes", exact: true })).toHaveCount(0);
+  await frame.getByRole("button", { name: "More", exact: true }).click();
+  await expect(frame.getByRole("menuitem", { name: "Copy diff", exact: true })).toBeDisabled();
+  await frame.getByRole("menuitem", { name: "Show full file", exact: true }).press("Escape");
+  await expect(frame.getByRole("menu")).toHaveCount(0);
+  await expect(page.getByRole("dialog")).toBeVisible();
   await fs.writeFile(file, Buffer.from([0, 1, 2]));
   await frame.getByRole("button", { name: "Reload code", exact: true }).click();
   await expect(frame.getByRole("alert")).toContainText("not text");

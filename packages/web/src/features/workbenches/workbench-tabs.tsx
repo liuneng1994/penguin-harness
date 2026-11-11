@@ -54,7 +54,10 @@ export function useWorkbenchTabs(
     notices: WorkbenchNotice[];
   } | null>(null);
   const [selection, setSelection] = useState<{ scope: string; id: string | null } | null>(null);
-  const tabs = loaded?.scope === scope ? loaded.tabs : [];
+  const availableTabs = loaded?.scope === scope ? loaded.tabs : [];
+  // Code previews need a chat citation; keep their renderer available without a standalone tab.
+  const codePreviewTab = availableTabs.find((tab) => tab.key === "code-preview");
+  const tabs = availableTabs.filter((tab) => tab.key !== "code-preview");
   const notices = loaded?.scope === scope ? loaded.notices : [];
   const active = selection?.scope === selectionScope ? selection.id : initialTab;
   const setActiveRaw = useCallback(
@@ -109,7 +112,15 @@ export function useWorkbenchTabs(
     if (loaded?.scope === scope && active !== null && settled === null) setActiveRaw(null);
   }, [active, settled, loaded, scope, setActiveRaw]);
   const activeTab = settled === null ? null : (tabs.find((t) => t.tabId === settled) ?? null);
-  return { tabs, notices, active: settled, activeTab, setActive: setActiveRaw, refresh };
+  return {
+    tabs,
+    codePreviewTab,
+    notices,
+    active: settled,
+    activeTab,
+    setActive: setActiveRaw,
+    refresh,
+  };
 }
 
 /** How long a page that never finishes loading stays hidden before it is shown as it is. */
