@@ -1,4 +1,4 @@
-import { Compartment, EditorState, StateEffect, StateField } from "@codemirror/state";
+import { Compartment, EditorState, RangeSet, StateEffect, StateField } from "@codemirror/state";
 import {
   Decoration,
   EditorView,
@@ -6,6 +6,9 @@ import {
   lineNumbers,
   highlightSpecialChars,
   drawSelection,
+  gutter,
+  GutterMarker,
+  WidgetType,
 } from "@codemirror/view";
 import type { DecorationSet } from "@codemirror/view";
 import { HighlightStyle, syntaxHighlighting, StreamLanguage } from "@codemirror/language";
@@ -28,6 +31,11 @@ export interface CodeAnchor {
   right: number;
   triggerLeft: number;
 }
+export interface GitChange {
+  line: number;
+  added: Array<{ line: number; words: readonly (readonly [number, number])[] }>;
+  removed: Array<{ line: number; text: string }>;
+}
 
 export interface PreviewOptions {
   text: string;
@@ -38,6 +46,9 @@ export interface PreviewOptions {
   endColumn?: number;
   codeLabel: string;
   phrases?: Record<string, string>;
+  changes?: GitChange[];
+  changeLabels?: { add: string; modify: string; delete: string };
+  renderRemoved?: (parent: HTMLElement, change: GitChange) => () => void;
   onAnchor?: (anchor: CodeAnchor | null) => void;
   onSelection?: (selection: CodeSelection) => void;
   onWindow: (from: number, to: number, total: number) => void;
@@ -46,6 +57,8 @@ export interface PreviewEditor {
   revealSelection(): void;
   focus(): void;
   selection(): CodeSelection;
+  changes(changes: GitChange[]): void;
+  nextChange(direction: -1 | 1): void;
   expand: (direction: "up" | "down" | "all") => void;
   wrap: (enabled: boolean) => void;
   search: () => void;
@@ -93,14 +106,75 @@ export async function createPreviewEditor(
   let from = Math.max(1, first - 12),
     to = Math.min(doc.lines, last + 12);
   let selectionTouched = false;
+  let changes = options.changes ?? [];
   const windowEffect = StateEffect.define<{ from: number; to: number }>();
+  const changeEffect = StateEffect.define<GitChange[]>();
+  const widgetMounts = new WeakMap<
+    HTMLElement,
+    { cleanup: () => void; observer: ResizeObserver }
+  >();
+  class RemovedWidget extends WidgetType {
+    constructor(readonly change: GitChange) {
+      super();
+    }
+    eq(other: RemovedWidget) {
+      return other.change === this.change;
+    }
+    toDOM(view: EditorView) {
+      const dom = document.createElement("div");
+      const cleanup = options.renderRemoved?.(dom, this.change) ?? (() => {});
+      const observer = new ResizeObserver(() => view.requestMeasure());
+      observer.observe(dom);
+      widgetMounts.set(dom, { cleanup, observer });
+      return dom;
+    }
+    destroy(dom: HTMLElement) {
+      const mounted = widgetMounts.get(dom);
+      mounted?.observer.disconnect();
+      queueMicrotask(() => mounted?.cleanup());
+    }
+  }
+  const position = (line: number, state: EditorState) =>
+    state.doc.line(Math.max(1, Math.min(state.doc.lines, line))).from;
   const marks = (state: EditorState): DecorationSet => {
     const ranges = [];
     if (from > 1)
       ranges.push(Decoration.replace({ block: true }).range(0, state.doc.line(from).from));
-    if (options.line !== undefined && !selectionTouched) {
+    if (options.line !== undefined) {
       for (let line = first; line <= last; line++)
         ranges.push(Decoration.line({ class: "cm-cited-line" }).range(state.doc.line(line).from));
+    }
+    for (const change of changes) {
+      for (const added of change.added) {
+        if (added.line < from || added.line > to) continue;
+        const start = position(added.line, state);
+        ranges.push(
+          Decoration.line({ class: change.removed.length ? "cm-git-modify" : "cm-git-add" }).range(
+            start,
+          ),
+        );
+        for (const [a, b] of added.words)
+          if (b > a)
+            ranges.push(Decoration.mark({ class: "cm-git-word" }).range(start + a, start + b));
+      }
+      if (change.removed.length && change.line >= from && change.line <= to + 1) {
+        const lastAdded = change.added.at(-1)?.line;
+        const atEnd = change.line > state.doc.lines;
+        const after = lastAdded !== undefined || atEnd;
+        const at =
+          lastAdded !== undefined
+            ? state.doc.line(Math.min(state.doc.lines, lastAdded)).to
+            : atEnd
+              ? state.doc.length
+              : position(change.line, state);
+        ranges.push(
+          Decoration.widget({
+            widget: new RemovedWidget(change),
+            block: true,
+            side: after ? 1 : -1,
+          }).range(at),
+        );
+      }
     }
     if (to < state.doc.lines)
       ranges.push(
@@ -117,6 +191,7 @@ export async function createPreviewEditor(
           (tr.isUserEvent("select") && !tr.startState.selection.eq(tr.state.selection)))
       )
         selectionTouched = true;
+      for (const effect of tr.effects) if (effect.is(changeEffect)) changes = effect.value;
       for (const effect of tr.effects)
         if (effect.is(windowEffect)) {
           from = effect.value.from;
@@ -124,9 +199,45 @@ export async function createPreviewEditor(
           options.onWindow(from, to, doc.lines);
           return marks(tr.state);
         }
-      return tr.selection ? marks(tr.state) : value;
+      return tr.selection || tr.effects.some((effect) => effect.is(changeEffect))
+        ? marks(tr.state)
+        : value;
     },
     provide: (field) => EditorView.decorations.from(field),
+  });
+  class ChangeMarker extends GutterMarker {
+    constructor(readonly kind: "add" | "modify" | "delete") {
+      super();
+    }
+    toDOM() {
+      const node = document.createElement("span");
+      node.textContent = { add: "+", modify: "~", delete: "−" }[this.kind];
+      node.setAttribute("aria-label", options.changeLabels?.[this.kind] ?? this.kind);
+      node.setAttribute("role", "img");
+      node.dataset.tooltip = options.changeLabels?.[this.kind] ?? this.kind;
+      return node;
+    }
+    eq(other: ChangeMarker) {
+      return other.kind === this.kind;
+    }
+  }
+  const changeGutter = gutter({
+    class: "cm-git-gutter",
+    markers: (view) => {
+      const markers = new Map<number, "add" | "modify" | "delete">();
+      for (const change of changes) {
+        if (!change.added.length) markers.set(position(change.line, view.state), "delete");
+        for (const added of change.added)
+          markers.set(position(added.line, view.state), change.removed.length ? "modify" : "add");
+      }
+      return RangeSet.of(
+        [...markers]
+          .sort((a, b) => a[0] - b[0])
+          .map(([at, kind]) => new ChangeMarker(kind).range(at)),
+      );
+    },
+    lineMarkerChange: (update) =>
+      update.transactions.some((tr) => tr.effects.some((effect) => effect.is(changeEffect))),
   });
   const selectedCode = (state: EditorState): CodeSelection => {
     const selection = state.selection.main;
@@ -168,6 +279,7 @@ export async function createPreviewEditor(
         EditorState.phrases.of(options.phrases ?? {}),
         EditorView.contentAttributes.of({ "aria-label": options.codeLabel, tabindex: "0" }),
         lineNumbers(),
+        changeGutter,
         highlightSpecialChars(),
         drawSelection(),
         lang,
@@ -199,6 +311,11 @@ export async function createPreviewEditor(
             backgroundColor: "var(--ui-accent-tint)",
             boxShadow: "inset 2px 0 var(--ui-accent)",
           },
+          ".cm-git-add, .cm-git-modify, .cm-cited-line.cm-git-add, .cm-cited-line.cm-git-modify": {
+            backgroundColor: "var(--ui-diff-add-bg)",
+          },
+          ".cm-git-word": { backgroundColor: "var(--ui-diff-add-word)" },
+          ".cm-git-gutter .cm-gutterElement": { minWidth: "1.5em", textAlign: "center" },
           ".cm-selectionBackground, &.cm-focused .cm-selectionBackground, ::selection": {
             backgroundColor: "var(--ui-code-selection)",
           },
@@ -237,6 +354,9 @@ export async function createPreviewEditor(
       ],
     }),
   });
+  // Git markers convey changes; only the decorative line-number gutter stays hidden.
+  view.dom.querySelector(".cm-gutters")?.removeAttribute("aria-hidden");
+  view.dom.querySelector(".cm-lineNumbers")?.setAttribute("aria-hidden", "true");
   let destroyed = false;
   function measureAnchor() {
     if (destroyed) return;
@@ -250,7 +370,7 @@ export async function createPreviewEditor(
         const viewport = view.scrollDOM.getBoundingClientRect();
         const gutter = view.dom.querySelector(".cm-gutters")?.getBoundingClientRect();
         const left = Math.max(viewport.left + 8, (gutter?.right ?? viewport.left + 48) + 8);
-        let rect = view.coordsAtPos(end);
+        let rect = view.coordsAtPos(end, -1);
         if (!rect || rect.bottom > viewport.bottom || rect.top < viewport.top) {
           const visible = view.posAtCoords({
             x: left,
@@ -308,6 +428,30 @@ export async function createPreviewEditor(
     },
     selection() {
       return selectedCode(view.state);
+    },
+    changes(value) {
+      view.dispatch({ effects: changeEffect.of(value) });
+    },
+    nextChange(direction) {
+      const line = doc.lineAt(view.state.selection.main.head).number;
+      const ordered = [...changes].sort((a, b) => a.line - b.line);
+      const target =
+        direction === 1
+          ? (ordered.find((change) => change.line > line) ?? ordered[0])
+          : (ordered.findLast((change) => change.line < line) ?? ordered.at(-1));
+      if (!target) return;
+      const at = Math.max(1, Math.min(doc.lines, target.line));
+      view.dispatch({
+        selection: { anchor: doc.line(at).from },
+        effects: [
+          windowEffect.of({
+            from: Math.min(from, Math.max(1, at - 12)),
+            to: Math.max(to, Math.min(doc.lines, at + 12)),
+          }),
+          EditorView.scrollIntoView(doc.line(at).from, { y: "center" }),
+        ],
+        userEvent: "select",
+      });
     },
     expand(direction) {
       view.dispatch({

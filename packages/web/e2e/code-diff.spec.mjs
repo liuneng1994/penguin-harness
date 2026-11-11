@@ -1,7 +1,8 @@
 /**
- * The current file's staged/working diff has old/new line numbers, semantic change colors,
- * unified and split views, copy and refresh. Other files stay out of the diff. Returning to
- * Code preserves read-only selection and side questions. Three themes and phone layouts fit.
+ * Code and Git changes share one editor. Source line numbers and selections stay intact;
+ * changed lines and words are marked, old code appears below its corresponding location,
+ * staged code is read from the index, and questions inherit nearby diff context.
+ * Copy, refresh, navigation, show/hide, three themes and phone layouts remain usable.
  */
 import { test, expect } from "@playwright/test";
 import fs from "node:fs/promises";
@@ -39,7 +40,16 @@ test("current-file Git diff and code questions", async ({ page }, info) => {
   await write(1);
   await fs.writeFile(path.join(workspace, "other.cpp"), "old\n");
   git("add", ".");
-  git("-c", "user.name=Test", "-c", "user.email=test@example.test", "commit", "-qm", "initial");
+  git(
+    "-c",
+    "user.name=Test",
+    "-c",
+    "user.email=test@example.test",
+    "commit",
+    "--allow-empty",
+    "-qm",
+    "initial",
+  );
   await write(2);
   git("add", "bolt/expression/Expr.cpp");
   await write(3);
@@ -92,22 +102,19 @@ test("current-file Git diff and code questions", async ({ page }, info) => {
     await page.getByRole("link", { name: "Expr.cpp:785-795", exact: true }).click();
     const dialog = page.getByRole("dialog");
     const frame = dialog.frameLocator("iframe");
-    await frame.getByRole("button", { name: "Git diff", exact: true }).click();
-    const diff = frame.getByRole("table", {
-      name: "Changes to bolt/expression/Expr.cpp",
-      exact: true,
-    });
-    await expect(diff).toContainText("value * 2;");
-    await expect(diff).toContainText("value * 3;");
-    await expect(diff).not.toContainText("unrelated-file-secret");
-    await expect(diff.locator("tr[data-kind=add] ins")).toContainText("value * 3;");
-    await expect(diff.locator("tr[data-kind=del] del")).toContainText("value * 2;");
-    const colors = await diff.evaluate((node) => ({
-      add: getComputedStyle(node.querySelector("[data-kind=add]")).backgroundColor,
-      del: getComputedStyle(node.querySelector("[data-kind=del]")).backgroundColor,
-    }));
-    expect(colors.add).not.toBe(colors.del);
-    await frame.getByRole("region", { name: "Git diff", exact: true }).evaluate((node) => {
+    const source = frame.locator(".cm-content");
+    await expect(frame.locator(".cm-git-modify")).toContainText("value * 3;");
+    await expect(frame.getByRole("img", { name: "Modified code", exact: true })).toBeVisible();
+    await expect(frame.locator(".cm-git-word")).toContainText("3");
+    await expect(frame.getByRole("table", { name: "Old code", exact: true })).toBeVisible();
+    const height = await frame.locator(".cm-scroller").evaluate((node) => node.clientHeight);
+    const old = frame.getByRole("table", { name: "Old code", exact: true });
+    await expect(old).toContainText("value * 2;");
+    await expect(old).not.toContainText("value * 3;");
+    await expect(source).not.toContainText("unrelated-file-secret");
+    const rowBox = await frame.locator(".cm-git-modify").boundingBox();
+    expect((await old.boundingBox()).y).toBeGreaterThan(rowBox.y);
+    await frame.locator(".code-removed-block").evaluate((node) => {
       for (const animation of node.getAnimations({ subtree: true })) {
         const duration = animation.effect?.getTiming().duration;
         if (typeof duration === "number" && duration > 0) {
@@ -117,12 +124,16 @@ test("current-file Git diff and code questions", async ({ page }, info) => {
       }
     });
     await page.screenshot({
-      path: info.outputPath(`${themeId}-diff-opening.png`),
+      path: info.outputPath(`${themeId}-inline-changes-opening.png`),
       animations: "allow",
     });
-    await frame.getByRole("region", { name: "Git diff", exact: true }).evaluate((node) => {
+    await frame.locator(".code-removed-block").evaluate((node) => {
       for (const animation of node.getAnimations({ subtree: true })) animation.finish();
     });
+    await frame.getByRole("button", { name: "Copy code", exact: true }).click();
+    const copied = await page.evaluate(() => navigator.clipboard.readText());
+    expect(copied).toContain("value * 3;");
+    expect(copied).not.toContain("value * 2;");
     const expected = await (
       await page.request.get(
         `${BASE}/api/sessions/${sid}/files/git-diff?path=bolt/expression/Expr.cpp`,
@@ -130,16 +141,46 @@ test("current-file Git diff and code questions", async ({ page }, info) => {
     ).json();
     await frame.getByRole("button", { name: "Copy diff", exact: true }).click();
     expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(expected.patch);
+    await frame.getByRole("switch", { name: "Show changes", exact: true }).click();
+    await expect(frame.locator(".cm-git-modify")).toHaveCount(0);
+    await expect(frame.locator(".code-removed-block")).toHaveCount(0);
+    await expect(source).toContainText("value * 3;");
+    expect(await frame.locator(".cm-scroller").evaluate((node) => node.clientHeight)).toBe(height);
+    await frame.getByRole("switch", { name: "Show changes", exact: true }).click();
+    await frame.getByRole("button", { name: "Next change", exact: true }).click();
+    await frame.getByRole("button", { name: "Previous change", exact: true }).click();
     await frame.getByRole("button", { name: "Staged", exact: true }).click();
-    await expect(diff).toContainText("value * 1;");
-    await expect(diff).toContainText("value * 2;");
-    await expect(diff).not.toContainText("value * 3;");
-    await frame.getByRole("button", { name: "Side by side", exact: true }).click();
-    expect(await diff.locator("tbody tr").nth(1).locator("td").count()).toBe(6);
-    await page.screenshot({ path: info.outputPath(`${themeId}-split-diff.png`) });
-    await frame.getByRole("button", { name: "Code", exact: true }).click();
+    await expect(frame.locator(".cm-git-modify")).toContainText("value * 2;");
+    await expect(source).not.toContainText("value * 3;");
+    await expect(old).toContainText("value * 1;");
+    await page.screenshot({ path: info.outputPath(`${themeId}-staged-inline-diff.png`) });
+    // Ask against index code, even though the disk contains a different expression.
+    const historyBefore = await (
+      await page.request.get(`${BASE}/api/sessions/${sid}/messages`)
+    ).json();
+    const snapshot = await (
+      await page.request.get(
+        `${BASE}/api/sessions/${sid}/files/git-diff?path=bolt/expression/Expr.cpp&scope=staged`,
+      )
+    ).json();
+    await frame.getByRole("button", { name: "btw Q&A", exact: true }).click();
     await expect(frame.locator(".cm-cited-line")).toHaveCount(11);
-    await expect(frame.locator(".cm-content")).toBeVisible();
+    await expect(frame.locator(".cm-git-modify")).toContainText("value * 2;");
+    const request = page.waitForRequest(
+      (r) => r.url().endsWith("/code-questions") && r.method() === "POST",
+    );
+    await frame
+      .getByRole("textbox", { name: "Ask about this code…", exact: true })
+      .fill("private-question-one");
+    await frame.getByRole("button", { name: "Ask", exact: true }).click();
+    const body = (await request).postDataJSON();
+    expect(body.gitScope).toBe("staged");
+    expect(body.gitVersion).toBe(snapshot.version);
+    await expect(frame.getByRole("log")).toContainText("First private answer");
+    expect(await (await page.request.get(`${BASE}/api/sessions/${sid}/messages`)).json()).toEqual(
+      historyBefore,
+    );
+    await frame.getByRole("button", { name: "Collapse Q&A", exact: true }).click();
     await frame.locator(".cm-content").press("Escape");
   }
   for (const lang of ["en", "zh"]) {
@@ -148,12 +189,12 @@ test("current-file Git diff and code questions", async ({ page }, info) => {
     await page.goto(`${BASE}/chat/${sid}`);
     await page.getByRole("link", { name: "Expr.cpp:785-795", exact: true }).click();
     const frame = page.getByRole("dialog").frameLocator("iframe");
-    await frame.getByRole("button", { name: "Git diff", exact: true }).click();
-    await expect(frame.getByRole("table")).toContainText("value * 3;");
+    await expect(frame.locator(".cm-git-modify")).toContainText("value * 3;");
+    await expect(frame.getByRole("table")).toContainText("value * 2;");
     expect(
       await frame.locator("body").evaluate((node) => node.scrollWidth <= node.clientWidth),
     ).toBe(true);
-    await page.screenshot({ path: info.outputPath(`phone-${lang}-git-diff.png`) });
+    await page.screenshot({ path: info.outputPath(`phone-${lang}-inline-diff.png`) });
     await page
       .getByRole("dialog")
       .getByRole("button", { name: lang === "en" ? "Close" : "关闭", exact: true })
@@ -164,27 +205,21 @@ test("current-file Git diff and code questions", async ({ page }, info) => {
   await page.goto(`${BASE}/chat/${sid}`);
   await page.getByRole("link", { name: "Expr.cpp:785-795", exact: true }).click();
   const frame = page.getByRole("dialog").frameLocator("iframe");
-  await frame.getByRole("button", { name: "Git diff", exact: true }).click();
-  await expect(frame.getByRole("table")).toContainText("value * 3;");
+  await expect(frame.locator(".cm-git-modify")).toContainText("value * 3;");
   await write(4);
   await frame.getByRole("button", { name: "Reload code", exact: true }).click();
-  await expect(frame.getByRole("table")).toContainText("value * 4;");
+  await expect(frame.locator(".cm-git-modify")).toContainText("value * 4;");
   await fs.writeFile(file, Buffer.from([0, 1, 2]));
   await frame.getByRole("button", { name: "Reload code", exact: true }).click();
-  await expect(
-    frame.getByText("Binary file changed. Open it in VS Code.", { exact: true }),
-  ).toBeVisible();
-  await expect(frame.getByRole("alert")).toHaveCount(0);
+  await expect(frame.getByRole("alert")).toContainText("not text");
   await expect(frame.getByRole("button", { name: "Reload code", exact: true })).toBeEnabled();
   await write(4);
   await frame.getByRole("button", { name: "Reload code", exact: true }).click();
-  await expect(frame.getByRole("table")).toContainText("value * 4;");
+  await expect(frame.locator(".cm-git-modify")).toContainText("value * 4;");
   await page.setViewportSize({ width: 390, height: 844 });
   await frame.getByRole("switch", { name: "Wrap lines", exact: true }).click();
   await frame.getByRole("button", { name: "Reload code", exact: true }).click();
-  await expect(frame.getByRole("table")).toContainText("value * 4;");
-  await frame.getByRole("button", { name: "Code", exact: true }).click();
-  await expect(frame.locator(".cm-content")).toContainText("value * 4;");
+  await expect(frame.locator(".cm-git-modify")).toContainText("value * 4;");
   const longLine = await frame
     .locator(".cm-line")
     .filter({ hasText: "const char* detail" })
@@ -194,11 +229,17 @@ test("current-file Git diff and code questions", async ({ page }, info) => {
     .filter({ hasText: "// line 789" })
     .boundingBox();
   expect(longLine.height).toBeGreaterThan(shortLine.height * 2);
+  await fs.rm(file);
+  await frame.getByRole("button", { name: "Reload code", exact: true }).click();
+  await expect(frame.getByRole("table")).toContainText("value * 2;");
   await frame.getByRole("button", { name: "btw Q&A", exact: true }).click();
   await frame
     .getByRole("textbox", { name: "Ask about this code…", exact: true })
     .fill("private-question-one");
   await frame.getByRole("button", { name: "Ask", exact: true }).click();
   await expect(frame.getByRole("log")).toContainText("First private answer");
+  await write(4);
+  await frame.getByRole("button", { name: "Reload code", exact: true }).click();
+  await expect(frame.locator(".cm-git-modify")).toContainText("value * 4;");
   console.log(`Git diff demo: ${BASE}/chat/${sid}`);
 });

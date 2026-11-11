@@ -15,6 +15,8 @@ export function CodeInteraction({
   path,
   selection,
   version,
+  gitScope,
+  hasChanges = false,
 }: {
   editor: PreviewEditor;
   anchor: CodeAnchor | null;
@@ -23,6 +25,8 @@ export function CodeInteraction({
   path: string;
   selection: CodeSelection;
   version: string;
+  gitScope?: "working" | "staged";
+  hasChanges?: boolean;
 }) {
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
@@ -80,7 +84,8 @@ export function CodeInteraction({
   };
   const chosen = pinned ?? selection;
   const submit = async () => {
-    if (busy || !text.trim() || !chosen.text.trim() || chosen.text.length > 24000) return;
+    if (busy || !text.trim() || (!chosen.text.trim() && !hasChanges) || chosen.text.length > 24000)
+      return;
     const abort = new AbortController();
     controller.current = abort;
     setBusy(true);
@@ -98,6 +103,7 @@ export function CodeInteraction({
             endColumn: chosen.endColumn,
           },
           version,
+          ...(gitScope ? { gitScope, gitVersion: version } : {}),
           question: text,
           history: turns.map((turn) => ({ question: turn.prompt, answer: turn.answer })),
         },
@@ -218,7 +224,9 @@ export function CodeInteraction({
               size="sm"
               type="submit"
               variant="primary"
-              disabled={!text.trim() || !chosen.text.trim() || chosen.text.length > 24000}
+              disabled={
+                !text.trim() || (!chosen.text.trim() && !hasChanges) || chosen.text.length > 24000
+              }
               data-tooltip={chosen.text.length > 24000 ? S.smallerSelection : undefined}
             >
               {S.sendQuestion}

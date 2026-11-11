@@ -3,6 +3,8 @@
  *   the main trace is unchanged, its next model request excludes side text, and usage is metered.
  * - Invalid selections, an escaped path, another user's Session and excessive side history
  *   are refused before a model request. A changed file is refused until the preview reloads.
+ * - A staged selection reads the index and nearby diff, never substitutes disk text, and a
+ *   changed index is refused before model work. Deleted code can be questioned via its diff.
  */
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -12,6 +14,8 @@ import type { SessionResponse } from "../src/api/types.js";
 import type { TestApp } from "./helpers.js";
 import { startMockLLM, requestText } from "./live-session.js";
 import type { MockLLM } from "./live-session.js";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 let app: TestApp,
   mock: MockLLM,
   client: ReturnType<typeof apiClient>,
@@ -131,6 +135,67 @@ describe("code side questions", () => {
     const count = mock.requests.length;
     expect((await side({ path: "../outside.cpp" })).status).not.toBe(200);
     expect(mock.requests.length).toBe(count);
+  });
+  it("uses the staged source and nearby diff without substituting working-tree text, and refuses stale index context", async () => {
+    const run = promisify(execFile);
+    const git = async (...args: string[]) => run("git", args, { cwd: workspace });
+    await git("init", "-q");
+    await git("add", ".");
+    await git(
+      "-c",
+      "user.name=Test",
+      "-c",
+      "user.email=test@example.test",
+      "commit",
+      "-qm",
+      "initial",
+    );
+    await fs.writeFile(
+      path.join(workspace, "sample.cpp"),
+      "// outside context\nint value = 2 + 3;  \n// do not include\n",
+    );
+    await git("add", "sample.cpp");
+    await fs.writeFile(
+      path.join(workspace, "sample.cpp"),
+      "// working-only\nint value = 9 + 9;  \n",
+    );
+    const snapshot = (await (
+      await client.get(`/api/sessions/${sessionId}/files/git-diff?path=sample.cpp&scope=staged`)
+    ).json()) as { version: string };
+    const before = await messages();
+    const response = await side({
+      gitScope: "staged",
+      gitVersion: snapshot.version,
+      question: "staged-source-question",
+    });
+    expect(await response.text()).toContain("event: done");
+    expect(requestText(mock.requests.at(-1)!)).toContain("int value = 2 + 3;");
+    expect(requestText(mock.requests.at(-1)!)).toContain("int value = 1 + 2;");
+    expect(requestText(mock.requests.at(-1)!)).not.toContain("working-only");
+    expect(requestText(mock.requests.at(-1)!)).not.toContain("int value = 9 + 9;");
+    expect(await messages()).toEqual(before);
+    await git("add", "sample.cpp");
+    const count = mock.requests.length;
+    expect((await side({ gitScope: "staged", gitVersion: snapshot.version })).status).toBe(409);
+    expect(mock.requests.length).toBe(count);
+  });
+  it("answers about removed code from the diff when the current file is empty", async () => {
+    const run = promisify(execFile);
+    await run("git", ["init", "-q"], { cwd: workspace });
+    await fs.writeFile(path.join(workspace, "removed.cpp"), "int removed = 1;\n");
+    await run("git", ["add", "removed.cpp"], { cwd: workspace });
+    await fs.rm(path.join(workspace, "removed.cpp"));
+    const snapshot = (await (
+      await client.get(`/api/sessions/${sessionId}/files/git-diff?path=removed.cpp`)
+    ).json()) as { version: string };
+    const response = await side({
+      path: "removed.cpp",
+      gitScope: "working",
+      gitVersion: snapshot.version,
+      selection: { line: 1, column: 1, endLine: 1, endColumn: 1 },
+    });
+    expect(await response.text()).toContain("event: done");
+    expect(requestText(mock.requests.at(-1)!)).toContain("int removed = 1;");
   });
   it("refuses another user's Session before reading code or using its model", async () => {
     const other = await provisionUser(app.app, "code_other", "password123");

@@ -30,6 +30,7 @@ import type { DiffLine, DiffModel, WordRange } from "./diff";
 import "../prose/prose.css";
 
 export type DiffMode = "unified" | "split";
+export { parsePatch } from "./diff";
 
 interface DiffViewerBase {
   /** The language both sides are highlighted as; plain text by default. */

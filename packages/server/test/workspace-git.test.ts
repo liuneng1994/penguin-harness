@@ -57,10 +57,13 @@ describe("current-file Git previews", () => {
     const working = await readWorkspaceGit(files, root, "file.cpp", "working");
     expect(working.patch).toContain("-int value = 2;");
     expect(working.patch).toContain("+int value = 3;");
+    expect(working.text).toBe("int value = 3;\n");
     expect(working.patch).not.toContain("unrelated-secret");
     const staged = await readWorkspaceGit(files, root, "file.cpp", "staged");
     expect(staged.patch).toContain("-int value = 1;");
     expect(staged.patch).toContain("+int value = 2;");
+    expect(staged.text).toBe("int value = 2;\n");
+    expect(staged.version).not.toBe(working.version);
     expect(await fs.readFile(path.join(root, ".git/index"))).toEqual(index);
   });
   it("previews new and empty files and reports no staged changes until added", async () => {
@@ -80,6 +83,7 @@ describe("current-file Git previews", () => {
     expect((await readWorkspaceGit(files, root, "file.cpp", "working")).patch).toContain(
       "-int value = 1;",
     );
+    expect((await readWorkspaceGit(files, root, "file.cpp", "working")).text).toBe("");
     const nested = path.join(root, "new-repo");
     await fs.mkdir(nested);
     await run("git", ["init", "-q"], { cwd: nested });

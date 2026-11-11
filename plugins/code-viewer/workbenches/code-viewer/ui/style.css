@@ -72,6 +72,11 @@ body {
 .code-preview-editor {
   min-height: 100px;
 }
+.code-removed-block {
+  padding: 0.25rem 0.5rem;
+  white-space: normal;
+  background: var(--ui-diff-del-bg);
+}
 /* Floating questions do not consume any editor height. */
 .code-question-trigger {
   z-index: 40;

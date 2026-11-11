@@ -12,8 +12,8 @@ Escape closes the floating question panel or search first, then the preview, and
 same chat position.
 
 Drag the mouse to select any code, including part of a line or several lines outside the original
-citation, or click a line to ask about that whole line. The original citation highlight gives way
-to your selection. Click **Ask** beside the selection. A question panel floats below the selected
+citation, or click a line to ask about that whole line. The original citation and Git change highlights remain visible while you select code or ask
+questions. Click **Ask** beside the selection. A question panel floats below the selected
 line and follows it as you scroll, without changing the code viewport's height. **btw Q&A**
 streams answers using the selected code, the main conversation's current readable context and
 its own previous questions and answers. Each question reads the main context again, including
@@ -29,15 +29,23 @@ Other text files use plain text. UTF-8 text up to 2 MB is previewed; larger or b
 be opened in VS Code. Files use the Session's existing Workspace access and path resolver,
 including unique abbreviated names, on its own server.
 
-Switch to **Git diff** to inspect the current file's **Unstaged** or **Staged** changes. The
-shared diff viewer shows old/new line numbers, additions, deletions and changed words in a
-unified view or side by side. **Copy diff** copies the patch, and **Reload code** also refreshes
-the diff. Switch back to **Code** to select code and ask questions.
+Git changes appear in the same code view: added and modified lines have gutter marks, with
+changed words highlighted. Removed code appears directly below its corresponding location, with the old lines and their
+original line numbers. **Show changes**
+hides or restores these marks without changing the source or selection. **Previous change**
+and **Next change** move between this file's edits.
 
-New text files appear as additions; deleted files retain their removed lines. Binary, empty,
-metadata-only and unchanged files have explicit states. A non-Git Workspace shows a notice.
-Diff reads are confined to the current Workspace file, bounded to 2 MB and leave the Git index
-unchanged. The preview does not run external diff drivers or clean/process filters.
+Choose **Unstaged** to read working-tree code or **Staged** to read the Git index. **Copy code**
+only copies the selected current-version source, even while old code is displayed. **Copy
+diff** copies the complete patch. **Reload code** refreshes both source and changes, and clears
+side questions. Questions use the displayed version and nearby Git hunks; a changed snapshot
+requires a reload before asking.
+
+New text files appear as additions; deleted files retain their removed lines and support
+questions about that diff. Binary, empty, metadata-only and unchanged files have explicit states.
+A non-Git Workspace still shows ordinary code. Diff reads are confined to the current Workspace
+file, bounded to 2 MB and leave the Git index unchanged. The preview does not run external diff
+drivers or clean/process filters.
 
 The Workbench tab key `code-preview` is the host's preview entry. The iframe receives `session`,
 `path`, optional `line`, `column`, `endLine`, `endColumn` and `locale` query parameters. Opening

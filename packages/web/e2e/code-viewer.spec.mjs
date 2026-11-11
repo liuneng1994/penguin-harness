@@ -343,7 +343,7 @@ test("chat code preview and errors across themes", async ({ page }, testInfo) =>
     await codePoint(codeFrame, "int evaluateExpression", 5),
     await codePoint(codeFrame, "int evaluateExpression", 23),
   );
-  await expect(codeFrame.locator(".cm-cited-line")).toHaveCount(0);
+  await expect(codeFrame.locator(".cm-cited-line")).toHaveCount(11);
   await codeFrame.getByRole("button", { name: "btw Q&A", exact: true }).click();
   await expect(codeFrame.getByText("Line 784", { exact: true })).toBeVisible();
   const mouseRequest = page.waitForRequest(

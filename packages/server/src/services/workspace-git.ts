@@ -3,6 +3,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import path from "node:path";
 import fs from "node:fs/promises";
+import { createHash } from "node:crypto";
 import type { WorkspaceFiles } from "../mechanisms/workspace.js";
 import { HttpError } from "../http/errors.js";
 
@@ -16,9 +17,11 @@ export interface WorkspaceGitDiff {
   patch: string;
   binary: boolean;
   untracked: boolean;
+  text: string | null;
+  version: string | null;
 }
 
-async function git(cwd: string, args: string[], config: string[] = []): Promise<string> {
+async function gitBytes(cwd: string, args: string[], config: string[] = []): Promise<Buffer> {
   const env: NodeJS.ProcessEnv = {
     ...process.env,
     GIT_OPTIONAL_LOCKS: "0",
@@ -39,7 +42,7 @@ async function git(cwd: string, args: string[], config: string[] = []): Promise<
         {
           cwd,
           env,
-          encoding: "utf8",
+          encoding: "buffer",
           timeout: 5000,
           maxBuffer: LIMIT,
         },
@@ -52,6 +55,40 @@ async function git(cwd: string, args: string[], config: string[] = []): Promise<
     if (code === "ENOENT")
       throw new HttpError(503, "git_unavailable", "Git is not available on this server.");
     throw error;
+  }
+}
+
+async function git(cwd: string, args: string[], config: string[] = []): Promise<string> {
+  return (await gitBytes(cwd, args, config)).toString("utf8");
+}
+
+function source(result: WorkspaceGitDiff, data: Buffer, version?: string): void {
+  try {
+    result.text = new TextDecoder("utf-8", { fatal: true }).decode(data);
+    if (result.text.includes("\0")) result.text = null;
+  } catch {
+    result.text = null;
+  }
+  if (result.text === null) result.binary = true;
+  result.version =
+    version ??
+    createHash("sha256").update(result.scope).update(data).update(result.patch).digest("hex");
+}
+
+async function workingSource(
+  files: WorkspaceFiles,
+  base: string,
+  rel: string,
+  result: WorkspaceGitDiff,
+): Promise<void> {
+  try {
+    const file = await files.read(base, rel, { maxBytes: LIMIT });
+    if (file.truncated)
+      throw new HttpError(413, "diff_too_large", "Git changes exceed the 2 MB preview limit.");
+    source(result, file.data, result.available ? undefined : file.version);
+  } catch (error) {
+    if (!(error instanceof HttpError) || error.code !== "path_not_found") throw error;
+    source(result, Buffer.alloc(0));
   }
 }
 
@@ -100,11 +137,17 @@ export async function readWorkspaceGit(
     patch: "",
     binary: false,
     untracked: false,
+    text: null,
+    version: null,
   };
   try {
-    if ((await git(base, ["rev-parse", "--is-inside-work-tree"])).trim() !== "true") return result;
+    if ((await git(base, ["rev-parse", "--is-inside-work-tree"])).trim() !== "true") {
+      await workingSource(files, base, rel, result);
+      return result;
+    }
   } catch (error) {
-    if (error instanceof HttpError) throw error;
+    if (error instanceof HttpError && error.code !== "git_unavailable") throw error;
+    await workingSource(files, base, rel, result);
     return result;
   }
   result.available = true;
@@ -147,19 +190,25 @@ export async function readWorkspaceGit(
       text = new TextDecoder("utf-8", { fatal: true }).decode(file.data);
     } catch {
       result.binary = true;
+      source(result, file.data);
       return result;
     }
     if (text.includes("\0")) {
       result.binary = true;
+      source(result, file.data);
       return result;
     }
-    if (!text) return result;
+    if (!text) {
+      source(result, file.data);
+      return result;
+    }
     const lines = text.split("\n");
     const newline = text.endsWith("\n");
     if (newline) lines.pop();
     result.patch = `--- /dev/null\n+++ ${JSON.stringify(`b/${rel}`)}\n@@ -0,0 +1,${lines.length} @@\n${lines.map((line) => `+${line}`).join("\n")}\n${newline ? "" : "\\ No newline at end of file\n"}`;
     if (Buffer.byteLength(result.patch) > LIMIT)
       throw new HttpError(413, "diff_too_large", "Git changes exceed the 2 MB preview limit.");
+    source(result, file.data);
     return result;
   }
   result.patch = await git(
@@ -179,5 +228,20 @@ export async function readWorkspaceGit(
     config,
   );
   result.binary = /^Binary files .* differ$/m.test(result.patch);
+  if (scope === "working") await workingSource(files, base, rel, result);
+  else {
+    const entries = (await git(base, ["ls-files", "--stage", "-z", "--", rel], config))
+      .split("\0")
+      .filter(Boolean);
+    const entry = entries
+      .map((line) => /^\d+ ([0-9a-f]+) (\d)\t/.exec(line))
+      .find((match) => match?.[2] === "0");
+    if (entries.length && !entry)
+      throw new HttpError(409, "git_unmerged", "The staged file has unresolved conflicts.");
+    source(
+      result,
+      entry ? await gitBytes(base, ["cat-file", "blob", entry[1]!], config) : Buffer.alloc(0),
+    );
+  }
   return result;
 }
