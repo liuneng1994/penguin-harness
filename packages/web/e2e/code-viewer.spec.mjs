@@ -239,6 +239,8 @@ test("chat code preview and errors across themes", async ({ page }, testInfo) =>
     await page.goto(`${BASE}/chat/${sessionId}`);
     const headerLink = page.getByRole("link", { name: "Expr.h:108–120", exact: true });
     await expect(headerLink).toBeVisible();
+    await headerLink.scrollIntoViewIfNeeded();
+    await expect(headerLink).toBeInViewport();
     // An inline link wraps at phone width; its bounding box includes unrelated text.
     const point = await headerLink.evaluate((el) => {
       const rect = el.getClientRects()[0];

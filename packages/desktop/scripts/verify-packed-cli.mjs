@@ -113,9 +113,11 @@ for (const app of dirs) {
   // failing. Each one is its manifest (package.json) beside the skills or hooks it ships.
   const pluginFiles = pluginNames.map((name) => `node_modules/${name}/package.json`);
   for (const name of pluginNames) {
-    const content = ["skills", "hooks"].map((sub) => path.join(app, "node_modules", name, sub));
+    const content = ["skills", "hooks", "workbenches"].map((sub) =>
+      path.join(app, "node_modules", name, sub),
+    );
     if (!content.some((dir) => fs.existsSync(dir))) {
-      problems.push(`${app}: node_modules/${name} carries neither skills/ nor hooks/.`);
+      problems.push(`${app}: node_modules/${name} carries no skills/, hooks/ or workbenches/.`);
     }
   }
   for (const rel of [
