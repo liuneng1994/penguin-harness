@@ -1,5 +1,6 @@
 /** Private node RPC; Project and admin access are checked at its HTTP entry. */
 import type { AmspRecord, ApprovalDecision, ToolCallPayload } from "@prismshadow/amsp/records";
+import { THINKING_LEVEL_NAMES } from "@prismshadow/penguin-core";
 import type { ControlEnvContext, RunCutoff, ThinkingLevelName } from "@prismshadow/penguin-core";
 
 export interface DelegationOwner extends ControlEnvContext {
@@ -116,7 +117,10 @@ export function readDelegationRequest(value: unknown, projectId: string): Delega
   if (request.operation !== "spawn" && (!request.sessionId || !request.capability))
     throw new Error("Remote session and capability are required.");
   if (raw.thinkingLevel !== undefined) {
-    if (!["none", "low", "medium", "high", "xhigh", "max"].includes(String(raw.thinkingLevel)))
+    if (
+      typeof raw.thinkingLevel !== "string" ||
+      !THINKING_LEVEL_NAMES.includes(raw.thinkingLevel as ThinkingLevelName)
+    )
       throw new Error("Invalid remote thinking level.");
     request.thinkingLevel = raw.thinkingLevel as ThinkingLevelName;
   }
@@ -126,7 +130,7 @@ export function readDelegationRequest(value: unknown, projectId: string): Delega
     request.cursor = raw.cursor as number;
   }
   if (raw.decision !== undefined) {
-    if (!["allow", "deny", "forbidden"].includes(String(raw.decision)))
+    if (typeof raw.decision !== "string" || !["allow", "deny", "forbidden"].includes(raw.decision))
       throw new Error("Invalid approval decision.");
     request.decision = raw.decision as ApprovalDecision;
   }

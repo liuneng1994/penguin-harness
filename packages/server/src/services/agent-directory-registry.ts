@@ -26,7 +26,6 @@ export abstract class AgentDirectoryBinding {
 
 export interface RemoteDelegationClient {
   runner(context: ControlEnvContext): SubagentRunner;
-  isRemote(sessionId: string): boolean;
 }
 @Interface()
 export abstract class AgentDelegationBinding {
@@ -76,8 +75,7 @@ export class AgentDirectoryRegistry {
             : {}),
         };
       },
-      isRemote: (sessionId) =>
-        remoteSessions.has(sessionId) || (client?.isRemote(sessionId) ?? false),
+      isRemote: (sessionId) => remoteSessions.has(sessionId),
       execute: (projectId, request) =>
         host
           ? host(projectId, request)

@@ -2,6 +2,7 @@
  * Behavior tests for run_subagent / input_subagent: foreground delegation, backgrounding,
  * polling, resuming with an appended Prompt, the approval queue, and lifecycle finalization.
  * A completed remote child retains node coordinates for a host follow-up after its foreground call ends.
+ * A remote steering refusal is awaited and reported as busy rather than acknowledged as sent.
  */
 import { afterEach, describe, expect, it } from "vitest";
 import { Environment } from "../src/environment/index.js";
@@ -926,6 +927,45 @@ describe("subagent steering and per-run abort", () => {
       expect(complete.output).toContain("approved:allow");
       expect(consulted).toEqual(["t1"]);
     } finally {
+      env.dispose();
+    }
+  });
+
+  it("reports busy when a remote child asynchronously refuses a steering message", async () => {
+    let finish!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      finish = resolve;
+    });
+    const env = new Environment({
+      workspaceDir: "/tmp/ws",
+      toolConfig: { customTools: [DEF], mcpServers: [] },
+      services: {
+        subagentRunner: {
+          spawn: async () => ({
+            sessionId: HOP,
+            async *run() {
+              yield withOrigin(partialText("delta", "Research started"), HOP);
+              await gate;
+              return null;
+            },
+            steer: async () => false,
+            dispose() {},
+          }),
+        },
+      },
+    });
+    try {
+      for await (const _record of env.executeTool({
+        toolCall: toolCall({
+          name: "run_subagent",
+          arguments: JSON.stringify({ prompt: "Research", run_in_background: true }),
+          toolCallId: "background",
+        }),
+      })) {
+      }
+      expect(await env.sendToBackgroundSubagent(HOP, [userText("A follow-up")])).toBe("busy");
+    } finally {
+      finish();
       env.dispose();
     }
   });

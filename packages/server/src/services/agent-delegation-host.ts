@@ -15,7 +15,6 @@ interface Child {
   agentId: string;
   resuming?: Promise<Session>;
   capability: string;
-  running: boolean;
   abort: AbortController | null;
   records: DelegationBatch["records"];
   cursor: number;
@@ -27,7 +26,9 @@ interface Child {
   wake: Set<() => void>;
   cutoff: DelegationBatch["cutoff"];
   error?: string;
-  lease: ReturnType<typeof setTimeout>;
+  lease?: ReturnType<typeof setTimeout>;
+  spawnKey: string;
+  releaseVersion: number;
   disposed: boolean;
   rounds: Set<string>;
   roundId?: string;
@@ -57,7 +58,7 @@ export class AgentDelegationHost {
       const previous = this.spawns.get(key);
       if (previous) return previous;
       if (this.spawns.size >= 128) throw new Error("Remote subagents are at capacity.");
-      const pending = this.spawn(projectId, request);
+      const pending = this.spawn(key, projectId, request);
       this.spawns.set(key, pending);
       try {
         return await pending;
@@ -74,10 +75,9 @@ export class AgentDelegationHost {
       case "run": {
         if (child.disposed) throw new Error("Remote subagent has been released; resume it first.");
         if (child.rounds.has(request.requestId)) return {};
-        if (child.running) throw new Error("Remote subagent is still running.");
+        if (child.abort || child.resuming) throw new Error("Remote subagent is still running.");
         child.rounds.add(request.requestId);
         child.roundId = request.requestId;
-        child.running = true;
         child.abort = new AbortController();
         child.cutoff = null;
         delete child.error;
@@ -103,19 +103,25 @@ export class AgentDelegationHost {
       case "resume": {
         // Release frees resources but keeps the same Session and its own history/workspace.
         // A Session cannot run after dispose; the injected creator handles resume by id.
-        if (child.running) throw new Error("Remote subagent is still running.");
+        if (child.abort) throw new Error("Remote subagent is still running.");
         if (child.disposed) {
+          const version = child.releaseVersion;
           const pending = (child.resuming ??= this.create(projectId, {
             ...request,
             agentId: child.agentId,
           }));
           try {
-            child.session = await pending;
-            child.disposed = false;
-            if (this.closed || !this.children.has(child.session.sessionId)) {
-              this.release(child);
-              throw new Error("Remote delegation was closed while resuming.");
+            const session = await pending;
+            if (
+              this.closed ||
+              this.children.get(session.sessionId) !== child ||
+              version !== child.releaseVersion
+            ) {
+              session.dispose();
+              throw new Error("Remote subagent was released while resuming.");
             }
+            child.session = session;
+            child.disposed = false;
           } finally {
             delete child.resuming;
           }
@@ -129,7 +135,7 @@ export class AgentDelegationHost {
       case "steer":
         return {
           accepted:
-            child.running &&
+            child.abort !== null &&
             (!request.roundId || request.roundId === child.roundId) &&
             child.session.steer(request.messages ?? []),
         };
@@ -149,7 +155,11 @@ export class AgentDelegationHost {
     this.spawns.clear();
   }
 
-  private async spawn(projectId: string, request: DelegationRequest): Promise<DelegationSpawn> {
+  private async spawn(
+    spawnKey: string,
+    projectId: string,
+    request: DelegationRequest,
+  ): Promise<DelegationSpawn> {
     const session = await this.create(projectId, request);
     if (this.closed) {
       session.dispose();
@@ -160,7 +170,6 @@ export class AgentDelegationHost {
       owner: ownerKey(request),
       agentId: request.agentId!,
       capability: randomUUID(),
-      running: false,
       abort: null,
       records: [],
       cursor: 0,
@@ -168,7 +177,8 @@ export class AgentDelegationHost {
       approvals: new Map(),
       wake: new Set(),
       cutoff: null,
-      lease: setTimeout(() => {}, 0),
+      spawnKey,
+      releaseVersion: 0,
       disposed: false,
       rounds: new Set(),
     };
@@ -190,14 +200,9 @@ export class AgentDelegationHost {
       () => {
         this.release(child);
         this.children.delete(child.session.sessionId);
-        for (const [key, pending] of this.spawns)
-          void pending
-            .then((spawn) => {
-              if (spawn.sessionId === child.session.sessionId) this.spawns.delete(key);
-            })
-            .catch(() => {});
+        this.spawns.delete(child.spawnKey);
       },
-      child.running ? 60_000 : 30 * 60_000,
+      child.abort ? 60_000 : 30 * 60_000,
     );
     child.lease.unref?.();
   }
@@ -209,6 +214,7 @@ export class AgentDelegationHost {
     this.notify(child);
   }
   private release(child: Child): void {
+    child.releaseVersion++;
     this.abort(child);
     if (!child.disposed) {
       child.disposed = true;
@@ -263,7 +269,6 @@ export class AgentDelegationHost {
       this.abort(child);
     } finally {
       await iterator.return(null);
-      child.running = false;
       child.abort = null;
       this.touch(child);
       this.notify(child);
@@ -276,7 +281,7 @@ export class AgentDelegationHost {
       const item = child.records.shift()!;
       child.bytes -= Buffer.byteLength(JSON.stringify(item.record));
     }
-    if (child.running && !child.records.length) {
+    if (child.abort && !child.records.length) {
       await new Promise<void>((resolve) => {
         const wake = () => {
           clearTimeout(timer);
@@ -297,7 +302,7 @@ export class AgentDelegationHost {
     return {
       records,
       approvals: [...child.approvals].map(([id, { toolCall }]) => ({ id, toolCall })),
-      done: !child.running && records.length === child.records.length,
+      done: child.abort === null && records.length === child.records.length,
       cutoff: child.cutoff,
       ...(child.error ? { error: child.error } : {}),
     };

@@ -439,7 +439,7 @@ export class Environment implements EnvironmentInterface {
     const session = this.subagentSessions.bySessionId(childSessionId);
     if (!session) return this.resumeAndRun(childSessionId, messages, opts);
     this.attachHostTap(session);
-    if (session.steer(messages)) return "steered";
+    if (await session.steer(messages)) return "steered";
     if (session.running) return "busy";
     try {
       // A host round is the user's own conversation with the child, not work the model

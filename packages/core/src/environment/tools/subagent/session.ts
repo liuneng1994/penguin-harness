@@ -178,7 +178,7 @@ export class ManagedSubagentSession {
    * session with — see SubagentHandle.steer). False when idle, killed, or the handle predates
    * steering: the caller then falls back to a follow-up run or reports "not running".
    */
-  steer(messages: AmspRecord[]): boolean {
+  async steer(messages: AmspRecord[]): Promise<boolean> {
     if (this.killed || !this.isRunning) return false;
     return this.handle.steer?.(messages) ?? false;
   }

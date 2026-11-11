@@ -6,13 +6,17 @@
  * - A remote qualifier cannot hit the same-named local Agent. Default/off discovery sends no
  *   remote work; foreign Projects, non-admin connections and another parent are refused.
  * - A leaf can reach a sibling through a controller's held relay; a disconnected controller
- *   fails its requests. An interrupted research round denies pending approval and settles.
+ *   fails its requests, then an existing child can continue after controller reconnection.
+ * - Releasing a child while its Session is resuming must not resurrect it.
+ * - A steering request rejected by an already-finished target is reported as unaccepted.
+ *   An interrupted research round denies pending approval and settles.
  */
 import fs from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { afterAll, afterEach, beforeAll, expect, it, vi } from "vitest";
 import {
+  createAgent,
   isCompleteModelMessage,
   saveProjectConfig,
   systemConfigPath,
@@ -25,6 +29,7 @@ import type {
   SubagentHandle,
 } from "@prismshadow/penguin-core";
 import { AgentDirectoryService } from "../src/services/agent-directory.js";
+import { AgentDelegationHost } from "../src/services/agent-delegation-host.js";
 import { AgentDelegationClient } from "../src/services/agent-delegation-client.js";
 import type {
   DelegationCall,
@@ -152,9 +157,7 @@ beforeAll(async () => {
     read: async () => (await (await admin.get(`${base}/local`)).json()) as GlobalAgentCatalog,
     call: async (_nodeId, _projectId, request) => invoke(request),
   });
-  client = new AgentDelegationClient(root, directory, "left", (_projectId, request) =>
-    invoke(request),
-  );
+  client = new AgentDelegationClient(directory, "left", (_projectId, request) => invoke(request));
 });
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -297,6 +300,12 @@ it("enforces Project, admin access and parent ownership at the target API", asyn
   expect((await admin.post(`${base}/delegate`, { ...request, workspaceDir: root })).status).toBe(
     400,
   );
+  expect(
+    (await admin.post(`${base}/delegate`, { ...request, thinkingLevel: ["high"] })).status,
+  ).toBe(400);
+  expect((await admin.post(`${base}/delegate`, { ...request, decision: ["allow"] })).status).toBe(
+    400,
+  );
   const remote = (await invoke(request)) as DelegationSpawn;
   const access = {
     operation: "poll" as const,
@@ -321,26 +330,43 @@ it("reaches a sibling through the same-Project controller relay and refuses a di
       throw new Error("no peers");
     },
   });
-  const stop = leaf.relay(P, "hub").subscribe((event) => {
-    if (event.event !== "agent_discovery_query") return;
-    const query = JSON.parse(event.data) as DirectoryQuery;
-    void (
-      query.rpc
-        ? invoke(query.rpc.request).then((result) => ({ rpc: true, controllerId: "hub", result }))
-        : directory.aggregate(P, query).then((catalog) => ({ ...catalog, currentNodeId: "hub" }))
-    ).then((reply) => leaf.answer(P, query.leaseId, query.requestId, reply));
-  });
-  const remoteClient = new AgentDelegationClient(root, leaf, "leaf", (_projectId, request) =>
+  const connect = () =>
+    leaf.relay(P, "hub").subscribe((event) => {
+      if (event.event !== "agent_discovery_query") return;
+      const query = JSON.parse(event.data) as DirectoryQuery;
+      void (
+        query.rpc
+          ? invoke(query.rpc.request).then((result) => ({ rpc: true, controllerId: "hub", result }))
+          : directory.aggregate(P, query).then((catalog) => ({ ...catalog, currentNodeId: "hub" }))
+      ).then((reply) => leaf.answer(P, query.leaseId, query.requestId, reply));
+    });
+  let stop = connect();
+  const remoteClient = new AgentDelegationClient(leaf, "leaf", (_projectId, request) =>
     invoke(request),
   );
   const handle = await remoteClient
     .runner({ projectId: P, agentId: A, sessionId: randomUUID() })
     .spawn({ nodeId, agentId: A, modelId: "m", provider: "custom" });
   expect((await drain(handle, "Research using the sibling node")).cutoff).toBeNull();
-  handle.dispose();
   stop();
   await expect(leaf.delegationRoute(P, nodeId)).rejects.toThrow("disconnected");
-  leaf.close();
+  stop = connect();
+  try {
+    const followUp = await drain(handle, "Continue after the controller reconnects");
+    expect(followUp.cutoff).toBeNull();
+    expect(
+      followUp.records.some(
+        (record) =>
+          isCompleteModelMessage(record) &&
+          record.payload.type === "text" &&
+          record.payload.text === "Research answer 1",
+      ),
+    ).toBe(true);
+    handle.dispose();
+  } finally {
+    stop();
+    leaf.close();
+  }
 });
 
 it("aborts remote work while the parent is waiting for an approval", async () => {
@@ -507,4 +533,87 @@ it("ignores a delayed abort for an earlier research round", async () => {
     ),
   ).toBe("42");
   await invoke({ ...access, operation: "dispose" });
+});
+
+it("reports remote steering as unaccepted when the target has already finished", async () => {
+  script();
+  let observed!: () => void, deliver!: () => void;
+  const completedAtTarget = new Promise<void>((resolve) => {
+    observed = resolve;
+  });
+  const receive = new Promise<void>((resolve) => {
+    deliver = resolve;
+  });
+  const delayed = new AgentDirectoryService(root, {
+    local: () => ({ nodeId: "left", nodeName: "left" }),
+    peers: () => [{ nodeId, nodeName: "right" }],
+    read: async () => (await (await admin.get(`${base}/local`)).json()) as GlobalAgentCatalog,
+    call: async (_nodeId, _projectId, request) => {
+      const result = await invoke(request);
+      if (request.operation === "poll" && (result as { done: boolean }).done) {
+        observed();
+        await receive;
+      }
+      return result;
+    },
+  });
+  const delayedClient = new AgentDelegationClient(delayed, "left", (_projectId, request) =>
+    invoke(request),
+  );
+  const handle = await delayedClient
+    .runner({ projectId: P, agentId: A, sessionId: randomUUID() })
+    .spawn({ nodeId, agentId: A, modelId: "m", provider: "custom" });
+  const result = drain(handle, "Research data");
+  await completedAtTarget;
+  try {
+    expect(await handle.steer!([userText("A late follow-up")])).toBe(false);
+  } finally {
+    deliver();
+    await result;
+    handle.dispose();
+    delayed.close();
+  }
+});
+
+it("does not resurrect a remote child released while resume is pending", async () => {
+  const agent = await createAgent({ root: app.root, projectId: P, agentId: A });
+  let entered!: () => void, release!: () => void;
+  const resuming = new Promise<void>((resolve) => {
+    entered = resolve;
+  });
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const host = new AgentDelegationHost(async (_projectId, request) => {
+    if (request.operation === "resume") {
+      entered();
+      await gate;
+    }
+    return agent.createSession({
+      sessionId: request.sessionId,
+      subagentDepth: 1,
+      source: "subagent",
+    });
+  });
+  const request: DelegationRequest = {
+    operation: "spawn",
+    owner,
+    requestId: randomUUID(),
+    agentId: A,
+  };
+  const spawn = (await host.execute(P, request)) as DelegationSpawn;
+  const access = { ...request, sessionId: spawn.sessionId, capability: spawn.capability };
+  await host.execute(P, { ...access, operation: "dispose" });
+  const revived = host.execute(P, { ...access, operation: "resume" });
+  await resuming;
+  await host.execute(P, { ...access, operation: "dispose" });
+  release();
+  try {
+    await expect(revived).rejects.toThrow("released while resuming");
+    await expect(
+      host.execute(P, { ...access, operation: "run", messages: [userText("Research")] }),
+    ).rejects.toThrow("released");
+  } finally {
+    host.close();
+  }
 });

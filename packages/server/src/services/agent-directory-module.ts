@@ -1,4 +1,4 @@
-/** The host's read-only discovery extension, scoped to the Session's Project. */
+/** Project discovery and delegation over authenticated node connections. */
 import { Bind, Module, Use } from "@prismshadow/penguin-core/kernel";
 import type { ClassCtx } from "@prismshadow/penguin-core/kernel";
 import { Hono } from "hono";
@@ -40,7 +40,6 @@ export class AgentDirectoryModule {
   setup({ effect }: ClassCtx) {
     const service = new AgentDirectoryService(this.paths.root, this.transport);
     const client = new AgentDelegationClient(
-      this.paths.root,
       service,
       () => this.transport.local().nodeId,
       (projectId, request) => this.delegation.execute(projectId, request),

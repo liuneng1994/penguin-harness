@@ -1,8 +1,5 @@
 /** Adapts node RPC to the existing subagent lifecycle and parent approval callback. */
 import { randomUUID } from "node:crypto";
-import fs from "node:fs/promises";
-import { parse } from "yaml";
-import { systemConfigPath } from "@prismshadow/penguin-core";
 import { withOrigin } from "@prismshadow/amsp/records";
 import type { ControlEnvContext, SubagentHandle, SubagentRunner } from "@prismshadow/penguin-core";
 import type { AgentDirectoryService } from "./agent-directory.js";
@@ -24,7 +21,6 @@ interface RemoteChild {
 export class AgentDelegationClient {
   private readonly children = new Map<string, { owner: string; remote: RemoteChild }>();
   constructor(
-    private readonly root: string,
     private readonly directory: AgentDirectoryService,
     private readonly nodeId: string | (() => string),
     private readonly localCall: (
@@ -32,29 +28,23 @@ export class AgentDelegationClient {
       request: Parameters<DelegationCall>[0],
     ) => Promise<unknown>,
   ) {}
-  isRemote(sessionId: string): boolean {
-    return this.children.has(sessionId);
-  }
   runner(context: ControlEnvContext): SubagentRunner {
     const localNodeId = typeof this.nodeId === "function" ? this.nodeId() : this.nodeId;
     const owner: DelegationOwner = { ...context, nodeId: localNodeId };
-    const key = JSON.stringify(owner);
+    const key = JSON.stringify([owner.projectId, owner.agentId, owner.sessionId, owner.nodeId]);
     return {
       spawn: async (input) => {
-        const config = parse(
-          await fs.readFile(
-            systemConfigPath(this.root, context.projectId, context.agentId),
-            "utf8",
-          ),
-        );
-        if (config?.global_agent_discovery !== true)
-          throw new Error("Global Agent discovery is disabled for this Agent.");
         if (!input.nodeId || !input.agentId)
           throw new Error("Remote delegation requires node_id and agent_id.");
-        const catalog = await this.directory.forAgent(context.projectId, context.agentId, {
-          nodeId: input.nodeId,
-          agentId: input.agentId,
-        });
+        const catalog = await this.directory.forAgent(
+          context.projectId,
+          context.agentId,
+          {
+            nodeId: input.nodeId,
+            agentId: input.agentId,
+          },
+          true,
+        );
         if (
           !catalog.agents.some(
             (agent) =>
@@ -109,7 +99,6 @@ export class AgentDelegationClient {
     let sent = false,
       disposed = false,
       running = false;
-    let cursor = remote.cursor;
     let roundId: string | undefined;
     const call = (
       operation: Parameters<DelegationCall>[0]["operation"],
@@ -142,26 +131,25 @@ export class AgentDelegationClient {
           void call("abort", { roundId }).catch(() => {});
         };
         signal?.addEventListener("abort", onAbort, { once: true });
-        const decisions = new Map<string, Promise<unknown>>();
+        const decisions = new Set<string>();
         let finished = false;
         running = true;
         try {
           await call("run", { messages, requestId: roundId });
           if (signal?.aborted) onAbort();
           for (;;) {
-            const batch = (await call("poll", { cursor })) as DelegationBatch;
+            const batch = (await call("poll", { cursor: remote.cursor })) as DelegationBatch;
             if (!batch || !Array.isArray(batch.records) || !Array.isArray(batch.approvals))
               throw new Error("Invalid remote subagent output.");
             for (const item of batch.records) {
               if (
                 !Number.isSafeInteger(item.cursor) ||
-                item.cursor <= cursor ||
+                item.cursor <= remote.cursor ||
                 !item.record ||
                 item.record.origin?.[0] !== spawn.sessionId
               )
                 throw new Error("Invalid remote subagent record.");
-              cursor = item.cursor;
-              remote.cursor = cursor;
+              remote.cursor = item.cursor;
               yield item.record;
             }
             for (const approval of batch.approvals)
@@ -178,7 +166,7 @@ export class AgentDelegationClient {
                   )
                   .catch(() => "deny" as const)
                   .then((decision) => call("approve", { approvalId: approval.id, decision }));
-                decisions.set(approval.id, pending);
+                decisions.add(approval.id);
                 void pending.catch(() => {});
               }
             if (batch.done) {
@@ -194,10 +182,12 @@ export class AgentDelegationClient {
           if (!finished) await call("abort", { roundId }).catch(() => {});
         }
       },
-      steer(messages) {
+      async steer(messages) {
         if (!running || disposed) return false;
-        void call("steer", { messages, roundId }).catch(() => {});
-        return true;
+        const result = (await call("steer", { messages, roundId })) as { accepted: boolean };
+        if (typeof result?.accepted !== "boolean")
+          throw new Error("Invalid remote steering response.");
+        return result.accepted;
       },
       setThinkingLevel(thinkingLevel) {
         void call("thinking", { thinkingLevel }).catch(() => {});

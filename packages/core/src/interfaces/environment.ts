@@ -133,11 +133,11 @@ export interface SubagentHandle {
   /**
    * Queues a steering message for the child Session's running Task (the same mechanism as a
    * user steering the main session: delivered as a `[user_steering]` user message at the
-   * child's next input assembly). Returns false when no run is in flight — the caller then
-   * falls back to a follow-up run. Optional so older embedders' handles keep compiling; a
+   * child's next input assembly). False when idle or delivery was refused, so the caller can
+   * fall back to a follow-up run. Remote handles acknowledge delivery asynchronously. Optional so older embedders' handles keep compiling; a
    * handle without it simply reports "not steerable".
    */
-  steer?(messages: AmspRecord[]): boolean;
+  steer?(messages: AmspRecord[]): boolean | Promise<boolean>;
   /** Pins the child Session's thinking level (`Session.thinkingLevel`: applied from its next LLM request) — a host panel's pick on a live child. Optional, like `steer`. */
   setThinkingLevel?(level: ThinkingLevelName): void;
   /** Releases runtime resources held by the child Session (e.g. its managed command sessions). Idempotent. */

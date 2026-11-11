@@ -134,12 +134,13 @@ export class AgentDirectoryService {
     projectId: string,
     agentId: string,
     target: DirectoryTarget = {},
+    requireGlobal = false,
   ): Promise<GlobalAgentCatalog> {
     const config = parse(
       await fs.readFile(systemConfigPath(this.root, projectId, agentId), "utf8"),
     );
     if (config?.global_agent_discovery !== true) {
-      if (target.nodeId && target.nodeId !== this.network.local().nodeId)
+      if (requireGlobal || (target.nodeId && target.nodeId !== this.network.local().nodeId))
         throw new Error("Global Agent discovery is disabled for this Agent.");
       return this.local(projectId, target.agentId);
     }
@@ -231,7 +232,6 @@ export class AgentDirectoryService {
         {
           ...agent,
           local: agent.nodeId === own.nodeId,
-          canDelegate: agent.canDelegate,
         },
       ]),
     );
@@ -262,7 +262,9 @@ export class AgentDirectoryService {
         const catalog = await this.query(lease, { nodeId });
         if (!catalog.agents.some((agent) => agent.nodeId === nodeId && agent.canDelegate)) continue;
         return async (request) => {
-          const reply = await this.queryRpc(lease, { nodeId, request });
+          const current = this.parents.get(projectId)?.get(lease.controllerId);
+          if (!current) throw new Error("Controller disconnected.");
+          const reply = await this.queryRpc(current, { nodeId, request });
           if (reply.error) throw new Error(reply.error);
           return reply.result;
         };
