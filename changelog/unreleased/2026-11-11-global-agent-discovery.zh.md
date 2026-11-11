@@ -3,6 +3,7 @@
 Date: 2026-11-11
 Type: Added
 Scope: core, server, web
+PR: [#10](https://github.com/liuneng1994/penguin-harness/pull/10)
 
 [English](2026-11-11-global-agent-discovery.md)
 
