@@ -89,6 +89,12 @@
   }
 }
 
+/* Wide chats use the available width, retaining a small gutter for the conversation rail. */
+.chat-reading-column {
+  width: min(100%, max(48rem, calc(100% - 7rem)));
+  margin-inline: auto;
+}
+
 /* The preview is an interior row of Appearance, so only the surrounding settings group's
    outer ends have corners. A nested last row must not acquire its own bottom corners. */
 .background-settings-details .ui-field {

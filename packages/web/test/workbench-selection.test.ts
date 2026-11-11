@@ -4,6 +4,8 @@
  * - Changing Agent hides previous tabs immediately and ignores their late response.
  * - A full-app return restores its tab after loading; a fresh chat route starts on Chat.
  * - Removing the selected tab forgets it even if a later refresh brings it back.
+ * - Citation-only code previews remain available to the chat without offering a standalone tab;
+ *   returning from that page falls back to Chat while ordinary workbench tabs still work.
  */
 import { createElement as h } from "react";
 import { afterEach, expect, it } from "vitest";
@@ -41,6 +43,7 @@ function Page({
     "div",
     null,
     h("output", { "aria-label": "active" }, wb.active ?? "chat"),
+    h("output", { "aria-label": "code-preview" }, wb.codePreviewTab?.src ?? ""),
     ...wb.tabs.map((tab) =>
       h("button", { key: tab.tabId, onClick: () => wb.setActive(tab.tabId) }, tab.title),
     ),
@@ -48,6 +51,34 @@ function Page({
 }
 const selected = () => document.querySelector("output")!.textContent;
 afterEach(unmountAll);
+it("keeps the code-preview renderer available while excluding it from standalone selection", async () => {
+  stubFetch(() =>
+    json({
+      workbenches: [
+        {
+          ...result.workbenches[0],
+          tabs: [
+            ...result.workbenches[0]!.tabs,
+            {
+              id: "demo.code",
+              key: "code-preview",
+              title: "Code",
+              renderer: { iframe: { src: "/code" } },
+            },
+          ],
+        },
+      ],
+    }),
+  );
+  await mount(h(Page, { agent: "general", initial: "demo/code-preview" }));
+  expect(document.querySelector('[aria-label="code-preview"]')!.textContent).toBe("/code");
+  expect([...document.querySelectorAll("button")].map((node) => node.textContent)).toEqual([
+    "Board",
+  ]);
+  expect(selected()).toBe("chat");
+  await click(button("Board"));
+  expect(selected()).toBe("demo/main");
+});
 it("hides the old Agent's tabs immediately and ignores its late response", async () => {
   let finish!: (response: Response) => void;
   stubFetch((request) =>

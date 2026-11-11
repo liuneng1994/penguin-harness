@@ -660,7 +660,7 @@ export function MessageStream({
         onTouchEnd={() => follow.touchEnd()}
         className="anim-fade h-full overflow-y-auto px-4 py-4 md:px-6"
       >
-        <div className="mx-auto max-w-3xl">
+        <div className="chat-reading-column">
           {/* Top-of-history affordance: spinner while the previous window loads, a notice with
               Retry after a failure, and — once at least one window was backfilled — a quiet
               beginning-of-conversation marker when there is nothing older. Idle-with-more shows

@@ -411,12 +411,9 @@ function SubagentComposer({
   };
 
   return (
-    <div className="shrink-0 border-t border-gray-100 px-2 pb-2 pt-2 dark:border-gray-800/60">
-      {/* The transcript's reading column (MessageStream caps its messages at max-w-3xl), as the
-          main conversation's composer does: a dock at full screen is as wide as the chat column
-          or wider, and the composer must line up with the messages above it rather than span
-          the surface. A docked panel is narrower than the cap, so there it changes nothing. */}
-      <div className="mx-auto max-w-3xl">
+    <div className="shrink-0 border-t border-gray-100 px-4 pb-2 pt-2 md:px-6 dark:border-gray-800/60">
+      {/* The composer follows the transcript's reading width in both docked and full views. */}
+      <div className="chat-reading-column">
         <ChatInput
           variant="subagent"
           controlRef={controlRef}
