@@ -399,6 +399,8 @@ export interface SystemConfig {
   description?: string;
   /** Who made the Agent (see AgentAuthor); read through `agentAuthorOf`, absent means `user`. */
   author?: AgentAuthor;
+  /** Discover peers in this Project across connected nodes only when explicitly enabled. */
+  global_agent_discovery?: boolean;
   /** Agent State version number: a natural number, 1 on creation, incremented on successful optimization; a missing field is treated as 1. */
   version?: number;
   /**

@@ -8,6 +8,8 @@
  * - Given a model refreshing or inspecting an Agent, the tool returns current roles and enabled shared/private skills, excluding secrets.
  * - Given invalid, absent or foreign targets, discovery refuses them without creating an Agent.
  * - Given a model's own chosen target, delegation passes that choice to the runner without routing by task keywords.
+ * - Global discovery is opt-in; the host is never queried with the switch off, and enabled Sessions receive node-qualified peers.
+ * - A remote qualifier never silently starts a local Agent with the same id.
  */
 import fs from "node:fs/promises";
 import { readFileSync, writeFileSync } from "node:fs";
@@ -87,20 +89,51 @@ afterEach(async () => {
 });
 
 /** One transport fake captures real Agent request assembly and completes each turn. */
-function captureRequests() {
+function captureRequests(discover = false, delegated = false) {
   const requests: { tools: unknown[]; messages: unknown[] }[] = [];
   vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, init) => {
     requests.push(JSON.parse(String(init?.body)));
+    const toolTurn = discover && requests.length === 1;
     const chunk = {
       id: "reply",
       object: "chat.completion.chunk",
       model: "m",
       created: 0,
-      choices: [{ index: 0, delta: { role: "assistant", content: "Done" }, finish_reason: null }],
+      choices: [
+        {
+          index: 0,
+          delta: toolTurn
+            ? {
+                role: "assistant",
+                tool_calls: [
+                  {
+                    index: 0,
+                    id: "discover",
+                    type: "function",
+                    function: {
+                      name: delegated ? "run_subagent" : "list_agents",
+                      arguments: JSON.stringify(
+                        delegated
+                          ? {
+                              description: "Delegate remote research",
+                              node_id: "peer",
+                              agent_id: "writer",
+                              prompt: "Research the data",
+                            }
+                          : { description: "Discover peers" },
+                      ),
+                    },
+                  },
+                ],
+              }
+            : { role: "assistant", content: "Done" },
+          finish_reason: null,
+        },
+      ],
     };
     const stop = {
       ...chunk,
-      choices: [{ index: 0, delta: {}, finish_reason: "stop" }],
+      choices: [{ index: 0, delta: {}, finish_reason: toolTurn ? "tool_calls" : "stop" }],
       usage: { prompt_tokens: 100, completion_tokens: 1, total_tokens: 101 },
     };
     return new Response(
@@ -115,7 +148,8 @@ function captureRequests() {
 
 async function completedRun(session: Session, input = "Continue") {
   const records: AmspRecord[] = [];
-  for await (const record of session.run([userText(input)])) records.push(record);
+  for await (const record of session.run([userText(input)], { approve: allowAll }))
+    records.push(record);
   return records;
 }
 
@@ -139,6 +173,128 @@ async function openedTools(depth = 0): Promise<ToolDefinition[]> {
 function argsOf(tool: ToolDefinition): Record<string, Record<string, unknown>> {
   return tool.parameters!.properties as Record<string, Record<string, unknown>>;
 }
+
+it.each([false, true])(
+  "queries the host only when global discovery is enabled (%s)",
+  async (enabled) => {
+    const file = systemConfigPath(root, P, A);
+    const stored = JSON.parse(await fs.readFile(file, "utf8"));
+    if (enabled)
+      await fs.writeFile(file, JSON.stringify({ ...stored, global_agent_discovery: true }));
+    const requests = captureRequests(true);
+    let queries = 0;
+    const agent = await createAgent({
+      root,
+      projectId: P,
+      agentId: A,
+      assembly: {
+        agentDiscovery: (_ctx, local) => ({
+          ...local,
+          global: async () => {
+            queries++;
+            return {
+              projectId: P,
+              currentNodeId: "hub",
+              unavailableNodes: [],
+              agents: [
+                {
+                  agentId: "writer",
+                  name: "Remote Writer",
+                  description: "Writes",
+                  nodeId: "peer",
+                  nodeName: "Node B",
+                  local: false,
+                  canDelegate: false,
+                },
+              ],
+            };
+          },
+        }),
+      },
+    });
+    const session = await agent.createSession({ workspaceDir: root });
+    try {
+      const records = await completedRun(session);
+      expect(outputs(records)[0]!.output).toContain('"agents"');
+      expect(queries).toBe(enabled ? 1 : 0);
+      const result = JSON.parse(outputs(records)[0]!.output);
+      if (enabled) expect(result.agents[0]).toMatchObject({ node_id: "peer", can_delegate: false });
+      else
+        expect(result.agents.map((item: { agent_id: string }) => item.agent_id)).toEqual([
+          A,
+          "reviewer",
+          "writer",
+        ]);
+      const definition = (requests[0]!.tools as Array<{ function: ToolDefinition }>).find(
+        (tool) => tool.function.name === "list_agents",
+      )!.function;
+      expect(argsOf(definition).node_id !== undefined).toBe(enabled);
+    } finally {
+      await session.dispose();
+    }
+  },
+);
+
+it.each([false, true])(
+  "dispatches a node-qualified research task only with global discovery enabled (%s)",
+  async (enabled) => {
+    const file = systemConfigPath(root, P, A);
+    const stored = JSON.parse(await fs.readFile(file, "utf8"));
+    await fs.writeFile(file, JSON.stringify({ ...stored, global_agent_discovery: enabled }));
+    const requests = captureRequests(true, true);
+    const delegated: unknown[] = [];
+    const agent = await createAgent({
+      root,
+      projectId: P,
+      agentId: A,
+      assembly: {
+        agentDiscovery: (_ctx, local) => ({
+          ...local,
+          global: async () => ({
+            projectId: P,
+            currentNodeId: "hub",
+            agents: [],
+            unavailableNodes: [],
+          }),
+        }),
+        remoteSubagents: () => ({
+          spawn: async (input) => {
+            delegated.push(input);
+            return {
+              sessionId: "remote-child",
+              async *run() {
+                yield withOrigin(partialText("delta", "Remote research answer"), "remote-child");
+                yield withOrigin(assistantText("Remote research answer"), "remote-child");
+                return null;
+              },
+              dispose() {},
+            };
+          },
+        }),
+      },
+    });
+    const session = await agent.createSession({ workspaceDir: root });
+    try {
+      const records = await completedRun(session);
+      expect(delegated).toHaveLength(enabled ? 1 : 0);
+      if (enabled) {
+        expect(delegated[0]).toMatchObject({
+          nodeId: "peer",
+          agentId: "writer",
+          modelId: "m",
+          provider: "custom",
+        });
+        expect(outputs(records)[0]!.output).toContain("Remote research answer");
+      } else expect(outputs(records)[0]!.status).toBe("fatal");
+      const tool = (requests[0]!.tools as Array<{ function: ToolDefinition }>).find(
+        (entry) => entry.function.name === "run_subagent",
+      )!.function;
+      expect(argsOf(tool).node_id !== undefined).toBe(enabled);
+    } finally {
+      session.dispose();
+    }
+  },
+);
 
 async function runScript(
   script: ScriptedReply[],
@@ -505,5 +661,35 @@ describe("Agent discovery", () => {
           output.status === "completed" && output.output.includes("Completed the assigned task"),
       ),
     ).toBe(true);
+  });
+  it("refuses a remote qualifier before starting a same-named local Agent", async () => {
+    let starts = 0;
+    const { records } = await runScript(
+      [
+        {
+          toolCalls: [
+            {
+              id: "remote",
+              name: "run_subagent",
+              args: {
+                description: "Delegate to peer",
+                prompt: "Review",
+                agent_id: "writer",
+                node_id: "peer",
+              },
+            },
+          ],
+        },
+        { text: "Done" },
+      ],
+      {
+        spawn: async () => {
+          starts++;
+          throw new Error("must not start");
+        },
+      },
+    );
+    expect(starts).toBe(0);
+    expect(outputs(records)[0]!.status).toBe("fatal");
   });
 });

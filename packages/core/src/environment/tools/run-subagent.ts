@@ -73,6 +73,18 @@ export function createSubagentTool(
       const fail = function* (msg: string): Generator<AmspRecord> {
         yield partialToolCallOutput({ eventType: "delta", output: msg, toolCallId });
       };
+      if (
+        args.node_id !== undefined &&
+        (typeof args.node_id !== "string" || !args.node_id.trim())
+      ) {
+        yield* fail("[run_subagent error: node_id must be a non-empty node id from list_agents]");
+        return { status: "fatal" };
+      }
+      const nodeId = args.node_id as string | undefined;
+      if (nodeId !== undefined && !services?.agentDiscovery?.global) {
+        yield* fail("[run_subagent error: global Agent discovery is disabled or unavailable]");
+        return { status: "fatal" };
+      }
 
       // Missing arguments / unconfigured services both collapse to an explanatory output rather
       // than throwing (consistent with other tools).
@@ -140,6 +152,7 @@ export function createSubagentTool(
       let session: ManagedSubagentSession;
       try {
         const handle = await runner.spawn({
+          ...(nodeId !== undefined ? { nodeId } : {}),
           ...(agentId !== undefined ? { agentId } : {}),
           ...(modelId !== undefined ? { modelId } : {}),
           ...(provider !== undefined ? { provider } : {}),
@@ -148,6 +161,7 @@ export function createSubagentTool(
         session = new ManagedSubagentSession(handle, {
           // Spawn-time owner for the revival tombstone (undefined = a self-spawn of this Agent).
           ...(agentId !== undefined ? { resumeAgentId: agentId } : {}),
+          ...(nodeId !== undefined ? { resumeNodeId: nodeId } : {}),
         });
         // Live index from the moment of spawn (before any registration): host paths — the
         // subagents panel's steer/abort — reach this child by its session id even while it

@@ -1978,6 +1978,9 @@ export const en: Strings = {
     tabPrompt: "System Prompt",
     tabMemory: "Memory",
     tabRuntime: "Runtime",
+    globalAgentDiscovery: "Global discovery",
+    globalAgentDiscoveryInfo:
+      "Discover and delegate to Agents in this same Project on connected nodes. Off by default: discovery stays on this node. Remote research runs in an empty temporary workspace.",
     tabTools: "Tools",
     tabPlugins: "Plugins",
     tabVault: "Vault",

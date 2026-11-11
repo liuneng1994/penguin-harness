@@ -33,6 +33,11 @@ export class SubagentSessionManager {
    * access; `subagent_id` is still allocated only at background registration.
    */
   private readonly live = new Set<ManagedSubagentSession>();
+  private readonly known = new Map<string, { agentId?: string; nodeId?: string }>();
+  /** Spawn-time coordinates for host follow-ups, including completed foreground children. */
+  resumeInfoBySessionId(sessionId: string): { agentId?: string; nodeId?: string } | undefined {
+    return this.known.get(sessionId);
+  }
   /** Single aggregate run-state listener (the Environment's notifier); pinged on any child's run start/settle. */
   private stateListener: (() => void) | null = null;
   /** Host fallback approval sink, applied to every tracked session (see EnvironmentInterface.setSubagentApprovalFallback). */
@@ -62,6 +67,10 @@ export class SubagentSessionManager {
   /** Enters a freshly spawned session into the live index and wires its run-state pings into the aggregate listener. */
   track(session: ManagedSubagentSession): void {
     this.live.add(session);
+    this.known.set(session.sessionId, {
+      ...(session.resumeAgentId !== undefined ? { agentId: session.resumeAgentId } : {}),
+      ...(session.resumeNodeId !== undefined ? { nodeId: session.resumeNodeId } : {}),
+    });
     session.onStateChange(() => this.stateListener?.());
     if (this.approvalFallback) session.setFallbackApprovalSink(this.approvalFallback);
   }
@@ -150,15 +159,21 @@ export class SubagentSessionManager {
     this.registered.set(id, {
       sessionId: session.sessionId,
       ...(session.resumeAgentId !== undefined ? { agentId: session.resumeAgentId } : {}),
+      ...(session.resumeNodeId !== undefined ? { nodeId: session.resumeNodeId } : {}),
     });
     return id;
   }
 
   /** Ever-registered index by subagent_id (see register): the resume clue for ids whose session left the registry. */
-  private readonly registered = new Map<string, { sessionId: string; agentId?: string }>();
+  private readonly registered = new Map<
+    string,
+    { sessionId: string; agentId?: string; nodeId?: string }
+  >();
 
   /** The resume clue for a subagent_id no longer in the registry; undefined for ids this parent session never allocated. */
-  releasedInfo(subagentId: string): { sessionId: string; agentId?: string } | undefined {
+  releasedInfo(
+    subagentId: string,
+  ): { sessionId: string; agentId?: string; nodeId?: string } | undefined {
     return this.registered.get(subagentId);
   }
 

@@ -254,6 +254,7 @@ export class AgentConfigService implements AgentConfig {
     // without knowing core's KERNEL_VERSION.
     const kernelVersion = typeof parsed.kernel_version === "string" ? parsed.kernel_version : null;
     const config: AgentConfigDto = {
+      globalAgentDiscovery: parsed.global_agent_discovery === true,
       ...(typeof parsed.name === "string" ? { name: parsed.name } : {}),
       ...(typeof parsed.description === "string" ? { description: parsed.description } : {}),
       author: agentAuthorOf(parsed),
@@ -392,6 +393,7 @@ export class AgentConfigService implements AgentConfig {
       optionalNumber(cfg, "maxTurns", { integer: true, positiveOrMinusOne: true }),
     );
 
+    setIfProvided(["global_agent_discovery"], optionalBoolean(cfg, "globalAgentDiscovery"));
     if (cfg.model !== undefined) {
       const model = asRecord(cfg.model);
       setIfProvided(

@@ -1654,6 +1654,8 @@ export interface AgentConfigDto {
   description?: string;
   /** The effective author: the stored value, `user` when the field is missing or unknown. This server always sends it; absent (a machine on an older server) reads as `user`. */
   author?: AgentAuthor;
+  /** Missing in older responses means local discovery only. */
+  globalAgentDiscovery?: boolean;
   /** Agent State version number (treated as 1 if missing; shown in the settings page overview). */
   version: number;
   /** The stored kernel stamp (`kernel_version`): which defaults generation the config is based on; null when the config predates the kernel-version mechanism. */
@@ -1724,6 +1726,7 @@ export interface AgentConfigUpdateRequest {
     name?: string;
     description?: string;
     author?: AgentAuthor;
+    globalAgentDiscovery?: boolean;
     systemPrompt?: string;
     maxTurns?: number;
     model?: AgentModelConfigDto;

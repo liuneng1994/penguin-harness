@@ -80,10 +80,12 @@ export function createInputSubagentTool(
           try {
             const handle = await runner.resume({
               sessionId: clue.sessionId,
+              ...(clue.nodeId !== undefined ? { nodeId: clue.nodeId } : {}),
               ...(clue.agentId !== undefined ? { agentId: clue.agentId } : {}),
             });
             const revived = new ManagedSubagentSession(handle, {
               ...(clue.agentId !== undefined ? { resumeAgentId: clue.agentId } : {}),
+              ...(clue.nodeId !== undefined ? { resumeNodeId: clue.nodeId } : {}),
             });
             manager.track(revived);
             manager.register(revived); // The id derives from the session tail: same handle as before.
@@ -131,7 +133,7 @@ export function createInputSubagentTool(
       // false on an idle child, so the running/idle race settles on whichever side is true
       // at delivery.
       if (!empty) {
-        if (session.steer([userText(prompt, "parent_agent")])) {
+        if (await session.steer([userText(prompt, "parent_agent")])) {
           yield delta(`[steering message queued for subagent ${subagentId}]\n`);
         } else if (!session.running) {
           // startRun expresses edge cases like already-disposed via throw, collapsed here into failed (the tool never throws outward).

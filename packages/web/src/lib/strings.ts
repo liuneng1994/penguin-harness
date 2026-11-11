@@ -2115,6 +2115,9 @@ export const zh = {
     tabPrompt: "系统提示词",
     tabMemory: "记忆",
     tabRuntime: "运行参数",
+    globalAgentDiscovery: "全局发现",
+    globalAgentDiscoveryInfo:
+      "开启后，可发现并委派同一 Project 在已连接节点上的 Agent。默认仅发现本机；远程调研使用独立的空临时工作区。",
     tabTools: "工具",
     tabPlugins: "插件",
     tabVault: "密钥保险柜",
