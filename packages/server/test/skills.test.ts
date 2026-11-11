@@ -2,8 +2,8 @@
  * The Skill routes: the library catalogue, installs into an Agent, zip archives and the Agent
  * list's update badge.
  *
- * - Any signed-in user reads the catalogue (categories with plugin metadata, skills and hook
- *   points, no bodies) and what a plugin ships, keyed by path.
+ * - Any signed-in user reads the catalogue (categories with plugin metadata, skills, hook
+ *   points and workbenches, no bodies) and what a plugin ships, keyed by path.
  * - Members install and uninstall; installs land verbatim, the directory goes on uninstall, and
  *   a reinstall restores hand-edited content. An unknown skill is a 404 with nothing half
  *   installed, a malformed body a 400; outsiders and a missing Agent get 404.
@@ -127,7 +127,7 @@ describe("skills api", () => {
     expect(res.status).toBe(201);
   }
 
-  it("GET /api/plugins: categories with plugin metadata, skills and hook points, without sending bodies", async () => {
+  it("GET /api/plugins: categories with plugin metadata, skills, hook points and workbenches, without sending bodies", async () => {
     const res = await member.get("/api/plugins");
     expect(res.status).toBe(200);
     const body = (await res.json()) as PluginLibraryResponse;
@@ -153,7 +153,12 @@ describe("skills api", () => {
       expect(plugin.version, plugin.name).toBe(libraryPlugin(plugin.name)!.version);
       expect(plugin.version, plugin.name).toMatch(/^\d+\.\d+\.\d+/);
       expect(plugin.source, plugin.name).toBe("builtin");
-      expect(plugin.skills.length > 0 || plugin.hooks.length > 0, plugin.name).toBe(true);
+      expect(
+        plugin.skills.length > 0 ||
+          plugin.hooks.length > 0 ||
+          (plugin.workbenches?.length ?? 0) > 0,
+        plugin.name,
+      ).toBe(true);
       for (const skill of plugin.skills) {
         // The short description (preferred in compact spots like cards) is passed through for
         // every returned skill; a skill's icon is its plugin's, sent once on the plugin item;
@@ -175,6 +180,11 @@ describe("skills api", () => {
     });
     expect(plugins.find((p) => p.name === "humanizer")).toMatchObject({
       hooks: [],
+    });
+    expect(plugins.find((p) => p.name === "code-viewer")).toMatchObject({
+      skills: [],
+      hooks: [],
+      workbenches: [{ name: "code-viewer", version: expect.any(String) }],
     });
   });
 

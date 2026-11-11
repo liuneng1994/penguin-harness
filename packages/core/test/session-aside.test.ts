@@ -3,6 +3,7 @@
  *   write their answers to the main Trace or send them with the next main task.
  * - Given resumed history before the main engine starts, a side question reads visible main
  *   text and tool results in order, without reasoning, fidelity or child-origin messages.
+ * - A reading question can bound recent main context without changing the main Trace.
  * - Given a cancelled question, no model client is created and the result is aborted.
  * - Given a Session without a bare model factory, the question fails without a main run.
  */
@@ -98,6 +99,31 @@ describe("side questions", () => {
     await drain(session.streamAside("third question"));
     expect(JSON.stringify(sideInputs[2])).toContain("next main task");
     expect(JSON.stringify(sideInputs[2])).not.toContain("private answer");
+  });
+  it("bounds recent main context only for a reading question", async () => {
+    const inputs: AmspRecord[][] = [];
+    const history = [
+      userText("earlier-context-" + "x".repeat(4000)),
+      assistantText("recent-main-reply"),
+    ];
+    const session = new Session({
+      ...base,
+      resumedHistory: history,
+      createBareLLM: () => ({
+        async *streamGenerate({ newMessages }) {
+          inputs.push(newMessages);
+          yield assistantText("aside answer");
+          return { status: "completed" };
+        },
+      }),
+    });
+    await drain(session.streamAside("reading question", undefined, { maxContextChars: 200 }));
+    expect(JSON.stringify(inputs[0])).toContain("recent-main-reply");
+    expect(JSON.stringify(inputs[0])).not.toContain("earlier-context-");
+    await drain(session.streamAside("ordinary question"));
+    expect(JSON.stringify(inputs[1])).toContain("earlier-context-");
+    await drain(session.streamAside("short context", undefined, { maxContextChars: 10000 }));
+    expect(JSON.stringify(inputs[2])).toContain("earlier-context-");
   });
   it("reads resumed visible main context without starting or writing the main engine", async () => {
     const inputs: AmspRecord[][] = [];

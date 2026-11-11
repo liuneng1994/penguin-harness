@@ -269,7 +269,11 @@ export interface RuntimeSession {
   /** A tool's permission level from the running context's toolset (core `Session.toolPermission`; strict-tier — rebuilt at rotation). */
   toolPermission(name: string): "r" | "rw" | undefined;
   /** A tool-free side stream, isolated from the main Session history. */
-  streamAside?(prompt: string, signal?: AbortSignal): AsyncGenerator<AmspRecord, LLMOutcome>;
+  streamAside?(
+    prompt: string,
+    signal?: AbortSignal,
+    options?: { maxContextChars?: number },
+  ): AsyncGenerator<AmspRecord, LLMOutcome>;
   /**
    * Out-of-band one-shot request for title generation (core `Session.generateTitle`,
    * writes no history/Trace). Material defaults to what the Session collects itself
@@ -944,6 +948,7 @@ export class SessionManager {
     sessionId: string,
     prompt: string,
     signal?: AbortSignal,
+    options?: { maxContextChars?: number },
   ): AsyncGenerator<AmspRecord, LLMOutcome> {
     const entry = await this.ensureEntry(sessionId);
     if (!entry.session.streamAside)
@@ -952,7 +957,7 @@ export class SessionManager {
         "side_question_unavailable",
         "Side questions are unavailable for this Session.",
       );
-    const stream = entry.session.streamAside(prompt, signal);
+    const stream = entry.session.streamAside(prompt, signal, options);
     const ctx: UsageContext = {
       projectId: entry.projectId,
       agentId: entry.agentId,

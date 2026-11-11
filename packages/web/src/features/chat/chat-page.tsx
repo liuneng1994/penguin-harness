@@ -2804,6 +2804,7 @@ export function ChatPage() {
                             </div>
                           ) : (
                             <MessageStream
+                              sessionId={selected?.sessionId}
                               items={allItems}
                               version={stream.version}
                               ctx={ctx}

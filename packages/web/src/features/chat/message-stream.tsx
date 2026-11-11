@@ -38,6 +38,7 @@ import { createStreamFollow, followToBottom, stickToBottom } from "./stream-foll
 import type { StreamFollow } from "./stream-follow";
 import type { ForkTarget } from "./task-stats-line";
 import { useStreamSelectionMenu } from "./stream-selection-menu";
+import { BtwActionsContext, useBtwReading } from "./btw-reading";
 import type { ComposerReference } from "../../lib/workspace-tree";
 import type { FileLocation } from "../../lib/file-location";
 import { FIND_LOAD_OLDER_EVENT, FIND_MORE_ATTR } from "../../lib/find-dom";
@@ -332,6 +333,7 @@ export interface OlderHistoryControls {
 const OLDER_TRIGGER_PX = 300;
 
 export function MessageStream({
+  sessionId,
   items,
   version,
   ctx,
@@ -341,6 +343,7 @@ export function MessageStream({
   onAddExcerpt,
   findRegion = "conversation",
 }: {
+  sessionId?: string;
   items: ChatItem[];
   /** View-model version number (a repaint signal for in-place updates that also drives auto-scroll). */
   version: number;
@@ -371,7 +374,11 @@ export function MessageStream({
   const scrollRef = useRef<HTMLDivElement>(null);
   // A search of this region opens its collapsed work groups (lib/find-expand.ts).
   const revealedForFind = useRegionRevealed(scrollRef);
-  const selectionMenu = useStreamSelectionMenu(onAddExcerpt);
+  const btw = useBtwReading(sessionId, items);
+  const selectionMenu = useStreamSelectionMenu(onAddExcerpt, {
+    canAsk: btw.canAskSelection,
+    ask: btw.fromSelection,
+  });
   // An upward-swipe intent immediately exits auto-follow; scrolling back near the bottom resumes it — see stream-follow.ts (#75) for the exact rule.
   const followRef = useRef<StreamFollow | null>(null);
   const follow = (followRef.current ??= createStreamFollow());
@@ -469,7 +476,10 @@ export function MessageStream({
   // commit that opens the menu applies the hold first. Releasing it catches a view that was
   // following up with whatever arrived meanwhile; the user's own scrolling during the hold still
   // decides whether it was following (see stream-follow.ts).
-  const menuOpen = selectionMenu.open;
+  const menuOpen = selectionMenu.open || btw.open;
+  useLayoutEffect(() => {
+    if (btw.open) follow.wheel(-1);
+  }, [btw.open, follow]);
   useLayoutEffect(() => {
     follow.hold(menuOpen);
     if (menuOpen) return;
@@ -643,6 +653,10 @@ export function MessageStream({
         {...(older?.hasMore ? { [FIND_MORE_ATTR]: "true" } : {})}
         // A selection inside the stream answers a secondary click with the app's own menu;
         // everything else keeps the browser's (see stream-selection-menu.tsx).
+        onPointerUp={(event) => {
+          if (event.button === 0) btw.capture();
+        }}
+        onKeyUp={btw.capture}
         onPointerDown={selectionMenu.hostProps.onPointerDown}
         onContextMenu={selectionMenu.hostProps.onContextMenu}
         onKeyDown={selectionMenu.hostProps.onKeyDown}
@@ -718,7 +732,9 @@ export function MessageStream({
             >
               <FindRevealContext.Provider value={revealedForFind}>
                 <ElidedBodiesContext.Provider value={ctx.bodies ?? null}>
-                  <MessageItems items={items} ctx={ctx} />
+                  <BtwActionsContext.Provider value={btw.actions}>
+                    <MessageItems items={items} ctx={ctx} />
+                  </BtwActionsContext.Provider>
                 </ElidedBodiesContext.Provider>
               </FindRevealContext.Provider>
             </WorkspaceLinksProvider>
@@ -727,6 +743,7 @@ export function MessageStream({
       </div>
       {outline}
       {selectionMenu.panel}
+      {btw.panel}
       {/* Back-to-bottom (shows once the user scrolls away from content below the fold): floats
           just above the composer; clicking returns to the bottom and re-enters follow, so the
           view keeps tracking the live stream. */}
