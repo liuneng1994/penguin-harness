@@ -1,6 +1,6 @@
 /**
  * Given an installed optional viewer, a chat range opens actual C++ code with real line numbers,
- * context, copy, search, read-only behavior and Escape back to the same chat in all three themes.
+ * the whole file, copy, search, read-only behavior and Escape back to the same chat in all three themes.
  * Missing and ambiguous references stay in the preview with a useful error. Phone layouts fit.
  * Floating questions follow a scrolled selection without resizing code or changing main history.
  * Mouse drags select partial and multiline code outside the original citation for questions.
@@ -147,7 +147,8 @@ test("chat code preview and errors across themes", async ({ page }, testInfo) =>
     const frame = dialog.frameLocator("iframe");
     await expect(frame.locator(".cm-cited-line")).toHaveCount(11);
     await expect(frame.getByText("bolt/expression/Expr.cpp", { exact: true })).toBeVisible();
-    await expect(frame.getByText("Lines 773–807 of 900", { exact: false })).toBeVisible();
+    await expect(frame.getByText("Lines 1–900 of 900", { exact: false })).toBeVisible();
+    await expect(frame.getByRole("button", { name: /Show 40 lines/ })).toHaveCount(0);
     expect(await frame.locator(".cm-content").getAttribute("contenteditable")).toBe("false");
     const box = await dialog.boundingBox();
     expect(box.width).toBeGreaterThan(1050);
@@ -178,8 +179,11 @@ test("chat code preview and errors across themes", async ({ page }, testInfo) =>
     expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
       lines.slice(784, 795).join("\n"),
     );
-    await frame.getByRole("button", { name: "Show 40 lines above", exact: true }).click();
-    await expect(frame.getByText("Lines 733–807 of 900", { exact: false })).toBeVisible();
+    const scroller = frame.locator(".cm-scroller");
+    await scroller.evaluate((node) => (node.scrollTop = 0));
+    await expect(frame.locator(".cm-line").filter({ hasText: "#include <memory>" })).toBeVisible();
+    await scroller.evaluate((node) => (node.scrollTop = node.scrollHeight));
+    await expect(frame.locator(".cm-line").filter({ hasText: "// source line 900" })).toBeVisible();
     await frame.getByRole("switch", { name: "Wrap lines", exact: true }).click();
     await expect(frame.getByRole("switch", { name: "Wrap lines", exact: true })).toHaveAttribute(
       "aria-checked",
@@ -194,8 +198,9 @@ test("chat code preview and errors across themes", async ({ page }, testInfo) =>
     await frame.getByRole("textbox", { name: "Find" }).press("Escape");
     await expect(dialog).toBeVisible();
     await expect(frame.getByRole("button", { name: "Show full file", exact: true })).toHaveCount(0);
-    await frame.getByRole("button", { name: "More", exact: true }).click();
-    await frame.getByRole("menuitem", { name: "Show full file", exact: true }).click();
+    await expect(frame.getByRole("menuitem", { name: "Show full file", exact: true })).toHaveCount(
+      0,
+    );
     await expect(frame.getByText("Lines 1–900 of 900", { exact: false })).toBeVisible();
     await frame.locator(".cm-content").press("Escape");
     await expect(dialog).toHaveCount(0);
@@ -277,8 +282,6 @@ test("chat code preview and errors across themes", async ({ page }, testInfo) =>
   const historyBefore = await (
     await page.request.get(`${BASE}/api/sessions/${sessionId}/messages`)
   ).json();
-  // Leave scrollable context below the selection instead of testing at the snippet's bottom.
-  await codeFrame.getByRole("button", { name: "Show 40 lines below", exact: true }).click();
   const heightBefore = await codeFrame
     .locator(".cm-scroller")
     .evaluate((node) => node.clientHeight);

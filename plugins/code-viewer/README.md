@@ -3,9 +3,8 @@
 An optional CodeMirror 6 Workbench. Install **Code Viewer** on the Agent from PenguinHarness's
 Plugins page, then click a file reference in its chat, such as `Expr.cpp:785-795`.
 
-The preview opens in the center of the screen with the cited lines highlighted and twelve lines
-of context on either side. Expand in either direction or show the full file. Search also reveals
-matches outside the current snippet. Code is read only; select and copy text, or use **Copy code**
+The preview opens in the center of the screen with the whole file available to scroll and the cited lines highlighted.
+Search finds matches throughout the file. Code is read only; select and copy text, or use **Copy code**
 to copy the selection or the clicked line. Before choosing code, it copies the cited lines.
 **Open in VS Code** remains in the dialog footer.
 Escape closes the floating question panel or search first, then the preview, and returns to the
@@ -38,7 +37,7 @@ These actions are hidden when changes are hidden, and a file without edits has n
 
 Choose **Unstaged** to read working-tree code or **Staged** to read the Git index. **Copy code**
 only copies the selected current-version source, even while old code is displayed. **More**
-contains **Show full file** and **Copy diff**, which copies the complete patch. **Reload code**
+contains **Copy diff**, which copies the complete patch. **Reload code**
 refreshes both source and changes, and clears
 side questions. Questions use the displayed version and nearby Git hunks; a changed snapshot
 requires a reload before asking.

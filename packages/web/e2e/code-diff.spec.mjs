@@ -112,7 +112,9 @@ test("current-file Git diff and code questions", async ({ page }, info) => {
     await expect(frame.getByRole("img", { name: "Modified code", exact: true })).toBeVisible();
     await expect(frame.locator(".cm-git-word")).toContainText("3");
     await expect(frame.getByRole("table", { name: "Old code", exact: true })).toBeVisible();
-    const height = await frame.locator(".cm-scroller").evaluate((node) => node.clientHeight);
+    const height = await frame
+      .locator(".code-preview-editor")
+      .evaluate((node) => node.clientHeight);
     const old = frame.getByRole("table", { name: "Old code", exact: true });
     await expect(old).toContainText("value * 2;");
     await expect(old).not.toContainText("value * 3;");
@@ -309,7 +311,7 @@ test("current-file Git diff and code questions", async ({ page }, info) => {
   await expect(frame.getByRole("switch", { name: "Show changes", exact: true })).toHaveCount(0);
   await frame.getByRole("button", { name: "More", exact: true }).click();
   await expect(frame.getByRole("menuitem", { name: "Copy diff", exact: true })).toBeDisabled();
-  await frame.getByRole("menuitem", { name: "Show full file", exact: true }).press("Escape");
+  await frame.getByRole("menu").press("Escape");
   await expect(frame.getByRole("menu")).toHaveCount(0);
   await expect(page.getByRole("dialog")).toBeVisible();
   await write(4);

@@ -92,3 +92,11 @@ body {
   min-height: 0;
   max-height: min(40vh, 280px);
 }
+.code-preview-footer {
+  min-height: max(
+    3rem,
+    calc(
+      var(--ui-text-small-size) * var(--ui-text-small-lh) + 2 * var(--ui-control-py-sm) + 1rem + 3px
+    )
+  );
+}
