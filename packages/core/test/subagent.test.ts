@@ -1,6 +1,7 @@
 /**
  * Behavior tests for run_subagent / input_subagent: foreground delegation, backgrounding,
  * polling, resuming with an appended Prompt, the approval queue, and lifecycle finalization.
+ * A completed remote child retains node coordinates for a host follow-up after its foreground call ends.
  */
 import { afterEach, describe, expect, it } from "vitest";
 import { Environment } from "../src/environment/index.js";
@@ -978,6 +979,66 @@ describe("subagent steering and per-run abort", () => {
       await until(() => env.listBackgroundSubagents()[0]?.running === false);
       expect(env.listBackgroundSubagents()[0]!.subagentId).toBe(`subagent-${HOP.slice(-8)}`);
       expect(prompts).toEqual(["task", "wake up"]);
+    } finally {
+      env.dispose();
+    }
+  });
+
+  it("revives a completed remote child with its original node for a host follow-up", async () => {
+    const prompts: string[] = [];
+    const resumed: unknown[] = [];
+    const handle = (): SubagentHandle => ({
+      sessionId: HOP,
+      async *run({ messages }) {
+        prompts.push(promptOf(messages));
+        yield withOrigin(partialText("delta", "Research complete"), HOP);
+        return null;
+      },
+      dispose() {},
+    });
+    const env = new Environment({
+      workspaceDir: "/tmp/ws",
+      toolConfig: { customTools: [DEF], mcpServers: [] },
+      services: {
+        agentDiscovery: {
+          projectId: "p",
+          agentId: "general",
+          list: async () => [],
+          skills: async () => [],
+          global: async () => ({
+            projectId: "p",
+            currentNodeId: "hub",
+            agents: [],
+            unavailableNodes: [],
+          }),
+        },
+        subagentRunner: {
+          spawn: async () => handle(),
+          resume: async (input) => {
+            resumed.push(input);
+            return handle();
+          },
+        },
+      },
+    });
+    try {
+      for await (const _record of env.executeTool({
+        toolCall: toolCall({
+          name: "run_subagent",
+          arguments: JSON.stringify({
+            prompt: "Research data",
+            agent_id: "researcher",
+            node_id: "peer",
+          }),
+          toolCallId: "remote",
+        }),
+      })) {
+      }
+      expect(env.listBackgroundSubagents()).toEqual([]);
+      expect(await env.sendToBackgroundSubagent(HOP, [userText("Follow up")])).toBe("resumed");
+      await until(() => env.listBackgroundSubagents()[0]?.running === false);
+      expect(resumed).toEqual([{ agentId: "researcher", nodeId: "peer", sessionId: HOP }]);
+      expect(prompts).toEqual(["Research data", "Follow up"]);
     } finally {
       env.dispose();
     }

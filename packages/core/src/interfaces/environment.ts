@@ -185,6 +185,8 @@ export interface SubagentRunner {
    * by Environment).
    */
   spawn(input: {
+    /** A host node from list_agents; absent keeps delegation on this node. */
+    nodeId?: string;
     /** The child Agent's agentId; if omitted, reuses the current Agent (self-invocation). */
     agentId?: string;
     /**
@@ -210,7 +212,7 @@ export interface SubagentRunner {
    * self-spawn's child). A missing or unrecoverable session is expressed by throwing.
    * Optional — a runner without it simply leaves revival unavailable.
    */
-  resume?(input: { agentId?: string; sessionId: string }): Promise<SubagentHandle>;
+  resume?(input: { nodeId?: string; agentId?: string; sessionId: string }): Promise<SubagentHandle>;
 }
 
 /**

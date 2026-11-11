@@ -104,9 +104,10 @@ export class ManagedSubagentSession {
   // Single wake point: new message / run finished / new approval request all wake a waiting waitWake through it.
   private readonly wakeSignal = new WakeSignal();
 
-  constructor(handle: SubagentHandle, opts?: { resumeAgentId?: string }) {
+  constructor(handle: SubagentHandle, opts?: { resumeAgentId?: string; resumeNodeId?: string }) {
     this.handle = handle;
     this.resumeAgentId = opts?.resumeAgentId;
+    this.resumeNodeId = opts?.resumeNodeId;
   }
 
   /**
@@ -115,6 +116,7 @@ export class ManagedSubagentSession {
    * later input_subagent on the same id can resume the child (see SubagentSessionManager).
    */
   readonly resumeAgentId: string | undefined;
+  readonly resumeNodeId: string | undefined;
 
   /** Child Session id (one hop of a message's origin); `subagent_id` is derived from its tail so the frontend can correlate it. */
   get sessionId(): string {

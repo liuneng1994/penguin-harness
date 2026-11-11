@@ -80,10 +80,12 @@ export function createInputSubagentTool(
           try {
             const handle = await runner.resume({
               sessionId: clue.sessionId,
+              ...(clue.nodeId !== undefined ? { nodeId: clue.nodeId } : {}),
               ...(clue.agentId !== undefined ? { agentId: clue.agentId } : {}),
             });
             const revived = new ManagedSubagentSession(handle, {
               ...(clue.agentId !== undefined ? { resumeAgentId: clue.agentId } : {}),
+              ...(clue.nodeId !== undefined ? { resumeNodeId: clue.nodeId } : {}),
             });
             manager.track(revived);
             manager.register(revived); // The id derives from the session tail: same handle as before.
