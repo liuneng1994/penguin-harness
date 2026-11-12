@@ -16,6 +16,23 @@ export interface AgentDiscovery {
   agentId: string;
   list(): Promise<ProjectAgentInfo[]>;
   skills(agentId: string): Promise<string[]>;
+  /** Host-provided, read-only discovery; absent keeps the local catalog unchanged. */
+  global?(target?: { nodeId?: string; agentId?: string }): Promise<GlobalAgentCatalog>;
+}
+
+export interface GlobalAgentInfo extends ProjectAgentInfo {
+  nodeId: string;
+  nodeName: string;
+  local: boolean;
+  canDelegate: boolean;
+  skills?: string[];
+}
+
+export interface GlobalAgentCatalog {
+  projectId: string;
+  currentNodeId: string;
+  agents: GlobalAgentInfo[];
+  unavailableNodes: Array<{ nodeId: string; nodeName: string; reason: string }>;
 }
 
 export function createAgentDiscovery(

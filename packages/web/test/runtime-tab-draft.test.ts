@@ -22,6 +22,7 @@
  * - An unset Agent thinking level shows the Project default without making the form dirty;
  *   choosing a localized tier waits for Save and sends its wire value.
  * - A persisted legacy off tier stays reachable before Save, and Reset restores it.
+ * - Global discovery defaults off and saves independently without committing runtime drafts; refusal restores the switch.
  */
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { createElement as h } from "react";
@@ -105,6 +106,32 @@ const reset = () => button(en.common.reset);
 describe("the Runtime tab", () => {
   beforeAll(() => setActiveStrings(en));
   afterAll(() => setActiveStrings(zh));
+  it("saves global discovery alone while leaving a runtime edit unsaved", async () => {
+    const { server } = await openRuntime();
+    await type(maxTurns(), "81");
+    const toggle = document.querySelector<HTMLButtonElement>(
+      `button[role=switch][aria-label="${en.agent.globalAgentDiscovery}"]`,
+    )!;
+    expect(toggle.getAttribute("aria-checked")).toBe("false");
+    await click(toggle);
+    expect(server.writes("/config").map((request) => request.body)).toEqual([
+      { config: { globalAgentDiscovery: true } },
+    ]);
+    expect(maxTurns().value).toBe("81");
+    expect(hasUnsaved()).toBe(true);
+    expect(toggle.getAttribute("aria-checked")).toBe("true");
+  });
+  it("restores the discovery switch when its write is refused", async () => {
+    const { server } = await openRuntime();
+    server.refuseNext(400, "invalid_config", "discovery refused");
+    const toggle = document.querySelector<HTMLButtonElement>(
+      `button[role=switch][aria-label="${en.agent.globalAgentDiscovery}"]`,
+    )!;
+    await click(toggle);
+    await waitFor(() => toastStore.getState().items.length > 0);
+    expect(toggle.getAttribute("aria-checked")).toBe("false");
+    expect(hasUnsaved()).toBe(false);
+  });
   beforeEach(() => toastStore.setState({ items: [] }));
   afterEach(async () => {
     await unmountAll();

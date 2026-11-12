@@ -50,6 +50,7 @@ import {
   PageHeader,
   Skeleton,
   Switch,
+  ToggleRow,
   Table,
   TableBody,
   TableCell,
@@ -927,6 +928,20 @@ function PromptTab({ data, onSave }: FormTabProps) {
 }
 
 function RuntimeTab({ data, onSave, projectId }: FormTabProps & { projectId: string }) {
+  const [discoverySaving, setDiscoverySaving] = useState(false);
+  const [discoveryFlip, setDiscoveryFlip] = useState<boolean | null>(null);
+  const toggleDiscovery = async (enabled: boolean) => {
+    setDiscoverySaving(true);
+    setDiscoveryFlip(enabled);
+    try {
+      await onSave({ config: { globalAgentDiscovery: enabled } });
+    } catch (error) {
+      toastApiError(error);
+    } finally {
+      setDiscoverySaving(false);
+      setDiscoveryFlip(null);
+    }
+  };
   const machineId = useAgentLocation();
   const [projectThinking, setProjectThinking] = useState<string | null>(null);
   useEffect(() => {
@@ -982,6 +997,13 @@ function RuntimeTab({ data, onSave, projectId }: FormTabProps & { projectId: str
 
   return (
     <div className="space-y-4">
+      <ToggleRow
+        label={S.agent.globalAgentDiscovery}
+        info={S.agent.globalAgentDiscoveryInfo}
+        checked={discoveryFlip ?? data.config.globalAgentDiscovery ?? false}
+        disabled={discoverySaving || saving}
+        onChange={(enabled) => void toggleDiscovery(enabled)}
+      />
       <Card padding="none">
         <div className="p-3">
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
@@ -1087,7 +1109,7 @@ function RuntimeTab({ data, onSave, projectId }: FormTabProps & { projectId: str
       <SaveRow
         dirty={form.dirty}
         valid={errors === null}
-        busy={saving}
+        busy={saving || discoverySaving}
         onSave={submit}
         onReset={form.reset}
       />

@@ -80,6 +80,7 @@ import type { WeChatTransport } from "../src/runtime/messaging/wechat-api.js";
 import { WeChatScanTransportProvider } from "../src/runtime/messaging/wechat-scan.js";
 import type { WeChatScanTransport } from "../src/runtime/messaging/wechat-scan.js";
 import { MachinesModule, machinesServerProxyRoutes } from "../src/machines/service.js";
+import { MachineAgentDirectoryRelay } from "../src/machines/agent-directory-relay.js";
 import { OrganizationModule } from "../src/runtime/organization/service.js";
 import { machinesRoutes } from "../src/http/routes/machines.js";
 import { MachineEventHub } from "../src/machines/event-hub.js";
@@ -468,6 +469,7 @@ export function replacementsFor(
       MachinesModule,
       {
         machines,
+        agentDirectoryTransport: new MachineAgentDirectoryRelay(machines, sockets, () => []),
         routes: machinesRoutes({ machines, access: accessDouble(), events }),
         serverProxyRoutes: machinesServerProxyRoutes(machines, { sockets, events, history }),
         sessionForward: machineSessionForward(machines, { sockets, events, history }),
