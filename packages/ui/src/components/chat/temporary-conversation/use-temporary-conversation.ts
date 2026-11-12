@@ -17,8 +17,6 @@ export interface TemporaryConversationSource<T> {
 export interface TemporaryTurn {
   question: string;
   answer: string;
-  /** The server can return the actual question supplied to the model. */
-  prompt?: string;
   stopped?: boolean;
 }
 export interface TemporaryQuestion {
@@ -32,7 +30,7 @@ export interface TemporaryConversationOptions<T> {
     question: TemporaryQuestion,
     signal: AbortSignal,
     onText: (text: string) => void,
-  ) => Promise<{ answer: string; question?: string }>;
+  ) => Promise<{ answer: string }>;
   errorMessage: (error: unknown) => string;
   historyLimitMessage: string;
 }
@@ -41,9 +39,7 @@ export function useTemporaryConversation<T>(options: TemporaryConversationOption
   const [source, setSource] = useState<TemporaryConversationSource<T> | null>(null);
   const [turns, setTurns] = useState<TemporaryTurn[]>([]);
   const [draft, setDraft] = useState("");
-  const [partial, setPartial] = useState("");
-  const [pendingQuestion, setPendingQuestion] = useState("");
-  const [busy, setBusy] = useState(false);
+  const [pending, setPending] = useState<{ question: string; partial: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [readingMode, setReadingMode] = useState<"auto" | "compact" | "expanded">("auto");
   const sourceRef = useRef(source);
@@ -63,9 +59,7 @@ export function useTemporaryConversation<T>(options: TemporaryConversationOption
     setSource(null);
     setTurns([]);
     setDraft("");
-    setPartial("");
-    setPendingQuestion("");
-    setBusy(false);
+    setPending(null);
     setError(null);
     setReadingMode("auto");
   }, []);
@@ -94,16 +88,14 @@ export function useTemporaryConversation<T>(options: TemporaryConversationOption
         { question: pending.question, answer: pending.partial, stopped: true },
       ]);
     else setDraft(pending.question);
-    setPartial("");
-    setPendingQuestion("");
-    setBusy(false);
+    setPending(null);
   };
   const submit = async () => {
     const question = draft.trim();
     const target = sourceRef.current;
     if (!target || target.invalid || request.current || !question) return;
     const history = turns.map((turn) => ({
-      question: turn.prompt ?? turn.question,
+      question: turn.question,
       answer: turn.answer,
     }));
     if (
@@ -116,11 +108,9 @@ export function useTemporaryConversation<T>(options: TemporaryConversationOption
     }
     const pending = { abort: new AbortController(), question, partial: "" };
     request.current = pending;
-    setBusy(true);
     setError(null);
     setDraft("");
-    setPartial("");
-    setPendingQuestion(question);
+    setPending({ question, partial: "" });
     try {
       const result = await optionsRef.current.request(
         target.value,
@@ -129,18 +119,11 @@ export function useTemporaryConversation<T>(options: TemporaryConversationOption
         (fragment) => {
           if (request.current !== pending) return;
           pending.partial += fragment;
-          setPartial(pending.partial);
+          setPending({ question, partial: pending.partial });
         },
       );
       if (request.current !== pending) return;
-      setTurns((old) => [
-        ...old,
-        {
-          question,
-          answer: result.answer,
-          ...(result.question ? { prompt: result.question } : {}),
-        },
-      ]);
+      setTurns((old) => [...old, { question, answer: result.answer }]);
     } catch (cause) {
       if (request.current !== pending) return;
       setError(optionsRef.current.errorMessage(cause));
@@ -148,9 +131,7 @@ export function useTemporaryConversation<T>(options: TemporaryConversationOption
     } finally {
       if (request.current === pending) {
         request.current = null;
-        setPartial("");
-        setPendingQuestion("");
-        setBusy(false);
+        setPending(null);
       }
     }
   };
@@ -163,9 +144,9 @@ export function useTemporaryConversation<T>(options: TemporaryConversationOption
     turns,
     draft,
     setDraft,
-    partial,
-    pendingQuestion,
-    busy,
+    partial: pending?.partial ?? "",
+    pendingQuestion: pending?.question ?? "",
+    busy: pending !== null,
     error,
     expanded,
     setReadingMode,

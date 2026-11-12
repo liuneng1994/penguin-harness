@@ -52,16 +52,7 @@ function TemporaryReadingDemo() {
       >
         {t.open}
       </Button>
-      <TemporaryConversationPanel
-        conversation={conversation}
-        labels={t}
-        copy={(text) =>
-          navigator.clipboard.writeText(text).then(
-            () => true,
-            () => false,
-          )
-        }
-      />
+      <TemporaryConversationPanel conversation={conversation} labels={t} />
     </BoardGroup>
   );
 }

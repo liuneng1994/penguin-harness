@@ -9,9 +9,12 @@
  * - Stopping before any output restores the question without sending another request.
  * - A late cancelled reply cannot enter a newly opened temporary conversation.
  * - Reading earlier turns keeps the scroll position while another answer streams below.
+ * - A delayed copy result cannot mark a later answer as copied.
+ * - Copy feedback stays attached to the same answer as more of its text arrives.
  */
 import { createElement as h, act } from "react";
 import { assistantText } from "@prismshadow/amsp";
+import { ClipboardWriterProvider } from "@prismshadow/penguin-ui";
 import { afterEach, beforeEach, expect, it } from "vitest";
 import { MessageStream } from "../src/features/chat/message-stream";
 import type { StreamRenderContext } from "../src/features/chat/message-stream";
@@ -130,18 +133,13 @@ it("restores a stopped question before any output and does not resubmit it", asy
 });
 
 it("ignores a late answer from a cancelled conversation after a new one opens", async () => {
-  let pending: ReadableStreamDefaultController<Uint8Array> | undefined;
+  let reply: ((response: Response) => void) | undefined;
   const fetch = stubFetch(() =>
-    pending
+    reply
       ? response("New conversation answer")
-      : new Response(
-          new ReadableStream({
-            start(controller) {
-              pending = controller;
-            },
-          }),
-          { headers: { "Content-Type": "text/event-stream" } },
-        ),
+      : new Promise<Response>((resolve) => {
+          reply = resolve;
+        }),
   );
   await mount(page());
   await click(button(S.chat.btw.ask));
@@ -150,12 +148,7 @@ it("ignores a late answer from a cancelled conversation after a new one opens", 
   await click(button(S.chat.btw.ask));
   await ask("New question");
   await act(async () => {
-    pending!.enqueue(
-      new TextEncoder().encode(
-        'event: text\ndata: {"text":"Late old answer"}\n\nevent: done\ndata: {"answer":"Late old answer"}\n\n',
-      ),
-    );
-    pending!.close();
+    reply!(response("Late old answer"));
   });
   expect(document.querySelector(".temporary-conversation-log")!.textContent).toContain(
     "New conversation answer",
@@ -163,6 +156,7 @@ it("ignores a late answer from a cancelled conversation after a new one opens", 
   expect(document.querySelector(".temporary-conversation-log")!.textContent).not.toContain(
     "Late old answer",
   );
+  expect(fetch.requests[0]!.signal!.aborted).toBe(true);
   expect(fetch.requests[1]!.body).toMatchObject({ history: [] });
 });
 
@@ -351,4 +345,92 @@ it("resolves a just-completed reply by its text and completion time before askin
   expect(document.querySelector(".temporary-conversation-log")!.textContent).toContain(
     "private side answer",
   );
+});
+
+it("does not apply delayed copy feedback to a later answer", async () => {
+  let complete: ((ok: boolean) => void) | undefined;
+  const writes: string[] = [];
+  let answers = 0;
+  stubFetch(() => response(`Answer ${++answers}`));
+  await mount(
+    h(
+      ClipboardWriterProvider,
+      {
+        write: (text: string) => {
+          writes.push(text);
+          return new Promise<boolean>((resolve) => {
+            complete = resolve;
+          });
+        },
+      },
+      page(),
+    ),
+  );
+  await click(button(S.chat.btw.ask));
+  await ask("First question");
+  await click(button(S.chat.btw.copy));
+  await ask("Follow-up question");
+  await act(async () => {
+    complete!(true);
+  });
+  expect(writes).toEqual(["Answer 1"]);
+  expect(document.querySelector(".temporary-conversation-footer")!.textContent).not.toContain(
+    S.common.copied,
+  );
+  await click(button(S.chat.btw.copy));
+  await act(async () => {
+    complete!(true);
+  });
+  expect(writes).toEqual(["Answer 1", "Answer 2"]);
+  expect(document.querySelector(".temporary-conversation-footer [aria-live]")!.textContent).toBe(
+    S.common.copied,
+  );
+});
+
+it("keeps copy feedback for the same answer while more text arrives", async () => {
+  let pending: ReadableStreamDefaultController<Uint8Array> | undefined;
+  stubFetch(
+    (request) =>
+      new Response(
+        new ReadableStream({
+          start(controller) {
+            pending = controller;
+            controller.enqueue(
+              new TextEncoder().encode('event: text\ndata: {"text":"First part."}\n\n'),
+            );
+            request.signal!.addEventListener(
+              "abort",
+              () => controller.error(new DOMException("Aborted", "AbortError")),
+              { once: true },
+            );
+          },
+        }),
+      ),
+  );
+  const writes: string[] = [];
+  await mount(
+    h(
+      ClipboardWriterProvider,
+      {
+        write: async (text: string) => {
+          writes.push(text);
+          return true;
+        },
+      },
+      page(),
+    ),
+  );
+  await click(button(S.chat.btw.ask));
+  await ask("Explain this");
+  await click(button(S.chat.btw.copy));
+  await act(async () => {
+    pending!.enqueue(
+      new TextEncoder().encode('event: text\ndata: {"text":" More of the same answer."}\n\n'),
+    );
+  });
+  expect(writes).toEqual(["First part."]);
+  expect(document.querySelector(".temporary-conversation-footer [aria-live]")!.textContent).toBe(
+    S.common.copied,
+  );
+  await click(button(S.chat.btw.stop));
 });

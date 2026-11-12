@@ -21,7 +21,6 @@ import type { TracePosition } from "@prismshadow/penguin-server/api";
 import { S } from "../../lib/strings";
 import { ApiError } from "../../api/client";
 import { apiErrorText } from "../../lib/api-error";
-import { writeClipboard } from "../../lib/clipboard";
 import { inEditable } from "../../lib/selection-copy";
 import { selectionEndAnchor } from "../../lib/selection-menu";
 import type { CapturedSelection } from "./stream-selection-menu";
@@ -216,7 +215,6 @@ export function useBtwReading(sessionId: string | undefined, items: ChatItem[]) 
       <TemporaryConversationPanel
         conversation={conversation}
         labels={{ ...labels, copied: S.common.copied }}
-        copy={writeClipboard}
       />
     </>
   );

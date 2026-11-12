@@ -9,14 +9,6 @@ import type { CodeAnchor, CodeSelection, PreviewEditor } from "./editor/editor.j
 import { askCodeQuestion } from "./questions.js";
 import { en, zh } from "./strings.js";
 const S = new URLSearchParams(location.search).get("locale") === "zh" ? zh : en;
-async function copyAnswer(text: string) {
-  try {
-    await navigator.clipboard.writeText(text);
-    return true;
-  } catch {
-    return false;
-  }
-}
 
 export function CodeInteraction({
   editor,
@@ -126,7 +118,6 @@ export function CodeInteraction({
           expand: S.expandReading,
           restore: S.restorePopup,
         }}
-        copy={copyAnswer}
       />
     </>
   );

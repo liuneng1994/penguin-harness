@@ -1,7 +1,8 @@
 /** One reading popup for temporary questions; hosts supply their source and request adapter. */
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Button } from "../../actions/button/button";
 import { CloseButton } from "../../actions/close-button/close-button";
+import { CopiedStatus, useCopied } from "../../actions/copy-button/copy-button";
 import { Prose } from "../../content/prose/prose";
 import { Input } from "../../forms/input/input";
 import { NoticeStrip } from "../../feedback/notice/notice-strip";
@@ -30,24 +31,23 @@ export interface TemporaryConversationLabels {
 export function TemporaryConversationPanel<T>({
   conversation: c,
   labels,
-  copy,
   anchor,
 }: {
   conversation: TemporaryConversation<T>;
   labels: TemporaryConversationLabels;
-  copy: (text: string) => Promise<boolean>;
   /** Code hosts can follow a still-selected source as their editor scrolls. */
   anchor?: AnchorRect | null;
 }) {
   const [viewport, setViewport] = useState({ width: 1024, height: 768 });
-  const [copied, setCopied] = useState(false);
   const field = useRef<HTMLInputElement>(null);
   const log = useRef<HTMLDivElement>(null);
   const followBottom = useRef(true);
   const source = c.source;
   const sourceAnchor = anchor ?? source?.anchor;
-  const sourceRef = useRef(source);
-  sourceRef.current = source;
+  const answer = c.partial || c.turns.at(-1)?.answer || "";
+  const copyTarget = c.partial ? c.pendingQuestion : c.turns.at(-1);
+  const copyScope = useMemo(() => ({ source, copyTarget }), [source, copyTarget]);
+  const { copied, flash } = useCopied(copyScope);
   useLayoutEffect(() => {
     const resize = () => setViewport({ width: window.innerWidth, height: window.innerHeight });
     resize();
@@ -55,16 +55,11 @@ export function TemporaryConversationPanel<T>({
     return () => window.removeEventListener("resize", resize);
   }, []);
   useEffect(() => {
-    setCopied(false);
     followBottom.current = true;
-    if (!source) return;
-    const frame = requestAnimationFrame(() => field.current?.focus({ preventScroll: true }));
-    return () => cancelAnimationFrame(frame);
   }, [source]);
   useEffect(() => {
     if (c.pendingQuestion) {
       followBottom.current = true;
-      setCopied(false);
     }
   }, [c.pendingQuestion]);
   useEffect(() => {
@@ -72,7 +67,8 @@ export function TemporaryConversationPanel<T>({
   }, [c.partial, c.turns, c.pendingQuestion]);
   useEffect(() => {
     if (!source || c.busy) return;
-    field.current?.focus({ preventScroll: true });
+    const frame = requestAnimationFrame(() => field.current?.focus({ preventScroll: true }));
+    return () => cancelAnimationFrame(frame);
   }, [c.busy, source]);
   const mobile = viewport.width <= 640;
   const width = Math.min(c.expanded ? 768 : 512, viewport.width - 16);
@@ -226,20 +222,12 @@ export function TemporaryConversationPanel<T>({
           </form>
           <footer className="temporary-conversation-footer">
             <span>{labels.clearedOnClose}</span>
-            {(c.turns.length > 0 || c.partial) && (
-              <Button
-                size="xs"
-                variant="link"
-                onClick={() => {
-                  const current = source;
-                  void copy(c.partial || c.turns.at(-1)!.answer).then(
-                    (ok) => ok && current === sourceRef.current && setCopied(true),
-                  );
-                }}
-              >
+            {answer && (
+              <Button size="xs" variant="link" onClick={() => flash(answer)}>
                 {copied ? labels.copied : labels.copy}
               </Button>
             )}
+            <CopiedStatus copied={copied} announcement={labels.copied} />
           </footer>
         </section>
       )}

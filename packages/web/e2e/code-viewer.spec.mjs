@@ -292,8 +292,17 @@ test("chat code preview and errors across themes", async ({ page }, testInfo) =>
   await codeFrame.getByRole("button", { name: "Send", exact: true }).click();
   await expect(codeFrame.getByRole("log")).toContainText("First private answer");
   await expect(question).toHaveValue("");
+  const followupRequest = page.waitForRequest(
+    (request) => request.url().endsWith("/code-questions") && request.method() === "POST",
+  );
   await question.fill("private-question-follow-up");
   await codeFrame.getByRole("button", { name: "Send", exact: true }).click();
+  expect((await followupRequest).postDataJSON().history).toEqual([
+    {
+      question: "private-question-one",
+      answer: "First private answer: this code doubles its input.",
+    },
+  ]);
   await expect(codeFrame.getByRole("log")).toContainText("Follow-up private answer");
   await expect(
     codeFrame.locator(".cm-line").filter({ hasText: "const int doubled" }),

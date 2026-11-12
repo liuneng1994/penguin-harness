@@ -7,7 +7,7 @@ export async function askCodeQuestion(
   body: unknown,
   signal: AbortSignal,
   onText: (text: string) => void,
-): Promise<{ answer: string; question: string }> {
+): Promise<{ answer: string }> {
   const response = await fetch(url, {
     method: "POST",
     credentials: "same-origin",
@@ -29,27 +29,31 @@ export async function askCodeQuestion(
   try {
     for (;;) {
       const step = await reader.read();
-      buffer += decoder.decode(step.value, { stream: !step.done }).replaceAll("\r\n", "\n");
+      buffer += decoder.decode(step.value, { stream: !step.done });
       for (;;) {
-        const split = buffer.indexOf("\n\n");
-        if (split < 0) break;
-        const event = buffer.slice(0, split);
-        buffer = buffer.slice(split + 2);
-        const type = /^event:\s*(.+)$/m.exec(event)?.[1];
+        const boundary = /\r?\n\r?\n/.exec(buffer);
+        if (!boundary) break;
+        const event = buffer.slice(0, boundary.index);
+        buffer = buffer.slice(boundary.index + boundary[0].length);
+        const type = /^event:\s*(.+)$/m.exec(event)?.[1]?.trim();
         const data = event
-          .split("\n")
+          .split(/\r?\n/)
           .filter((line) => line.startsWith("data:"))
           .map((line) => line.slice(5).trimStart())
           .join("\n");
         if (!data) continue;
-        const value = JSON.parse(data);
-        if (type === "text") onText(value.text);
-        if (type === "error") throw new Error(value.message);
-        if (type === "done") return value;
+        const value = JSON.parse(data) as {
+          text?: string;
+          answer?: string;
+          message?: string;
+        } | null;
+        if (type === "text" && typeof value?.text === "string") onText(value.text);
+        if (type === "error") throw new Error(value?.message ?? S.answerFailed);
+        if (type === "done" && typeof value?.answer === "string") return { answer: value.answer };
       }
       if (step.done) throw new Error(S.answerEnded);
     }
   } finally {
-    await reader.cancel();
+    await reader.cancel().catch(() => {});
   }
 }
