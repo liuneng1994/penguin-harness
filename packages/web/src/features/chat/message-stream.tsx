@@ -36,6 +36,7 @@ import { ElidedBodiesContext } from "./elided-body";
 import { HistoryTransferLine } from "./history-loading";
 import { createStreamFollow, followToBottom, stickToBottom } from "./stream-follow";
 import type { StreamFollow } from "./stream-follow";
+import { useSessionScroll } from "./session-scroll";
 import type { ForkTarget } from "./task-stats-line";
 import { useStreamSelectionMenu } from "./stream-selection-menu";
 import { BtwActionsContext, useBtwReading } from "./btw-reading";
@@ -382,6 +383,7 @@ export function MessageStream({
   // An upward-swipe intent immediately exits auto-follow; scrolling back near the bottom resumes it — see stream-follow.ts (#75) for the exact rule.
   const followRef = useRef<StreamFollow | null>(null);
   const follow = (followRef.current ??= createStreamFollow());
+  const sessionScroll = useSessionScroll(sessionId, findRegion, scrollRef, follow, items);
   // Back-to-bottom button visibility (React state — the follow object mutates outside React):
   // shown only when follow is off AND there is actually content below the fold. The second
   // condition matters: a wheel-up flick over a list that already fits the viewport exits follow
@@ -454,6 +456,9 @@ export function MessageStream({
   const onScroll = () => {
     const el = scrollRef.current;
     if (!el) return;
+    // Restoration never scrolls while waiting for history; any scroll here hands the view
+    // to the reader, including scrollbar, keyboard, outline and find jumps.
+    sessionScroll.cancel();
     const prevTop = lastTopRef.current;
     lastTopRef.current = el.scrollTop;
     // Scrollbar-drag / keyboard scroll upward during the return cancels it (wheel/touch cancel in their own handlers).
@@ -502,6 +507,7 @@ export function MessageStream({
   // reported (a key, the scrollbar, a find or outline jump) is never undone.
   useLayoutEffect(() => {
     const el = scrollRef.current;
+    const restoring = el !== null && sessionScroll.restore(el, older);
     // Prepend scroll anchoring: when older windows land ABOVE the viewport, keep the
     // message the user was reading exactly where it was by moving scrollTop by however far
     // the recorded prompt was displaced (same pre-paint timing as the stick snap, so
@@ -512,7 +518,13 @@ export function MessageStream({
     // position (a prepend while stuck at the bottom cannot move the tail); a held view is
     // anchored like any other, since nothing snaps it.
     const prepended = older?.prependedCount ?? 0;
-    if (el && prepended > lastPrependedRef.current && !follow.snaps && !returningRef.current) {
+    if (
+      el &&
+      !restoring &&
+      prepended > lastPrependedRef.current &&
+      !follow.snaps &&
+      !returningRef.current
+    ) {
       const a = anchorRef.current;
       const node =
         a === null
@@ -530,7 +542,7 @@ export function MessageStream({
     syncJump();
     // syncJump is recreated per render; the effect intentionally keys on stream growth only.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [version, follow, older?.prependedCount]);
+  }, [version, follow, older?.prependedCount, older?.loading, older?.hasMore, older?.error]);
 
   // The container and the content can also resize OUTSIDE stream commits: the app shell's
   // notice banner (initial-password reminder) mounting after /api/me resolves shrinks the
@@ -567,6 +579,7 @@ export function MessageStream({
     const el = scrollRef.current;
     if (!el) return;
     const onWheel = (e: WheelEvent) => {
+      sessionScroll.cancel();
       follow.wheel(e.deltaY);
       if (e.deltaY < 0) cancelReturn(); // user takes over: the glide stops within a frame
       syncJump();
@@ -597,6 +610,7 @@ export function MessageStream({
   const jumpToLatest = () => {
     const el = scrollRef.current;
     if (!el) return;
+    sessionScroll.cancel();
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
       follow.resume();
       stickToBottom(el, follow);
@@ -662,6 +676,7 @@ export function MessageStream({
         onKeyDown={selectionMenu.hostProps.onKeyDown}
         onScroll={onScroll}
         onTouchStart={(e) => {
+          sessionScroll.cancel();
           const t = e.touches[0];
           if (t) follow.touchStart(t.clientY);
         }}
