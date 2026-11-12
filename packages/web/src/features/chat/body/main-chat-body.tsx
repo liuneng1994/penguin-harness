@@ -119,7 +119,7 @@ export function renderMainChatBody(scope: MainChatView) {
                         }}
                       />
                     ) : selected ? (
-                      stream.error ? (
+                      stream.sessionId === selected.sessionId && stream.error ? (
                         // History failed to load: say why and offer the way on, instead of staying on
                         // a misleading empty state — for a conversation on a machine out of reach,
                         // the machine's state rather than the transport's error.
@@ -130,13 +130,13 @@ export function renderMainChatBody(scope: MainChatView) {
                           cause={stream.errorCause}
                           onRetry={stream.retry}
                         />
-                      ) : stream.loading ? (
+                      ) : stream.sessionId !== selected.sessionId || stream.loading ? (
                         // The skeleton, and past a second, for a conversation on a machine, how far
                         // its newest messages have come over and how the link stands.
                         <HistoryLoading
                           projectId={projectId}
                           sessionId={selected.sessionId}
-                          progress={stream.transfer.window}
+                          progress={stream.sessionId === selected.sessionId ? stream.transfer.window : null}
                           onRetryNow={stream.retryNow}
                         />
                       ) : (

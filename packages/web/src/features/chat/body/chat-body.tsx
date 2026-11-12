@@ -98,7 +98,7 @@ export function ChatBody({ session, projectId }: { session: ChatBodySession; pro
           className="anim-fade flex min-h-0 flex-1 flex-col"
         >
           {selected ? (
-            stream.error ? (
+            stream.sessionId === selected.sessionId && stream.error ? (
               // History failed to load: show a clear error and a retry entry point, instead of staying on a misleading empty state.
               <div className="flex h-full flex-col items-center justify-center gap-3 p-6">
                 <p className="text-sm text-red-600 dark:text-red-400">
@@ -106,7 +106,7 @@ export function ChatBody({ session, projectId }: { session: ChatBodySession; pro
                 </p>
                 <Button onClick={stream.retry}>{S.common.retry}</Button>
               </div>
-            ) : stream.loading ? (
+            ) : stream.sessionId !== selected.sessionId || stream.loading ? (
               <div className="space-y-3 p-6">
                 <Skeleton className="h-5 w-1/3" />
                 <Skeleton className="h-5 w-2/3" />
