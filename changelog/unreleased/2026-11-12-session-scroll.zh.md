@@ -3,6 +3,7 @@
 - **Date:** 2026-11-12
 - **Type:** fix
 - **Scope:** `web`
+- **PR:** [#11](https://github.com/liuneng1994/penguin-harness/pull/11)
 
 [English](2026-11-12-session-scroll.md)
 
