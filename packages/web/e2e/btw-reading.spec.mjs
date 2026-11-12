@@ -95,6 +95,28 @@ test("temporary reading questions across themes and phone layouts", async ({ pag
     await input.fill("btw follow-up: give me an example");
     await panel.getByRole("button", { name: "Send", exact: true }).click();
     await expect(panel.getByText("A concrete example:", { exact: false })).toBeVisible();
+    await expect(panel.getByRole("button", { name: "Restore popup", exact: true })).toBeVisible();
+    const smallWidth = await panel.evaluate((node) => node.clientWidth);
+    await input.fill("Unsent follow-up");
+    await panel.getByRole("button", { name: "Restore popup", exact: true }).click();
+    await expect(input).toHaveValue("Unsent follow-up");
+    await expect.poll(() => panel.evaluate((node) => node.clientWidth)).toBeLessThan(smallWidth);
+    await panel.getByRole("button", { name: "Expand reading", exact: true }).click();
+    await panel.evaluate((node) => {
+      for (const animation of node.parentElement.getAnimations()) {
+        const duration = animation.effect.getTiming().duration;
+        if (typeof duration === "number" && duration > 0) {
+          animation.pause();
+          animation.currentTime = duration / 2;
+        }
+      }
+    });
+    await page.screenshot({ path: info.outputPath(`${themeId}-reading-resize.png`) });
+    await panel.evaluate((node) => {
+      for (const animation of node.parentElement.getAnimations()) animation.finish();
+    });
+    await expect(input).toHaveValue("Unsent follow-up");
+    await expect(panel.getByText("A concrete example:", { exact: false })).toBeVisible();
     await page.screenshot({ path: info.outputPath(`${themeId}-btw.png`), animations: "disabled" });
     const scroll = page.locator("[data-btw-reply]").evaluate((node) => {
       const parent = node.closest("[data-find-region]");
@@ -111,6 +133,20 @@ test("temporary reading questions across themes and phone layouts", async ({ pag
     await expect(
       panel.getByRole("button", { name: "About this reply", exact: true }),
     ).toBeVisible();
+    if (themeId === "github") {
+      await input.fill("long-reading-answer: explain in detail");
+      await panel.getByRole("button", { name: "Send", exact: true }).click();
+      await expect(panel.getByRole("button", { name: "Restore popup", exact: true })).toBeVisible();
+      const log = panel.locator(".temporary-conversation-log");
+      await log.evaluate((node) => {
+        node.scrollTop = 0;
+      });
+      await page.screenshot({
+        path: info.outputPath("long-answer-expanded.png"),
+        animations: "disabled",
+      });
+      await expect(log).toContainText("Reading step 6");
+    }
     await page.keyboard.press("Escape");
     await expect(panel).toHaveCount(0);
   }
@@ -143,8 +179,16 @@ test("temporary reading questions across themes and phone layouts", async ({ pag
         .first()
         .getByRole("button", { name: lang === "zh" ? "btw 提问" : "btw Ask", exact: true })
         .click();
-      const reading = page.locator(".btw-reading-panel");
+      const reading = page.locator(".temporary-conversation-panel");
       await expect(reading).toBeVisible();
+      await reading.evaluate(async (node) => {
+        await Promise.all(
+          node.parentElement
+            .getAnimations()
+            .filter((animation) => animation.effect.getComputedTiming().endTime !== Infinity)
+            .map((animation) => animation.finished.catch(() => {})),
+        );
+      });
       const bounds = await reading.boundingBox();
       expect(bounds.x).toBeGreaterThanOrEqual(0);
       expect(bounds.x + bounds.width).toBeLessThanOrEqual(width);

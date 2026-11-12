@@ -10,7 +10,11 @@ import {
 } from "react";
 import type { ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { Button, CloseButton, Dropdown, Input, Md, NoticeStrip } from "@prismshadow/penguin-ui";
+import {
+  Button,
+  TemporaryConversationPanel,
+  useTemporaryConversation,
+} from "@prismshadow/penguin-ui";
 import type { AnchorRect } from "@prismshadow/penguin-ui";
 import type { AssistantTextItem, ChatItem } from "../../lib/amsp/stream-model";
 import type { TracePosition } from "@prismshadow/penguin-server/api";
@@ -24,7 +28,6 @@ import type { CapturedSelection } from "./stream-selection-menu";
 import { askBtw, btwReplyPosition } from "./btw-request";
 import "./btw-reading.css";
 
-type Turn = { question: string; answer: string; stopped?: boolean };
 interface ReadingTarget {
   reply: AssistantTextItem;
   element: HTMLElement;
@@ -80,53 +83,40 @@ function highlight(range?: Range) {
 
 export function useBtwReading(sessionId: string | undefined, items: ChatItem[]) {
   const [candidate, setCandidate] = useState<ReadingTarget | null>(null);
-  const [active, setActive] = useState<ReadingTarget | null>(null);
-  const [turns, setTurns] = useState<Turn[]>([]);
-  const [draft, setDraft] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [partial, setPartial] = useState("");
-  const [pendingQuestion, setPendingQuestion] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
-  const controller = useRef<AbortController | null>(null);
-  const partialRef = useRef("");
-  const questionRef = useRef("");
-  const rangeRef = useRef<Range | undefined>(undefined);
-  const returnRef = useRef<HTMLElement | null>(null);
   const itemsRef = useRef(items);
   itemsRef.current = items;
-  const field = useRef<HTMLInputElement>(null);
-  const log = useRef<HTMLDivElement>(null);
-  const close = useCallback(() => {
-    controller.current?.abort();
-    controller.current = null;
-    setActive(null);
-    setCandidate(null);
-    setTurns([]);
-    setDraft("");
-    setBusy(false);
-    setPartial("");
-    setPendingQuestion("");
-    setError(null);
-    setCopied(false);
-    partialRef.current = "";
-    questionRef.current = "";
-    if (rangeRef.current) highlight();
-    rangeRef.current = undefined;
-  }, []);
-  useEffect(() => {
-    close();
-    return close;
-  }, [sessionId, close]);
-  useEffect(() => {
-    if (active) {
-      const frame = requestAnimationFrame(() => field.current?.focus({ preventScroll: true }));
-      return () => cancelAnimationFrame(frame);
-    }
-  }, [active]);
-  useEffect(() => {
-    if (log.current) log.current.scrollTop = log.current.scrollHeight;
-  }, [partial, turns]);
+  const conversation = useTemporaryConversation<ReadingTarget>({
+    resetKey: sessionId,
+    historyLimitMessage: S.chat.btw.historyLimit,
+    request: async (target, { question, history }, signal, onText) => {
+      if (!sessionId) throw new Error(S.chat.btw.sourceUnavailable);
+      const position = target.position ?? (await btwReplyPosition(sessionId, target.reply));
+      signal.throwIfAborted();
+      target.position = position;
+      return {
+        answer: await askBtw(
+          sessionId,
+          {
+            position,
+            question,
+            ...(target.excerpt !== undefined ? { excerpt: target.excerpt } : {}),
+            history,
+          },
+          signal,
+          onText,
+        ),
+      };
+    },
+    errorMessage: (cause) =>
+      cause instanceof ApiError
+        ? cause.code === "btw_reply_unavailable"
+          ? S.chat.btw.sourceUnavailable
+          : apiErrorText(cause)
+        : cause instanceof Error
+          ? cause.message
+          : S.chat.btw.failed,
+  });
+  useEffect(() => setCandidate(null), [sessionId]);
   useEffect(() => {
     if (!candidate) return;
     const hide = () => setCandidate(null);
@@ -139,15 +129,32 @@ export function useBtwReading(sessionId: string | undefined, items: ChatItem[]) 
   }, [candidate]);
   const open = useCallback(
     (target: ReadingTarget) => {
-      close();
-      returnRef.current = target.element;
-      setActive(target);
-      rangeRef.current = target.range;
-      highlight(target.range);
-      window.getSelection()?.removeAllRanges();
-      if (target.excerpt && target.excerpt.length > 24000) setError(S.chat.btw.smallerSelection);
+      conversation.open({
+        value: target,
+        anchor: target.anchor,
+        text: target.excerpt ?? target.reply.text,
+        label: target.excerpt !== undefined ? S.chat.btw.selected : S.chat.btw.whole,
+        ...(target.excerpt && target.excerpt.length > 24000
+          ? { invalid: S.chat.btw.smallerSelection }
+          : {}),
+        returnFocus: () => target.element,
+        reveal: () => {
+          if (!target.element.isConnected) return;
+          target.element.scrollIntoView({ block: "center", behavior: "smooth" });
+          highlight(target.range);
+        },
+        onOpen: () => {
+          setCandidate(null);
+          highlight(target.range);
+          window.getSelection()?.removeAllRanges();
+        },
+        onClose: () => {
+          setCandidate(null);
+          highlight();
+        },
+      });
     },
-    [close],
+    [conversation.open],
   );
   const fromSelection = useCallback(
     (captured: CapturedSelection) => {
@@ -174,7 +181,7 @@ export function useBtwReading(sessionId: string | undefined, items: ChatItem[]) 
                 anchor: {
                   top: Math.max(8, rect.top),
                   bottom: Math.max(8, rect.top),
-                  left: rect.right - 420,
+                  left: rect.right - 512,
                   right: rect.right,
                 },
                 position: reply.tracePosition,
@@ -184,86 +191,7 @@ export function useBtwReading(sessionId: string | undefined, items: ChatItem[]) 
     [sessionId, open],
   );
   const capture = () => {
-    if (!sessionId) return;
-    setCandidate(selectionTarget(itemsRef.current));
-  };
-  const stop = () => {
-    controller.current?.abort();
-    controller.current = null;
-    if (partialRef.current)
-      setTurns((old) => [
-        ...old,
-        { question: questionRef.current, answer: partialRef.current, stopped: true },
-      ]);
-    else setDraft(questionRef.current);
-    partialRef.current = "";
-    setPartial("");
-    setPendingQuestion("");
-    setBusy(false);
-  };
-  const submit = async () => {
-    const question = draft.trim();
-    if (!sessionId || !active || busy || !question || (active.excerpt?.length ?? 0) > 24000) return;
-    if (
-      turns.length >= 64 ||
-      turns.reduce((n, turn) => n + turn.question.length + turn.answer.length, 0) > 100000
-    ) {
-      setError(S.chat.btw.historyLimit);
-      return;
-    }
-    const abort = new AbortController();
-    controller.current = abort;
-    setBusy(true);
-    setError(null);
-    setPartial("");
-    setDraft("");
-    setCopied(false);
-    setPendingQuestion(question);
-    partialRef.current = "";
-    questionRef.current = question;
-    try {
-      const position = active.position ?? (await btwReplyPosition(sessionId, active.reply));
-      if (abort.signal.aborted) return;
-      active.position = position;
-      const answer = await askBtw(
-        sessionId,
-        {
-          position,
-          question,
-          ...(active.excerpt !== undefined ? { excerpt: active.excerpt } : {}),
-          history: turns.map(({ question, answer }) => ({ question, answer })),
-        },
-        abort.signal,
-        (text) => {
-          if (abort.signal.aborted) return;
-          partialRef.current += text;
-          setPartial(partialRef.current);
-        },
-      );
-      if (abort.signal.aborted) return;
-      setTurns((old) => [...old, { question, answer }]);
-      setPartial("");
-      setPendingQuestion("");
-      partialRef.current = "";
-    } catch (cause) {
-      if (!abort.signal.aborted) {
-        setError(
-          cause instanceof ApiError
-            ? cause.code === "btw_reply_unavailable"
-              ? S.chat.btw.sourceUnavailable
-              : apiErrorText(cause)
-            : cause instanceof Error
-              ? cause.message
-              : S.chat.btw.failed,
-        );
-        setDraft(question);
-      }
-    } finally {
-      if (controller.current === abort) {
-        controller.current = null;
-        setBusy(false);
-      }
-    }
+    if (sessionId) setCandidate(selectionTarget(itemsRef.current));
   };
   const labels = S.chat.btw;
   const panel: ReactNode = (
@@ -285,130 +213,17 @@ export function useBtwReading(sessionId: string | undefined, items: ChatItem[]) 
           </Button>,
           document.body,
         )}
-      <Dropdown
-        open={active !== null}
-        setOpen={() => {}}
-        onEscape={close}
-        button={null}
-        anchorRect={active?.anchor ?? null}
-        portal={{ direction: "down", align: "left" }}
-        followAnchor
-        focusOnOpen={false}
-        returnFocus={() => returnRef.current}
-        menuClass="btw-reading-popup"
-        menuStyle={{ width: "min(26rem, calc(100vw - 16px))" }}
-      >
-        {active && (
-          <section aria-label={labels.title} className="btw-reading-panel">
-            <header className="btw-reading-heading">
-              <strong>btw</strong>
-              <span>{labels.title}</span>
-              <CloseButton label={labels.close} onClose={close} />
-            </header>
-            <div className="btw-reading-source">
-              <Button
-                variant="link"
-                size="xs"
-                disabled={!active.element.isConnected}
-                onClick={() => {
-                  active.element.scrollIntoView({ block: "center", behavior: "smooth" });
-                  highlight(active.range);
-                }}
-              >
-                {active.excerpt !== undefined ? labels.selected : labels.whole}
-              </Button>
-              <p>{(active.excerpt ?? active.reply.text).slice(0, 400)}</p>
-            </div>
-            <div ref={log} className="btw-reading-log" role="log" aria-label={labels.title}>
-              {!turns.length && !pendingQuestion && (
-                <p className="text-xs text-fg-muted">{labels.hint}</p>
-              )}
-              {turns.map((turn, index) => (
-                <div className="btw-reading-turn" key={index}>
-                  <p className="btw-reading-question">{turn.question}</p>
-                  <Md text={turn.answer} />
-                  {turn.stopped && <p className="text-xs text-fg-muted">{labels.stopped}</p>}
-                </div>
-              ))}
-              {pendingQuestion && (
-                <div className="btw-reading-turn">
-                  <p className="btw-reading-question">{pendingQuestion}</p>
-                  {partial ? (
-                    <Md text={partial} streaming={busy} />
-                  ) : busy ? (
-                    <p role="status" className="text-xs text-fg-muted">
-                      {labels.sending}
-                    </p>
-                  ) : null}
-                </div>
-              )}
-              {error && (
-                <NoticeStrip tone="attention" role="alert">
-                  {error}
-                </NoticeStrip>
-              )}
-            </div>
-            <form
-              className="btw-reading-composer"
-              onSubmit={(event) => {
-                event.preventDefault();
-                void submit();
-              }}
-            >
-              <Input
-                ref={field}
-                size="sm"
-                aria-label={labels.title}
-                placeholder={turns.length ? labels.followup : labels.placeholder}
-                value={draft}
-                maxLength={5000}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" && event.nativeEvent.isComposing)
-                    event.preventDefault();
-                }}
-                onChange={(event) => setDraft(event.target.value)}
-                disabled={busy}
-              />
-              {busy ? (
-                <Button size="sm" onClick={stop}>
-                  {labels.stop}
-                </Button>
-              ) : (
-                <Button
-                  size="sm"
-                  type="submit"
-                  variant="primary"
-                  disabled={!draft.trim() || (active.excerpt?.length ?? 0) > 24000}
-                >
-                  {labels.send}
-                </Button>
-              )}
-            </form>
-            <footer className="btw-reading-footer">
-              <span>{labels.clearedOnClose}</span>
-              {(turns.length > 0 || partial) && (
-                <Button
-                  size="xs"
-                  variant="link"
-                  onClick={() => {
-                    void writeClipboard(partial || turns.at(-1)!.answer).then(
-                      (ok) => ok && setCopied(true),
-                    );
-                  }}
-                >
-                  {copied ? S.common.copied : labels.copy}
-                </Button>
-              )}
-            </footer>
-          </section>
-        )}
-      </Dropdown>
+      <TemporaryConversationPanel
+        conversation={conversation}
+        labels={{ ...labels, copied: S.common.copied }}
+        copy={writeClipboard}
+      />
     </>
   );
   return {
     actions,
     panel,
-    open: active !== null,
+    open: conversation.source !== null,
     capture,
     fromSelection,
     canAskSelection: (selection: CapturedSelection) =>

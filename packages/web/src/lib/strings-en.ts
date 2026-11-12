@@ -3276,6 +3276,8 @@ export const en: Strings = {
       smallerSelection: "Select a shorter passage.",
       historyLimit: "This temporary conversation is too long. Close it and start again.",
       stopped: "Stopped",
+      expand: "Expand reading",
+      restore: "Restore popup",
     },
     newSessionMenu: "New chat",
     chooseAgent: "Choose agent",

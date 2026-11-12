@@ -3446,6 +3446,8 @@ export const zh = {
       smallerSelection: "请选择一段更短的内容。",
       historyLimit: "这次临时问答已较长，请关闭后重新提问。",
       stopped: "已停止",
+      expand: "展开阅读",
+      restore: "恢复浮窗",
     },
     newSessionMenu: "新建对话",
     chooseAgent: "选择 Agent",

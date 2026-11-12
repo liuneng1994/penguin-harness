@@ -15,6 +15,8 @@ import {
   PagedDialog,
   Sheet,
   ZoomableImage,
+  TemporaryConversationPanel,
+  useTemporaryConversation,
 } from "@prismshadow/penguin-ui";
 import type { PagedDialogGroup, PaletteAction, SheetSnap } from "@prismshadow/penguin-ui";
 import { BoardGroup } from "../../foundations/shared";
@@ -22,6 +24,47 @@ import { BASE } from "../../lib/location";
 import { useGallery } from "../../state";
 
 type Page = "general" | "appearance" | "account";
+
+function TemporaryReadingDemo() {
+  const { S } = useGallery();
+  const t = S.library.dialogs.temporary;
+  const conversation = useTemporaryConversation<string>({
+    resetKey: t,
+    historyLimitMessage: t.historyLimit,
+    errorMessage: (error) => String(error),
+    request: async () => ({ answer: t.answer }),
+  });
+  return (
+    <BoardGroup title={t.title}>
+      <Button
+        size="sm"
+        onClick={(event) => {
+          const element = event.currentTarget;
+          conversation.open({
+            value: t.source,
+            text: t.source,
+            label: t.title,
+            anchor: element.getBoundingClientRect(),
+            returnFocus: () => element,
+            reveal: () => element.scrollIntoView({ block: "center" }),
+          });
+        }}
+      >
+        {t.open}
+      </Button>
+      <TemporaryConversationPanel
+        conversation={conversation}
+        labels={t}
+        copy={(text) =>
+          navigator.clipboard.writeText(text).then(
+            () => true,
+            () => false,
+          )
+        }
+      />
+    </BoardGroup>
+  );
+}
 
 export function DialogsBoard() {
   const { S } = useGallery();
@@ -55,6 +98,7 @@ export function DialogsBoard() {
   ];
   return (
     <div className="gf-board">
+      <TemporaryReadingDemo />
       <BoardGroup title={t.modal}>
         <div className="lib-row">
           <Button variant="primary" onClick={() => setModal(true)}>

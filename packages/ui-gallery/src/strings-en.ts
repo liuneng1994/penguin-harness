@@ -794,6 +794,28 @@ export const en: GalleryStrings = {
       todoDismiss: "Mark as read",
     },
     dialogs: {
+      temporary: {
+        title: "Temporary Q&A",
+        open: "btw Ask",
+        source:
+          "cachedRows records the cache's coverage; cachedResult stores results for the rows already evaluated.",
+        answer:
+          "An existing cache does not mean every requested row has been evaluated. Remove cache hits first, then check whether the remaining set is empty.\n\nIf rows remain, evaluate them and merge their new results into the cache. Only when every requested row is covered can the cached result be returned directly.",
+        hint: "Ask about the quoted content. Closing clears the conversation.",
+        placeholder: "What would you like to understand?",
+        followup: "Ask a follow-up…",
+        send: "Send",
+        stop: "Stop",
+        stopped: "Stopped",
+        sending: "Answering…",
+        close: "Close temporary Q&A",
+        copy: "Copy answer",
+        copied: "Copied",
+        clearedOnClose: "Clears on close",
+        expand: "Expand reading",
+        restore: "Restore popup",
+        historyLimit: "Close and start a new conversation.",
+      },
       modal: "Modal",
       openModal: "Open a dialog",
       modalTitle: "Rename session",

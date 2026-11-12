@@ -73,7 +73,10 @@ export function Dropdown({
   focusOnOpen,
   followAnchor = false,
   allowFlip = true,
+  layoutMotion = false,
 }: {
+  /** Animate size and placement through the active theme's layout tokens. */
+  layoutMotion?: boolean;
   button: ReactNode;
   open: boolean;
   setOpen: (v: boolean) => void;
@@ -352,6 +355,7 @@ export function Dropdown({
           createPortal(
             <div
               ref={panelRef}
+              data-layout-motion={layoutMotion ? "" : undefined}
               onKeyDown={onPanelKeyDown}
               style={{
                 position: "fixed",

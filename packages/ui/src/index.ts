@@ -243,6 +243,8 @@ export * from "./components/chat/assistant-text/streaming-caret";
 export * from "./components/chat/assistant-text/use-stream-reveal";
 export * from "./components/chat/assistant-text/stream-style";
 export * from "./components/chat/changes-card/changes-card";
+export * from "./components/chat/temporary-conversation/use-temporary-conversation";
+export * from "./components/chat/temporary-conversation/temporary-conversation-panel";
 
 // W6-A2 — the transcript's work: the activity card (the agent's work group and the harness's
 // events alike) and its rows (the thinking row, the tool call and the approval block it holds),

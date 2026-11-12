@@ -154,8 +154,8 @@ test("chat code preview and errors across themes", async ({ page }, testInfo) =>
     expect(box.width).toBeGreaterThan(1050);
     expect(Math.abs(box.x + box.width / 2 - 720)).toBeLessThan(3);
     await page.screenshot({ path: testInfo.outputPath(`${themeId}-code-preview.png`) });
-    await frame.getByRole("button", { name: "btw Q&A", exact: true }).click();
-    const popup = frame.getByRole("region", { name: "Private code Q&A", exact: true });
+    await frame.getByRole("button", { name: "btw Ask", exact: true }).click();
+    const popup = frame.getByRole("region", { name: "Temporary Q&A", exact: true });
     await expect(popup).toBeVisible();
     await popup.evaluate((node) => {
       for (const animation of node.parentElement.getAnimations({ subtree: true })) {
@@ -174,7 +174,7 @@ test("chat code preview and errors across themes", async ({ page }, testInfo) =>
       for (const animation of node.parentElement.getAnimations({ subtree: true }))
         animation.finish();
     });
-    await popup.getByRole("button", { name: "Collapse Q&A", exact: true }).click();
+    await popup.getByRole("button", { name: "Close temporary Q&A", exact: true }).click();
     await frame.getByRole("button", { name: "Copy code", exact: true }).click();
     expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
       lines.slice(784, 795).join("\n"),
@@ -285,15 +285,15 @@ test("chat code preview and errors across themes", async ({ page }, testInfo) =>
   const heightBefore = await codeFrame
     .locator(".cm-scroller")
     .evaluate((node) => node.clientHeight);
-  await codeFrame.getByRole("button", { name: "btw Q&A", exact: true }).click();
-  await expect(codeFrame.getByText("Line 785", { exact: true })).toBeVisible();
-  const question = codeFrame.getByRole("textbox", { name: "Ask about this code…", exact: true });
+  await codeFrame.getByRole("button", { name: "btw Ask", exact: true }).click();
+  await expect(codeFrame.getByRole("button", { name: /Expr\.cpp:785$/ })).toBeVisible();
+  const question = codeFrame.getByRole("textbox", { name: "Temporary Q&A", exact: true });
   await question.fill("private-question-one");
-  await codeFrame.getByRole("button", { name: "Ask", exact: true }).click();
+  await codeFrame.getByRole("button", { name: "Send", exact: true }).click();
   await expect(codeFrame.getByRole("log")).toContainText("First private answer");
   await expect(question).toHaveValue("");
   await question.fill("private-question-follow-up");
-  await codeFrame.getByRole("button", { name: "Ask", exact: true }).click();
+  await codeFrame.getByRole("button", { name: "Send", exact: true }).click();
   await expect(codeFrame.getByRole("log")).toContainText("Follow-up private answer");
   await expect(
     codeFrame.locator(".cm-line").filter({ hasText: "const int doubled" }),
@@ -305,8 +305,20 @@ test("chat code preview and errors across themes", async ({ page }, testInfo) =>
   expect(await codeFrame.locator(".cm-scroller").evaluate((node) => node.clientHeight)).toBe(
     heightBefore,
   );
+  await expect(codeFrame.getByRole("button", { name: "Restore popup", exact: true })).toBeVisible();
+  await codeFrame.getByRole("button", { name: "Restore popup", exact: true }).click();
+  await codeFrame
+    .getByRole("region", { name: "Temporary Q&A", exact: true })
+    .evaluate(async (node) => {
+      await Promise.all(
+        node.parentElement
+          .getAnimations()
+          .filter((animation) => animation.effect.getComputedTiming().endTime !== Infinity)
+          .map((animation) => animation.finished.catch(() => {})),
+      );
+    });
   const popupBox = await codeFrame
-    .getByRole("region", { name: "Private code Q&A", exact: true })
+    .getByRole("region", { name: "Temporary Q&A", exact: true })
     .boundingBox();
   const selectedLine = await codeFrame
     .locator(".cm-line")
@@ -323,26 +335,23 @@ test("chat code preview and errors across themes", async ({ page }, testInfo) =>
   await expect
     .poll(
       async () =>
-        (
-          await codeFrame
-            .getByRole("region", { name: "Private code Q&A", exact: true })
-            .boundingBox()
-        ).y,
+        (await codeFrame.getByRole("region", { name: "Temporary Q&A", exact: true }).boundingBox())
+          .y,
     )
     .toBeLessThan(yBefore - 8);
   await page.screenshot({ path: testInfo.outputPath("code-floating-questions.png") });
   await question.press("Escape");
-  await expect(
-    codeFrame.getByRole("region", { name: "Private code Q&A", exact: true }),
-  ).toHaveCount(0);
+  await expect(codeFrame.getByRole("region", { name: "Temporary Q&A", exact: true })).toHaveCount(
+    0,
+  );
   await expect(codeDialog).toBeVisible();
   await codeFrame.locator(".cm-content").press("Escape");
   await expect(codeDialog).toHaveCount(0);
   await codeLink.click();
-  await codeFrame.getByRole("button", { name: "btw Q&A", exact: true }).click();
+  await codeFrame.getByRole("button", { name: "btw Ask", exact: true }).click();
   await expect(codeFrame.getByRole("log")).not.toContainText("First private answer");
   await expect(codeFrame.getByRole("button", { name: "Send edit", exact: true })).toHaveCount(0);
-  await codeFrame.getByRole("button", { name: "Collapse Q&A", exact: true }).click();
+  await codeFrame.getByRole("button", { name: "Close temporary Q&A", exact: true }).click();
   const mouseLine = codeFrame.locator(".cm-line").filter({ hasText: "int evaluateExpression" });
   await mouseLine.scrollIntoViewIfNeeded();
   await dragCode(
@@ -351,13 +360,13 @@ test("chat code preview and errors across themes", async ({ page }, testInfo) =>
     await codePoint(codeFrame, "int evaluateExpression", 23),
   );
   await expect(codeFrame.locator(".cm-cited-line")).toHaveCount(11);
-  await codeFrame.getByRole("button", { name: "btw Q&A", exact: true }).click();
-  await expect(codeFrame.getByText("Line 784", { exact: true })).toBeVisible();
+  await codeFrame.getByRole("button", { name: "btw Ask", exact: true }).click();
+  await expect(codeFrame.getByRole("button", { name: /Expr\.cpp:784$/ })).toBeVisible();
   const mouseRequest = page.waitForRequest(
     (request) => request.url().endsWith("/code-questions") && request.method() === "POST",
   );
   await question.fill("mouse-selection-question");
-  await codeFrame.getByRole("button", { name: "Ask", exact: true }).click();
+  await codeFrame.getByRole("button", { name: "Send", exact: true }).click();
   expect((await mouseRequest).postDataJSON().selection).toEqual({
     line: 784,
     column: 5,
@@ -365,7 +374,7 @@ test("chat code preview and errors across themes", async ({ page }, testInfo) =>
     endColumn: 23,
   });
   await expect(question).toHaveValue("");
-  await codeFrame.getByRole("button", { name: "Collapse Q&A", exact: true }).click();
+  await codeFrame.getByRole("button", { name: "Close temporary Q&A", exact: true }).click();
   await mouseLine.scrollIntoViewIfNeeded();
   // Reverse drag through several lines keeps the normalized start/end range.
   await dragCode(
@@ -373,13 +382,13 @@ test("chat code preview and errors across themes", async ({ page }, testInfo) =>
     await codePoint(codeFrame, "Preserve null semantics", 12),
     await codePoint(codeFrame, "int evaluateExpression", 5),
   );
-  await codeFrame.getByRole("button", { name: "btw Q&A", exact: true }).click();
-  await expect(codeFrame.getByText("Lines 784–786", { exact: true })).toBeVisible();
+  await codeFrame.getByRole("button", { name: "btw Ask", exact: true }).click();
+  await expect(codeFrame.getByRole("button", { name: /Expr\.cpp:784–786$/ })).toBeVisible();
   const multiRequest = page.waitForRequest(
     (request) => request.url().endsWith("/code-questions") && request.method() === "POST",
   );
   await question.fill("multiline-mouse-question");
-  await codeFrame.getByRole("button", { name: "Ask", exact: true }).click();
+  await codeFrame.getByRole("button", { name: "Send", exact: true }).click();
   expect((await multiRequest).postDataJSON().selection).toEqual({
     line: 784,
     column: 5,
@@ -388,17 +397,17 @@ test("chat code preview and errors across themes", async ({ page }, testInfo) =>
   });
   await expect(question).toHaveValue("");
   await page.screenshot({ path: testInfo.outputPath("code-mouse-selection.png") });
-  await codeFrame.getByRole("button", { name: "Collapse Q&A", exact: true }).click();
+  await codeFrame.getByRole("button", { name: "Close temporary Q&A", exact: true }).click();
   await mouseLine.scrollIntoViewIfNeeded();
   const clickedLine = await codePoint(codeFrame, "int evaluateExpression", 9);
   await page.mouse.click(clickedLine.x, clickedLine.y);
-  await codeFrame.getByRole("button", { name: "btw Q&A", exact: true }).click();
-  await expect(codeFrame.getByText("Line 784", { exact: true })).toBeVisible();
+  await codeFrame.getByRole("button", { name: "btw Ask", exact: true }).click();
+  await expect(codeFrame.getByRole("button", { name: /Expr\.cpp:784$/ })).toBeVisible();
   const clickedRequest = page.waitForRequest(
     (request) => request.url().endsWith("/code-questions") && request.method() === "POST",
   );
   await question.fill("clicked-line-question");
-  await codeFrame.getByRole("button", { name: "Ask", exact: true }).click();
+  await codeFrame.getByRole("button", { name: "Send", exact: true }).click();
   expect((await clickedRequest).postDataJSON().selection).toEqual({
     line: 784,
     column: 1,
@@ -406,7 +415,7 @@ test("chat code preview and errors across themes", async ({ page }, testInfo) =>
     endColumn: lines[783].length + 1,
   });
   await expect(question).toHaveValue("");
-  await codeFrame.getByRole("button", { name: "Collapse Q&A", exact: true }).click();
+  await codeFrame.getByRole("button", { name: "Close temporary Q&A", exact: true }).click();
   await codeFrame.locator(".cm-content").press("Escape");
   await setAccountPrefs(page.request, { themeMode: "dark" });
   await page.reload();
