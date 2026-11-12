@@ -157,6 +157,7 @@ export function renderMainChatBody(scope: MainChatView) {
                               </div>
                             ) : (
                               <MessageStream
+                      sessionId={selected?.sessionId}
                                 items={allItems}
                                 version={stream.version}
                                 ctx={ctx}

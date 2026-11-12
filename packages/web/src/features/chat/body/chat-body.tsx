@@ -130,6 +130,7 @@ export function ChatBody({ session, projectId }: { session: ChatBodySession; pro
                     </div>
                   ) : (
                     <MessageStream
+                      sessionId={selected?.sessionId}
                       items={allItems}
                       version={stream.version}
                       ctx={ctx}

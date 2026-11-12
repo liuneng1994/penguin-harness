@@ -1,0 +1,12 @@
+::highlight(penguin-btw-reading) {
+  background: var(--ui-accent-muted);
+  color: var(--ui-fg);
+}
+.btw-reply-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+.btw-selection-trigger {
+  z-index: 65;
+  box-shadow: var(--ui-shadow-overlay);
+}

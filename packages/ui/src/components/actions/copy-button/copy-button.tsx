@@ -66,8 +66,9 @@ export function useClipboardWriter(): ClipboardWriter {
  * Transient "just copied" flag: `flash()` writes the text and, if the write landed, turns
  * `copied` on for COPIED_MS. For a caller whose copy trigger is not a plain CopyButton (a text
  * button rendering CopyCheckGlyph beside its label); most callers use CopyButton directly.
+ * A resetKey clears feedback when content changes and drops late writes from before it.
  */
-export function useCopied(): { copied: boolean; flash: (text: string) => void } {
+export function useCopied(resetKey?: unknown): { copied: boolean; flash: (text: string) => void } {
   const write = useContext(ClipboardWriterContext);
   const [copied, setCopied] = useState(false);
   // The pending reset is held so it can be restarted and cancelled. Restarted: a second click
@@ -76,17 +77,21 @@ export function useCopied(): { copied: boolean; flash: (text: string) => void } 
   // reads as "the copy didn't take". Cancelled: the control can unmount inside the window (a
   // popover or a modal that closes itself), and the timeout must not outlive it.
   const resetTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(
-    () => () => {
+  const generation = useRef(0);
+  useEffect(() => {
+    setCopied(false);
+    return () => {
+      generation.current++;
       if (resetTimer.current !== null) clearTimeout(resetTimer.current);
-    },
-    [],
-  );
+      resetTimer.current = null;
+    };
+  }, [resetKey]);
   const flash = (text: string) => {
+    const current = generation.current;
     void write(text).then((ok) => {
       // A refused write shows nothing rather than a check: the control returns to idle, so the
       // copy can simply be retried — there is no state to be stuck in.
-      if (!ok) return;
+      if (!ok || generation.current !== current) return;
       setCopied(true);
       if (resetTimer.current !== null) clearTimeout(resetTimer.current);
       resetTimer.current = setTimeout(() => {

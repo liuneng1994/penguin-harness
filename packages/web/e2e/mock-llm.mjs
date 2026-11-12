@@ -163,6 +163,37 @@ const server = http.createServer((req, res) => {
       return;
     }
 
+    if (
+      !isTitle &&
+      (flat.includes("This is a temporary, tool-free reading Q&A.") ||
+        flat.includes("btw reading test"))
+    ) {
+      res.writeHead(200, { "content-type": "text/event-stream", "cache-control": "no-cache" });
+      messageStart(res, msgCount);
+      const aside = flat.includes("This is a temporary, tool-free reading Q&A.");
+      let text = aside
+        ? flat.includes("btw follow-up")
+          ? "A concrete example: Alice and Bob exist, Carol does not. Bloom Filter can report Carol as possibly present, so the reader checks the actual data."
+          : "A false positive means the value is absent but the filter reports it as possibly present. This costs extra reads and does not change the correct result."
+        : "## Reading a long model reply\n\nBloom Filter can say a value is possibly present even when it is absent. This is a false positive. It can cause extra reads but does not discard actual matches.\n\n" +
+          Array.from(
+            { length: 18 },
+            (_, i) =>
+              `### Reading context ${i + 1}\n\nPredicate pushdown passes the condition to the reader. Row Group statistics can skip entire groups. Delayed materialization avoids decoding columns for rows that did not match. These mechanisms act at different stages.\n\n`,
+          ).join("");
+      if (aside && flat.includes("long-reading-answer"))
+        text +=
+          "\n\n" +
+          Array.from(
+            { length: 6 },
+            (_, index) =>
+              `### Reading step ${index + 1}\n\nCheck the cached row set before reusing a result. If any requested rows remain, evaluate those rows and merge the new values into the existing result. The original row positions stay intact.\n\n`,
+          ).join("");
+      block(res, 0, { type: "text", text: "" }, [{ type: "text_delta", text }]);
+      messageStop(res, "end_turn", aside ? 50 : 1000);
+      return;
+    }
+
     // Background-subagent FAILURE case (background-subagent.spec): the child session's own
     // requests (its context is just the fail prompt) are rejected 401 invalid_api_key —
     // classified `auth`, which the engine never retries, so the child's run fails at once
@@ -277,7 +308,17 @@ const server = http.createServer((req, res) => {
     // must be checked before hasToolResult (the same session's history already has a
     // first-round tool_result).
     if (flat.includes("pure Q&A")) {
-      if (flat.includes("cancel-this-question")) {
+      const content = messages.at(-1)?.content;
+      const prompt =
+        typeof content === "string"
+          ? content
+          : Array.isArray(content)
+            ? content
+                .filter((part) => part.type === "text")
+                .map((part) => part.text)
+                .join("\n")
+            : "";
+      if (prompt.endsWith("\n\nQuestion: cancel-this-question")) {
         // Keep the response streaming until the caller cancels; a later question is independent.
         block(res, 0, { type: "text", text: "" }, [
           { type: "text_delta", text: "Waiting for cancellation." },

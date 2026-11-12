@@ -91,7 +91,9 @@ export function SelectionMenuRows({
   selection,
   onAddExcerpt,
   onDone,
+  onBtw,
 }: {
+  onBtw?: (selection: CapturedSelection) => void;
   selection: CapturedSelection;
   /** Stages the excerpt in this conversation's composer. */
   onAddExcerpt: (reference: ComposerReference) => void;
@@ -124,6 +126,15 @@ export function SelectionMenuRows({
             }}
           />
         ),
+      )}
+      {onBtw && (
+        <MenuItem
+          label={S.chat.btw.ask}
+          onSelect={() => {
+            onDone(selection);
+            onBtw(selection);
+          }}
+        />
       )}
     </>
   );
@@ -260,6 +271,10 @@ export interface StreamSelectionMenu {
 
 export function useStreamSelectionMenu(
   onAddExcerpt: (reference: ComposerReference) => void,
+  btw?: {
+    canAsk: (selection: CapturedSelection) => boolean;
+    ask: (selection: CapturedSelection) => boolean;
+  },
 ): StreamSelectionMenu {
   // The row hook's anchor state and dismissal, with the stream as its "row": its owner is what a
   // scroll must move for the panel to close, and that is the stream's own scroll.
@@ -381,6 +396,7 @@ export function useStreamSelectionMenu(
               selection={captured.selection}
               onAddExcerpt={onAddExcerpt}
               onDone={done}
+              onBtw={btw?.canAsk(captured.selection) ? btw.ask : undefined}
             />
           )}
         </Menu>

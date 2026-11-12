@@ -53,7 +53,8 @@ export interface PreviewOptions {
   onSelection?: (selection: CodeSelection) => void;
 }
 export interface PreviewEditor {
-  revealSelection(): void;
+  revealSelection(selection?: CodeSelection): void;
+  pinSelection(selection: CodeSelection | null): void;
   focus(): void;
   selection(): CodeSelection;
   changes(changes: GitChange[]): void;
@@ -104,6 +105,8 @@ export async function createPreviewEditor(
   let selectionTouched = false;
   let changes = options.changes ?? [];
   const changeEffect = StateEffect.define<GitChange[]>();
+  const pinnedEffect = StateEffect.define<CodeSelection | null>();
+  let pinned: CodeSelection | null = null;
   const widgetMounts = new WeakMap<
     HTMLElement,
     { cleanup: () => void; observer: ResizeObserver }
@@ -133,6 +136,15 @@ export async function createPreviewEditor(
     state.doc.line(Math.max(1, Math.min(state.doc.lines, line))).from;
   const marks = (state: EditorState): DecorationSet => {
     const ranges = [];
+    if (pinned) {
+      for (let line = pinned.line; line <= pinned.endLine; line++)
+        ranges.push(
+          Decoration.line({ class: "cm-question-line" }).range(state.doc.line(line).from),
+        );
+      const from = state.doc.line(pinned.line).from + pinned.column - 1;
+      const to = state.doc.line(pinned.endLine).from + pinned.endColumn - 1;
+      if (to > from) ranges.push(Decoration.mark({ class: "cm-question-text" }).range(from, to));
+    }
     if (options.line !== undefined) {
       for (let line = first; line <= last; line++)
         ranges.push(Decoration.line({ class: "cm-cited-line" }).range(state.doc.line(line).from));
@@ -181,6 +193,10 @@ export async function createPreviewEditor(
         selectionTouched = true;
       let changed = false;
       for (const effect of tr.effects) {
+        if (effect.is(pinnedEffect)) {
+          pinned = effect.value;
+          changed = true;
+        }
         if (effect.is(changeEffect)) {
           changes = effect.value;
           changed = true;
@@ -304,6 +320,8 @@ export async function createPreviewEditor(
           ".cm-selectionBackground, &.cm-focused .cm-selectionBackground, ::selection": {
             backgroundColor: "var(--ui-code-selection)",
           },
+          ".cm-question-line": { boxShadow: "inset 2px 0 var(--ui-accent)" },
+          ".cm-question-text": { backgroundColor: "var(--ui-code-selection)" },
           ".cm-panels": {
             backgroundColor: "var(--ui-surface-muted)",
             color: "var(--ui-fg)",
@@ -382,8 +400,11 @@ export async function createPreviewEditor(
     effects: EditorView.scrollIntoView(view.state.selection.main.head, { y: "center" }),
   });
   return {
-    revealSelection() {
-      const range = selectedCode(view.state);
+    pinSelection(selection) {
+      if (!destroyed) view.dispatch({ effects: pinnedEffect.of(selection) });
+    },
+    revealSelection(selection) {
+      const range = selection ?? selectedCode(view.state);
       const position =
         (range.endLine - range.line + 1) * view.defaultLineHeight < parent.clientHeight / 2
           ? doc.line(range.line).from + range.column - 1

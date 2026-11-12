@@ -18,7 +18,8 @@ export interface GitChange {
   removed: Array<{ line: number; text: string }>;
 }
 export interface PreviewEditor {
-  revealSelection(): void;
+  revealSelection(selection?: CodeSelection): void;
+  pinSelection(selection: CodeSelection | null): void;
   focus(): void;
   selection(): CodeSelection;
   changes(changes: GitChange[]): void;

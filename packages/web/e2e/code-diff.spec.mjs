@@ -195,16 +195,16 @@ test("current-file Git diff and code questions", async ({ page }, info) => {
         `${BASE}/api/sessions/${sid}/files/git-diff?path=bolt/expression/Expr.cpp&scope=staged`,
       )
     ).json();
-    await frame.getByRole("button", { name: "btw Q&A", exact: true }).click();
+    await frame.getByRole("button", { name: "btw Ask", exact: true }).click();
     await expect(frame.locator(".cm-cited-line")).toHaveCount(11);
     await expect(frame.locator(".cm-git-modify")).toContainText("value * 2;");
     const request = page.waitForRequest(
       (r) => r.url().endsWith("/code-questions") && r.method() === "POST",
     );
     await frame
-      .getByRole("textbox", { name: "Ask about this code…", exact: true })
+      .getByRole("textbox", { name: "Temporary Q&A", exact: true })
       .fill("private-question-one");
-    await frame.getByRole("button", { name: "Ask", exact: true }).click();
+    await frame.getByRole("button", { name: "Send", exact: true }).click();
     const body = (await request).postDataJSON();
     expect(body.gitScope).toBe("staged");
     expect(body.gitVersion).toBe(snapshot.version);
@@ -214,16 +214,12 @@ test("current-file Git diff and code questions", async ({ page }, info) => {
     );
     // Keyboard access to More leaves Q&A open; Escape must close the newer layer first.
     await frame.getByRole("button", { name: "More", exact: true }).press("Space");
-    await expect(
-      frame.getByRole("region", { name: "Private code Q&A", exact: true }),
-    ).toBeVisible();
+    await expect(frame.getByRole("region", { name: "Temporary Q&A", exact: true })).toBeVisible();
     await frame.getByRole("menuitem", { name: "Copy diff", exact: true }).press("Escape");
     await expect(frame.getByRole("menu")).toHaveCount(0);
-    await expect(
-      frame.getByRole("region", { name: "Private code Q&A", exact: true }),
-    ).toBeVisible();
+    await expect(frame.getByRole("region", { name: "Temporary Q&A", exact: true })).toBeVisible();
     if (themeId === "github") {
-      const question = frame.getByRole("textbox", { name: "Ask about this code…", exact: true });
+      const question = frame.getByRole("textbox", { name: "Temporary Q&A", exact: true });
       const cancelledRequests = [];
       const record = (request) => {
         if (
@@ -235,20 +231,20 @@ test("current-file Git diff and code questions", async ({ page }, info) => {
       };
       page.on("request", record);
       await question.fill("cancel-this-question");
-      await frame.getByRole("button", { name: "Ask", exact: true }).click();
+      await frame.getByRole("button", { name: "Send", exact: true }).click();
       await expect(frame.getByRole("log")).toContainText("Waiting for cancellation");
       await frame.getByRole("button", { name: "Stop", exact: true }).click();
-      await expect(frame.getByRole("button", { name: "Ask", exact: true })).toBeEnabled();
+      await expect(frame.getByRole("button", { name: "Send", exact: true })).toBeVisible();
+      await expect(frame.getByRole("log")).toContainText("Stopped");
+      await expect(question).toHaveValue("");
       await question.fill("ask-again-after-stop");
-      await frame.getByRole("button", { name: "Ask", exact: true }).click();
+      await frame.getByRole("button", { name: "Send", exact: true }).click();
       await expect(frame.getByRole("log")).toContainText("Follow-up private answer");
       expect(cancelledRequests).toHaveLength(1);
       page.off("request", record);
     }
-    await frame.getByRole("textbox", { name: "Ask about this code…", exact: true }).press("Escape");
-    await expect(frame.getByRole("region", { name: "Private code Q&A", exact: true })).toHaveCount(
-      0,
-    );
+    await frame.getByRole("textbox", { name: "Temporary Q&A", exact: true }).press("Escape");
+    await expect(frame.getByRole("region", { name: "Temporary Q&A", exact: true })).toHaveCount(0);
     await expect(dialog).toBeVisible();
     await frame.locator(".cm-content").press("Escape");
   }
@@ -330,7 +326,7 @@ test("current-file Git diff and code questions", async ({ page }, info) => {
     "The file changed. Reload code before asking about it.",
   );
   await expect(frame.locator(".cm-content")).toHaveCount(0);
-  await expect(frame.getByRole("button", { name: "btw Q&A", exact: true })).toHaveCount(0);
+  await expect(frame.getByRole("button", { name: "btw Ask", exact: true })).toHaveCount(0);
   await page.unroute(pattern, inconsistent);
   await fs.writeFile(file, Buffer.from([0, 1, 2]));
   await frame.getByRole("button", { name: "Reload code", exact: true }).click();
@@ -375,11 +371,11 @@ test("current-file Git diff and code questions", async ({ page }, info) => {
   await page.getByRole("dialog").getByRole("button", { name: "Close", exact: true }).click();
   await page.getByRole("link", { name: "bolt/expression/Expr.cpp:785-795", exact: true }).click();
   await expect(frame.getByRole("table")).toContainText("value * 2;");
-  await frame.getByRole("button", { name: "btw Q&A", exact: true }).click();
+  await frame.getByRole("button", { name: "btw Ask", exact: true }).click();
   await frame
-    .getByRole("textbox", { name: "Ask about this code…", exact: true })
+    .getByRole("textbox", { name: "Temporary Q&A", exact: true })
     .fill("private-question-one");
-  await frame.getByRole("button", { name: "Ask", exact: true }).click();
+  await frame.getByRole("button", { name: "Send", exact: true }).click();
   await expect(frame.getByRole("log")).toContainText("First private answer");
   await write(4);
   await frame.getByRole("button", { name: "Reload code", exact: true }).click();
