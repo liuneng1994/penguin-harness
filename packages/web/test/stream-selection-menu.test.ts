@@ -11,7 +11,7 @@
  * environment cannot run; the rules deciding them are pinned in selection-menu.test.ts.
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createElement, isValidElement } from "react";
+import { Children, createElement, isValidElement } from "react";
 import type { ReactElement, ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { ICONS } from "@prismshadow/penguin-ui";
@@ -66,13 +66,13 @@ type Row = ReactElement<{ onSelect: () => void; label: ReactNode }>;
 /** The rows as the component returns them, to reach their click handlers. */
 function rows(props: Parameters<typeof SelectionMenuRows>[0]): Row[] {
   const fragment = SelectionMenuRows(props) as ReactElement<{ children: ReactNode }>;
-  return ([] as ReactNode[]).concat(fragment.props.children).filter(isValidElement) as Row[];
+  return Children.toArray(fragment.props.children).filter(isValidElement) as Row[];
 }
 
 /** The same for a link's rows. */
 function linkRows(props: Parameters<typeof LinkMenuRows>[0]): Row[] {
   const fragment = LinkMenuRows(props) as ReactElement<{ children: ReactNode }>;
-  return ([] as ReactNode[]).concat(fragment.props.children).filter(isValidElement) as Row[];
+  return Children.toArray(fragment.props.children).filter(isValidElement) as Row[];
 }
 
 /** A row's visible label (the Menu row's own prop; the glyph is a separate one). */

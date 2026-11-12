@@ -11,6 +11,7 @@
  * Retry a failed or stopped run's last line offers.
  */
 import { useState } from "react";
+import { useBtwActions } from "./btw-reading";
 import type { ReactNode } from "react";
 import {
   AssistantText,
@@ -267,6 +268,7 @@ export function MessageItem({
    */
   images?: readonly string[];
 }) {
+  const btw = useBtwActions();
   switch (item.kind) {
     case "user_text": {
       // Harness-injected completion notice of a run_in_background task: collapsed into a
@@ -393,17 +395,36 @@ export function MessageItem({
       // card follows the text once it is fully revealed. How the Request ended is not the
       // text's to say: the retry line, error banner or stop marker that follows says it.
       return (
-        <AssistantText text={item.text} streaming={item.streaming}>
-          {/* Nested models don't produce task_stats, so preserve their existing message-level file summaries. The root conversation renders one aggregated card from task_stats instead. */}
-          {ctx.origin.length > 0 && !item.streaming && ctx.onOpenFile && ctx.statFiles && (
-            <MessageFilesCard
-              text={item.text}
-              workspace={ctx.workspace ?? null}
-              statFiles={ctx.statFiles}
-              onOpenFile={ctx.onOpenFile}
-            />
+        <div
+          tabIndex={-1}
+          data-btw-reply={btw && ctx.origin.length === 0 && !item.streaming ? item.id : undefined}
+        >
+          {btw && ctx.origin.length === 0 && !item.streaming && item.text.trim() && (
+            <div className="btw-reply-actions">
+              <TextAction
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={(event) =>
+                  btw.whole(item, event.currentTarget.closest<HTMLElement>("[data-btw-reply]")!)
+                }
+              >
+                {S.chat.btw.ask}
+              </TextAction>
+            </div>
           )}
-        </AssistantText>
+          <div data-btw-body>
+            <AssistantText text={item.text} streaming={item.streaming}>
+              {/* Nested models don't produce task_stats, so preserve their existing message-level file summaries. The root conversation renders one aggregated card from task_stats instead. */}
+              {ctx.origin.length > 0 && !item.streaming && ctx.onOpenFile && ctx.statFiles && (
+                <MessageFilesCard
+                  text={item.text}
+                  workspace={ctx.workspace ?? null}
+                  statFiles={ctx.statFiles}
+                  onOpenFile={ctx.onOpenFile}
+                />
+              )}
+            </AssistantText>
+          </div>
+        </div>
       );
     case "thinking":
       return <SessionThinking item={item} />;

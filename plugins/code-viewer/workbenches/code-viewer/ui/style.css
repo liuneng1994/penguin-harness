@@ -79,18 +79,7 @@ body {
 }
 /* Floating questions do not consume any editor height. */
 .code-question-trigger {
-  z-index: 40;
-}
-.code-question-popup {
-  display: flex;
-  flex-direction: column;
-  padding: 0;
-}
-.code-floating-content {
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  max-height: min(40vh, 280px);
+  z-index: 65;
 }
 .code-preview-footer {
   min-height: max(

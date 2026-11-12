@@ -12,15 +12,16 @@ same chat position.
 
 Drag the mouse to select any code, including part of a line or several lines outside the original
 citation, or click a line to ask about that whole line. The original citation and Git change highlights remain visible while you select code or ask
-questions. Click **Ask** beside the selection. A question panel floats below the selected
-line and follows it as you scroll, without changing the code viewport's height. **btw Q&A**
+questions. Click **btw Ask** beside the selection. A question panel floats below the selected
+line and follows it as you scroll, without changing the code viewport's height. **btw**
 streams answers using the selected code, the main conversation's current readable context and
 its own previous questions and answers. Each question reads the main context again, including
 new main-conversation messages. Images and private reasoning are excluded from that snapshot.
 
 No question or answer is appended to the main conversation or its Trace; usage is still metered
-against the Session. The question request has no tools and cannot edit files. Closing or
-reloading the preview clears this conversation; **Clear Q&A** starts over in place.
+against the Session. The question request has no tools and cannot edit files. Closing the question panel or reloading the preview cancels generation and clears this conversation. Stopping keeps a partial answer, or restores the question if no answer has arrived.
+
+Long answers and multiple turns expand the reading popup. **Expand reading** and **Restore popup** switch its size without losing the draft or history. Scrolling up keeps the reading position while new text arrives.
 
 C/C++, JavaScript/TypeScript, Python, JSON, Rust and shell load their syntax parsers on demand,
 with colored tokens for both light and dark mode.

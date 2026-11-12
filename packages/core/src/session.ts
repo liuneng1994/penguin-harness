@@ -1261,17 +1261,26 @@ export class Session {
   }
 
   /** Read current main context in a fresh, tool-free request without writing its engine or Trace. */
-  async *streamAside(prompt: string, signal?: AbortSignal): AsyncGenerator<AmspRecord, LLMOutcome> {
+  async *streamAside(
+    prompt: string,
+    signal?: AbortSignal,
+    options?: { maxContextChars?: number },
+  ): AsyncGenerator<AmspRecord, LLMOutcome> {
     if (signal?.aborted) return { status: "aborted" };
     if (!this.createBareLLM)
       return { status: "fatal", errorMessage: "Side questions are unavailable for this Session." };
     const llm = this.createBareLLM({ maxTokens: 4096 });
-    const context =
+    const snapshot =
       this.engine?.contextSnapshot() ??
       JSON.stringify({
         systemPrompt: this.meta.payload.system_prompt,
         messages: contextRecords(this.resumedHistory ?? []),
       });
+    const limit = options?.maxContextChars;
+    const context =
+      limit !== undefined && limit > 0 && snapshot.length > limit
+        ? `Earlier main context omitted. Recent context:\n${snapshot.slice(-limit)}`
+        : snapshot;
     return yield* llm.streamGenerate({
       newMessages: [
         userText(`Current main conversation (read-only context):\n${context}\n\n${prompt}`),

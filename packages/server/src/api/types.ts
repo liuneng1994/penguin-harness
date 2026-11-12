@@ -7990,3 +7990,11 @@ export interface DesktopBrowserEventMessage {
   type: "desktop-browser-event";
   event: DesktopBrowserEvent;
 }
+
+/** A temporary reading question; its side history is held by the page, never the main Session. */
+export interface BtwQuestionRequest {
+  position: TracePosition;
+  excerpt?: string;
+  question: string;
+  history: Array<{ question: string; answer: string }>;
+}

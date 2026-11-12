@@ -8,6 +8,7 @@ import type {
   CSSProperties,
   InputHTMLAttributes,
   ReactNode,
+  Ref,
   RefCallback,
   TextareaHTMLAttributes,
 } from "react";
@@ -143,6 +144,8 @@ export interface InputAffix {
 }
 
 export interface InputProps extends Omit<InputHTMLAttributes<HTMLInputElement>, "size"> {
+  /** The input itself, for focus without scrolling when an anchored panel opens. */
+  ref?: Ref<HTMLInputElement>;
   label?: string;
   hint?: string;
   /**

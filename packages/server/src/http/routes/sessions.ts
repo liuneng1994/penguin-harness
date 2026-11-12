@@ -10,6 +10,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { Hono } from "hono";
 import { registerCodeQuestions } from "./code-questions.js";
+import { registerBtwQuestions } from "./btw-questions.js";
 import type { Context } from "hono";
 import {
   THINKING_LEVEL_NAMES,
@@ -783,6 +784,7 @@ export function sessionsRoutes(deps: SessionsRouteDeps): Hono<AppEnv> {
     return readableSession(row, c.var.user, deps.access);
   };
   registerCodeQuestions(app, deps, resolveSession);
+  registerBtwQuestions(app, deps, resolveSession);
 
   app.get("/:sessionId", async (c) => {
     const row = resolveSession(c);
