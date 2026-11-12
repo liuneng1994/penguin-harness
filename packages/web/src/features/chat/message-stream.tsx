@@ -448,7 +448,6 @@ export function MessageStream({
 
   /** Near the top of loaded history: fetch the previous window (loading/error states gate re-triggering; the retry row is click-driven). */
   const maybeLoadOlder = (el: HTMLDivElement) => {
-    if (sessionScroll.pending()) return;
     const o = olderRef.current;
     if (!o || !o.hasMore || o.loading || o.error !== null) return;
     if (el.scrollTop < OLDER_TRIGGER_PX) o.onLoad();
@@ -456,7 +455,10 @@ export function MessageStream({
 
   const onScroll = () => {
     const el = scrollRef.current;
-    if (!el || sessionScroll.pending()) return;
+    if (!el) return;
+    // Restoration never scrolls while waiting for history; any scroll here hands the view
+    // to the reader, including scrollbar, keyboard, outline and find jumps.
+    sessionScroll.cancel();
     const prevTop = lastTopRef.current;
     lastTopRef.current = el.scrollTop;
     // Scrollbar-drag / keyboard scroll upward during the return cancels it (wheel/touch cancel in their own handlers).
@@ -608,6 +610,7 @@ export function MessageStream({
   const jumpToLatest = () => {
     const el = scrollRef.current;
     if (!el) return;
+    sessionScroll.cancel();
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
       follow.resume();
       stickToBottom(el, follow);
@@ -670,12 +673,7 @@ export function MessageStream({
         onKeyUp={btw.capture}
         onPointerDown={selectionMenu.hostProps.onPointerDown}
         onContextMenu={selectionMenu.hostProps.onContextMenu}
-        onKeyDown={(event) => {
-          if (["ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home", "End"].includes(event.key)) {
-            sessionScroll.cancel();
-          }
-          selectionMenu.hostProps.onKeyDown(event);
-        }}
+        onKeyDown={selectionMenu.hostProps.onKeyDown}
         onScroll={onScroll}
         onTouchStart={(e) => {
           sessionScroll.cancel();

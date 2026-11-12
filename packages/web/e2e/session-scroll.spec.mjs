@@ -3,10 +3,12 @@
  * historical reading location even when it needs an older window. A second Session keeps its
  * own location. A reply streaming while the reader switches must not move that historical view;
  * leaving at the bottom instead follows the newer reply when the Session is reopened.
+ * A direct scroll while restoration waits for an older window takes control of the view.
  */
 import { test, expect } from "@playwright/test";
 import { provisionAndLogin } from "./auth.mjs";
 import { setAccountPrefs } from "./account-prefs.mjs";
+import { watchSocket } from "./api-socket.mjs";
 
 const BASE = process.env.BASE_URL;
 const MOCK = process.env.MOCK_URL;
@@ -85,6 +87,7 @@ test("Session switches preserve reading positions, pagination and stream-follow 
     },
   });
   expect(model.ok()).toBeTruthy();
+  const socket = await watchSocket(page);
   const ids = [];
   for (const count of [25, 4]) {
     const { session } = await (
@@ -119,6 +122,26 @@ test("Session switches preserve reading positions, pagination and stream-follow 
     await expectPosition(page, "Reading prompt 3.", aOffset);
     console.log(`SESSION-SCROLL ${themeId}: historical offsets A=${aOffset}, B=${bOffset}`);
   }
+
+  // The previous window is still coming over when the reader chooses a different position.
+  const olderPath = socket.calls.findLast((c) =>
+    c.path.startsWith(`/api/sessions/${a}/history?before=`),
+  ).path;
+  await switchTo(page, b);
+  socket.hold(olderPath, 1000);
+  const olderRequested = socket.nextCall((c) => c.path === olderPath);
+  await switchTo(page, a);
+  await olderRequested;
+  const chosenOffset = await placeAt(page, "Reading prompt 20.", -40);
+  await expect(page.locator(`${SCROLLER} [data-outline-anchor]`)).toHaveCount(25);
+  await expectPosition(page, "Reading prompt 20.", chosenOffset);
+  await switchTo(page, b);
+  await switchTo(page, a);
+  await expectPosition(page, "Reading prompt 20.", chosenOffset);
+  await page.locator(SCROLLER).evaluate((el) => {
+    el.scrollTop = 0;
+  });
+  await expect(page.locator(`${SCROLLER} [data-outline-anchor]`)).toHaveCount(25);
 
   // A background reply adds content while A's historical view is away and after it returns.
   const offset = await placeAt(page, "Reading prompt 3.", -40);

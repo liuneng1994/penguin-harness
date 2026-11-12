@@ -8,11 +8,11 @@ import { stickToBottom } from "./stream-follow";
 
 type Prompt = Extract<ChatItem, { kind: "user_text" | "user_image" }>;
 interface ReadingPosition {
-  following: boolean;
   scrollTop: number;
   anchor: { kind: Prompt["kind"]; atMs?: number; content: string; offset: number } | null;
 }
-const positions = new Map<string, ReadingPosition>();
+type SavedPosition = "latest" | ReadingPosition;
+const positions = new Map<string, SavedPosition>();
 const contentOf = (item: Prompt) => (item.kind === "user_text" ? item.text : item.imageUrl);
 const isPrompt = (item: ChatItem): item is Prompt =>
   item.kind === "user_text" || item.kind === "user_image";
@@ -37,32 +37,35 @@ export function useSessionScroll(
 
   useLayoutEffect(() => {
     const el = scrollRef.current;
-    if (pending.current !== null && !pending.current.following) follow.wheel(-1);
+    if (pending.current !== null && pending.current !== "latest") follow.wheel(-1);
     // Layout cleanup reads the outgoing DOM before React removes it. A passive cleanup would
     // find an empty container, and leaving during a history read must keep the original target.
     return () => {
       if (key === null || el === null || pending.current !== null) return;
       follow.observed(metrics(el));
-      const top = el.getBoundingClientRect().top;
-      let anchor: ReadingPosition["anchor"] = null;
-      const prompts = new Map(
-        itemsRef.current.filter(isPrompt).map((item) => [String(item.id), item]),
-      );
-      for (const node of el.querySelectorAll<HTMLElement>("[data-outline-anchor]")) {
-        const item = prompts.get(node.dataset.outlineAnchor ?? "");
-        if (item === undefined) continue;
-        const offset = node.getBoundingClientRect().top - top;
-        // Use the prompt immediately above the viewport, including when reading its long reply.
-        if (offset > 0 && anchor !== null) break;
-        anchor = { kind: item.kind, atMs: item.atMs, content: contentOf(item), offset };
-        if (offset > 0) break;
+      if (follow.stick) {
+        positions.set(key, "latest");
+        return;
       }
-      positions.set(key, { following: follow.stick, scrollTop: el.scrollTop, anchor });
+      const top = el.getBoundingClientRect().top;
+      const nodes = [...el.querySelectorAll<HTMLElement>("[data-outline-anchor]")];
+      // Use the prompt immediately above the viewport, including when reading its long reply.
+      const node = nodes.findLast((n) => n.getBoundingClientRect().top <= top) ?? nodes[0];
+      const item = itemsRef.current.find((i) => String(i.id) === node?.dataset.outlineAnchor);
+      const anchor =
+        node !== undefined && item !== undefined && isPrompt(item)
+          ? {
+              kind: item.kind,
+              atMs: item.atMs,
+              content: contentOf(item),
+              offset: node.getBoundingClientRect().top - top,
+            }
+          : null;
+      positions.set(key, { scrollTop: el.scrollTop, anchor });
     };
   }, [key, follow, scrollRef]);
 
   return {
-    pending: () => pending.current !== null,
     cancel: () => {
       pending.current = null;
     },
@@ -70,7 +73,7 @@ export function useSessionScroll(
     restore(el: HTMLDivElement, older: OlderHistoryControls | undefined): boolean {
       const saved = pending.current;
       if (saved === null) return false;
-      if (saved.following) {
+      if (saved === "latest") {
         follow.resume();
         stickToBottom(el, follow);
       } else {

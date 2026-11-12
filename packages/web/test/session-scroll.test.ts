@@ -9,6 +9,8 @@
  * - Given an older-window failure or a removed prompt, restoration releases the view for scrolling.
  * - Given a Session left before restoration finishes, reopening still seeks the original prompt.
  * - Given wheel input during restoration, the reader takes control and backfill stops.
+ * - Given a scrollbar, outline or keyboard scroll during restoration, that new position wins.
+ * - Given Jump to latest pressed before history arrives, the view follows the bottom instead.
  * - Given a stream without a Session or prompt anchors, remounting remains usable.
  */
 import { act, createElement } from "react";
@@ -16,8 +18,9 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { MessageStream } from "../src/features/chat/message-stream";
 import type { OlderHistoryControls } from "../src/features/chat/message-stream";
 import type { ChatItem } from "../src/lib/amsp/stream-model";
-import { mount, unmountAll } from "./helpers/dom";
+import { button, click, mount, unmountAll } from "./helpers/dom";
 import { LocaleProvider } from "../src/state/locale";
+import { S } from "../src/lib/strings";
 
 let extraHeight = 0;
 let serial = 0;
@@ -226,6 +229,32 @@ it("wheel input takes control during restoration and stops seeking older windows
   await page.rerender(view("A", 4, 6, older({ onLoad })));
   expect(onLoad).not.toHaveBeenCalled();
   expect(scroller().scrollTop).toBe(500);
+});
+
+it("a direct scroll during restoration takes control and stops seeking the old prompt", async () => {
+  const page = await mount(view("A"));
+  await scroll(650);
+  await page.rerender(view("B"));
+  await page.rerender(view("A", 4, 6, older({ loading: true })));
+  await scroll(500);
+  const onLoad = vi.fn();
+  await page.rerender(view("A", 4, 6, older({ onLoad })));
+  expect(onLoad).not.toHaveBeenCalled();
+  expect(scroller().scrollTop).toBe(500);
+  await page.rerender(view("B"));
+  await page.rerender(view("A", 4, 6));
+  expect(scroller().scrollTop).toBe(500);
+});
+
+it("Jump to latest cancels restoration before its scroll event and follows arriving history", async () => {
+  vi.stubGlobal("matchMedia", () => ({ matches: true }));
+  const page = await mount(view("A"));
+  await scroll(650);
+  await page.rerender(view("B"));
+  await page.rerender(view("A", 4, 6, older({ loading: true })));
+  await click(button(S.chat.jumpToLatest));
+  await page.rerender(view("A", 1, 6, older({ hasMore: false, prependedCount: 6 }), -100));
+  expect(scroller().scrollTop).toBe(3200);
 });
 
 it("streams without a Session or prompt anchors can still be remounted", async () => {
