@@ -19,7 +19,7 @@
  * **The caps are duplicated on the server on purpose** (`services/draft-shortcuts.ts`), which is
  * where they are enforced — ui_prefs is a free-form JSON column, so a bound that lives only in
  * this editor is not a bound at all. The numbers here drive the counters and the disabled states;
- * `test/user-shortcuts.test.ts` fails if the two copies drift apart.
+ * The list itself has no item-count limit.
  */
 import type { DraftShortcut } from "@prismshadow/penguin-server/api";
 import { randomHex } from "../../lib/random-id";
@@ -27,8 +27,6 @@ import { randomHex } from "../../lib/random-id";
 /** A saved shortcut, as stored and as rendered. Re-exported from the API type so the two cannot drift. */
 export type UserShortcut = DraftShortcut;
 
-/** Most shortcuts one user may keep. Past this a click-to-pick list is a search problem. */
-export const SHORTCUT_MAX_COUNT = 3;
 /** Longest title, in characters: what one folder row shows without truncating. */
 export const SHORTCUT_TITLE_MAX = 40;
 /** Longest prompt body, in characters: about three times the longest built-in example. */
@@ -64,7 +62,6 @@ export function normalizeShortcuts(value: unknown): UserShortcut[] {
   const out: UserShortcut[] = [];
   const seen = new Set<string>();
   for (const entry of value) {
-    if (out.length >= SHORTCUT_MAX_COUNT) break;
     if (entry === null || typeof entry !== "object" || Array.isArray(entry)) continue;
     const raw = entry as Record<string, unknown>;
     const id = readField(raw.id, 64);
@@ -107,11 +104,6 @@ export function shortcutDraftError(draft: {
   return null;
 }
 
-/** Whether another shortcut still fits. The add affordance reads this; the server enforces it. */
-export function canAddShortcut(list: readonly UserShortcut[]): boolean {
-  return list.length < SHORTCUT_MAX_COUNT;
-}
-
 /**
  * Saves an editor draft into the list and returns the new one.
  *
@@ -119,7 +111,6 @@ export function canAddShortcut(list: readonly UserShortcut[]): boolean {
  * its position, so saving a title fix does not move the row out from under the cursor that is
  * about to click it. A draft whose id is no longer in the list (deleted in another tab while the
  * editor was open) is appended rather than dropped — the user typed it, so it lands somewhere.
- * Appending past the cap is a no-op: the add affordance is disabled there and never reaches this.
  */
 export function upsertShortcut(
   list: readonly UserShortcut[],
@@ -132,7 +123,6 @@ export function upsertShortcut(
   };
   const at = list.findIndex((s) => s.id === saved.id);
   if (at !== -1) return list.map((s, i) => (i === at ? saved : s));
-  if (!canAddShortcut(list)) return [...list];
   return [...list, saved];
 }
 

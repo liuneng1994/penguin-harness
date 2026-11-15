@@ -1,23 +1,19 @@
 /**
- * Bounds on the draft screen's user-defined shortcuts (`ui_prefs.draftShortcuts`).
+ * Field validation for user-defined shortcuts (`ui_prefs.draftShortcuts`).
  *
  * `ui_prefs` is free-form JSON: `PUT /api/me/prefs` shallow-merges whatever it is handed into a
  * single TEXT column, and every other known key there holds a flag or an id. `draftShortcuts` is
  * the first key whose value is text the user wrote, so it is also the first place a client could
- * put an unbounded amount of it into a shared table. The caps are therefore enforced on the write
+ * store arbitrary fields in a shared table. Field length limits are therefore enforced on the write
  * path, not only in the editor that normally produces the value: the Web App carries its own copy
  * of these numbers for its counters, and a request that never goes through that editor still
  * cannot store more than this.
  *
- * The numbers: 3 shortcuts keeps the folder inside the examples block's height, so it never needs
- * a scrollbar and the block does not move as folders are switched; 40 characters is what one
- * folder row shows without truncating; 4000 characters is roughly three times the longest built-in
- * example prompt. Together they bound one user's row at about 12 KB.
+ * Titles allow 40 characters and prompts 4000. The list has no item-count limit.
  */
 import { HttpError } from "../http/errors.js";
 import type { DraftShortcut } from "../api/types.js";
 
-export const DRAFT_SHORTCUT_MAX_COUNT = 3;
 export const DRAFT_SHORTCUT_TITLE_MAX = 40;
 export const DRAFT_SHORTCUT_PROMPT_MAX = 4000;
 /** Client-generated id (`sc-` + hex); the length only has to stop an id being used as storage. */
@@ -57,9 +53,6 @@ function shortcutField(
  */
 export function validateDraftShortcuts(value: unknown): DraftShortcut[] {
   if (!Array.isArray(value)) throw invalid("draftShortcuts must be an array.");
-  if (value.length > DRAFT_SHORTCUT_MAX_COUNT) {
-    throw invalid(`draftShortcuts must hold at most ${DRAFT_SHORTCUT_MAX_COUNT} shortcuts.`);
-  }
   const seen = new Set<string>();
   return value.map((entry, index) => {
     if (entry === null || typeof entry !== "object" || Array.isArray(entry)) {

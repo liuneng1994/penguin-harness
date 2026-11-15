@@ -11,11 +11,8 @@
  *   create / edit dialog waits instead: it closes once its write landed, and a refused one leaves
  *   it open with what was typed. Its Save is live once the shortcut is valid and (when editing)
  *   changed; closing it with typing of the user's own asks first.
- * - **Its length is the user's**, not the registry's — but bounded to SHORTCUT_MAX_COUNT, chosen
- *   so the folder plus its New-shortcut row stays within a row of a built-in folder's height. The
- *   examples block reserves no scroll area, and rather than pinning a height and scrolling inside
- *   it, the cap is what keeps this folder the same shape as its siblings: no scrollbar, and its
- *   rows never outgrow the folder column they stand beside.
+ * - **Its length is the user's**, not the registry's. Saved rows scroll inside the panel while
+ *   the New-shortcut button stays visible below them.
  * - **Its rows carry their own actions.** Edit and delete are plain icon buttons that are always
  *   visible, deliberately not the sidebar's hover-revealed pair: those rows have a long-press menu
  *   behind them on touch, and these have nothing, so hover-gating would put a user's own prompts
@@ -46,10 +43,8 @@ import {
   exampleRowClass,
 } from "./example-folder-row";
 import {
-  SHORTCUT_MAX_COUNT,
   SHORTCUT_PROMPT_MAX,
   SHORTCUT_TITLE_MAX,
-  canAddShortcut,
   defaultShortcutTitle,
   normalizeShortcuts,
   removeShortcut,
@@ -176,60 +171,57 @@ export function ShortcutsFolder({
         open={open}
         glyph={SHORTCUTS_GLYPH}
         label={S.chat.shortcuts.folder}
-        count={`${shortcuts.length}/${SHORTCUT_MAX_COUNT}`}
+        count={shortcuts.length}
         onOpen={onOpen}
       />
 
       {open && (
-        /* No fixed height and no scroll: SHORTCUT_MAX_COUNT bounds this folder to a built-in
-           folder's height plus the New-shortcut row. */
         <div className={examplePanelClass}>
           {loaded && (
-            <ul className="space-y-1.5">
-              {shortcuts.map((shortcut) => (
-                <li key={shortcut.id} className="flex items-center gap-1">
-                  <button
-                    type="button"
-                    data-tooltip={`${shortcut.title}\n${S.chat.exampleFillHint}`}
-                    onClick={() => onFill(shortcut.prompt)}
-                    className={`flex min-w-0 flex-1 items-center ${ICON_GAP.menu} ${exampleRowClass}`}
-                  >
-                    <ExampleRowGlyph glyph={SHORTCUTS_GLYPH} />
-                    <span className="min-w-0 flex-1 truncate">{shortcut.title}</span>
-                    <ExampleRowGo />
-                  </button>
-                  <RowAction
-                    label={S.common.edit}
-                    glyph={ICONS.pencil}
-                    onClick={() => setDraft({ ...shortcut })}
-                  />
-                  <RowAction
-                    label={S.common.delete}
-                    glyph={ICONS.trash}
-                    danger
-                    onClick={() => setDeleting(shortcut)}
-                  />
-                </li>
-              ))}
-              {/* Gone at the cap rather than disabled: the header already reads 3/3, so a row
-                  explaining why it cannot be pressed would say the same thing twice. */}
-              {canAddShortcut(shortcuts) && (
-                <li>
-                  <button
-                    type="button"
-                    data-tooltip={S.chat.shortcuts.newFromComposer}
-                    onClick={startCreate}
-                    className={`flex w-full items-center ${ICON_GAP.menu} ${exampleRowClass}`}
-                  >
-                    {/* In a row glyph's box, so its title starts where the shortcuts' do. */}
-                    <span className="flex h-4 w-4 shrink-0 items-center justify-center text-fg-muted">
-                      <PlusIcon size={ICON_SIZE.inlineGlyph} />
-                    </span>
-                    <span className="min-w-0 flex-1 truncate">{S.chat.shortcuts.new}</span>
-                  </button>
-                </li>
-              )}
-            </ul>
+            <>
+              <ul
+                aria-label={S.chat.shortcuts.folder}
+                className="max-h-48 space-y-1.5 overflow-y-auto overscroll-contain"
+              >
+                {shortcuts.map((shortcut) => (
+                  <li key={shortcut.id} className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      data-tooltip={`${shortcut.title}\n${S.chat.exampleFillHint}`}
+                      onClick={() => onFill(shortcut.prompt)}
+                      className={`flex min-w-0 flex-1 items-center ${ICON_GAP.menu} ${exampleRowClass}`}
+                    >
+                      <ExampleRowGlyph glyph={SHORTCUTS_GLYPH} />
+                      <span className="min-w-0 flex-1 truncate">{shortcut.title}</span>
+                      <ExampleRowGo />
+                    </button>
+                    <RowAction
+                      label={S.common.edit}
+                      glyph={ICONS.pencil}
+                      onClick={() => setDraft({ ...shortcut })}
+                    />
+                    <RowAction
+                      label={S.common.delete}
+                      glyph={ICONS.trash}
+                      danger
+                      onClick={() => setDeleting(shortcut)}
+                    />
+                  </li>
+                ))}
+              </ul>
+              <button
+                type="button"
+                data-tooltip={S.chat.shortcuts.newFromComposer}
+                onClick={startCreate}
+                className={`mt-1.5 flex w-full items-center ${ICON_GAP.menu} ${exampleRowClass}`}
+              >
+                {/* In a row glyph's box, so its title starts where the shortcuts' do. */}
+                <span className="flex h-4 w-4 shrink-0 items-center justify-center text-fg-muted">
+                  <PlusIcon size={ICON_SIZE.inlineGlyph} />
+                </span>
+                <span className="min-w-0 flex-1 truncate">{S.chat.shortcuts.new}</span>
+              </button>
+            </>
           )}
         </div>
       )}
