@@ -1,25 +1,7 @@
 /**
- * The draft screen's user-defined shortcuts: prompts the user wrote and saved, one click away
- * from the composer. Storage, shape and the rules the editor enforces all live here.
- *
- * **Where they are stored, and why it is not the browser.** These are per-user server state
- * (`ui_prefs.draftShortcuts`, PUT /api/me/prefs), not localStorage. Every other draft-screen
- * preference — the cached draft, the collapsed groups, the sidebar width — can be recreated by
- * doing the thing again; a prompt the user typed and named cannot. Losing it by opening the app
- * on another machine, or by clearing site data, would be losing their work.
- *
- * **A shortcut is a title and a prompt, and pins no Skills.** A built-in example is authored
- * against the Skill catalog this product ships, so it can name the Skills its prompt depends on;
- * a prompt the user saved has no such guarantee, and the Agent it will eventually run under is
- * picked *after* the click. Pinning would therefore mean either silently dropping names the
- * selected Agent lacks, or growing the editor a Skill picker whose contents change with a
- * selection made elsewhere on the page. The composer's own Skills dropdown is one click away and
- * keeps working: a shortcut fills the text and leaves the selection exactly as the user set it.
- *
- * **The caps are duplicated on the server on purpose** (`services/draft-shortcuts.ts`), which is
- * where they are enforced — ui_prefs is a free-form JSON column, so a bound that lives only in
- * this editor is not a bound at all. The numbers here drive the counters and the disabled states;
- * `test/user-shortcuts.test.ts` fails if the two copies drift apart.
+ * Shortcuts are account data (`ui_prefs.draftShortcuts`), so saved prompts follow the user
+ * across devices. They fill composer text and leave its Skills selection alone.
+ * Field limits match server validation; the list has no item-count limit.
  */
 import type { DraftShortcut } from "@prismshadow/penguin-server/api";
 import { randomHex } from "../../lib/random-id";
@@ -27,8 +9,6 @@ import { randomHex } from "../../lib/random-id";
 /** A saved shortcut, as stored and as rendered. Re-exported from the API type so the two cannot drift. */
 export type UserShortcut = DraftShortcut;
 
-/** Most shortcuts one user may keep. Past this a click-to-pick list is a search problem. */
-export const SHORTCUT_MAX_COUNT = 3;
 /** Longest title, in characters: what one folder row shows without truncating. */
 export const SHORTCUT_TITLE_MAX = 40;
 /** Longest prompt body, in characters: about three times the longest built-in example. */
@@ -64,7 +44,6 @@ export function normalizeShortcuts(value: unknown): UserShortcut[] {
   const out: UserShortcut[] = [];
   const seen = new Set<string>();
   for (const entry of value) {
-    if (out.length >= SHORTCUT_MAX_COUNT) break;
     if (entry === null || typeof entry !== "object" || Array.isArray(entry)) continue;
     const raw = entry as Record<string, unknown>;
     const id = readField(raw.id, 64);
@@ -107,11 +86,6 @@ export function shortcutDraftError(draft: {
   return null;
 }
 
-/** Whether another shortcut still fits. The add affordance reads this; the server enforces it. */
-export function canAddShortcut(list: readonly UserShortcut[]): boolean {
-  return list.length < SHORTCUT_MAX_COUNT;
-}
-
 /**
  * Saves an editor draft into the list and returns the new one.
  *
@@ -119,7 +93,6 @@ export function canAddShortcut(list: readonly UserShortcut[]): boolean {
  * its position, so saving a title fix does not move the row out from under the cursor that is
  * about to click it. A draft whose id is no longer in the list (deleted in another tab while the
  * editor was open) is appended rather than dropped — the user typed it, so it lands somewhere.
- * Appending past the cap is a no-op: the add affordance is disabled there and never reaches this.
  */
 export function upsertShortcut(
   list: readonly UserShortcut[],
@@ -132,7 +105,6 @@ export function upsertShortcut(
   };
   const at = list.findIndex((s) => s.id === saved.id);
   if (at !== -1) return list.map((s, i) => (i === at ? saved : s));
-  if (!canAddShortcut(list)) return [...list];
   return [...list, saved];
 }
 

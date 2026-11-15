@@ -425,7 +425,7 @@ export interface UiPrefs {
   /**
    * The draft screen's user-defined shortcuts, in display order. Replaced whole on every write
    * (the merge is shallow, so the array is one field like any other) and bounded on write by
-   * services/draft-shortcuts.ts — count, title length and prompt length — because this is the one
+   * services/draft-shortcuts.ts — title length and prompt length — because this is the one
    * known key holding user-authored text rather than a flag or an id.
    */
   draftShortcuts?: DraftShortcut[];

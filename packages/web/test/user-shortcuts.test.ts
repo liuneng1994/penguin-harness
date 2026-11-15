@@ -3,21 +3,19 @@
  *
  * - A stored list reads back unchanged; anything else reads as no shortcuts, entries that
  *   cannot be a row are dropped, fields are trimmed and over-long ones truncated, duplicate ids
- *   dropped, and the list stops at the count cap.
+ *   dropped, and every valid entry is retained regardless of list length.
  * - The editor refuses a missing title or prompt (whitespace is not content) and either field
  *   over its cap.
  * - Saving appends a new shortcut with an id of its own (distinct every time), edits in place,
- *   trims, re-appends a draft whose shortcut was deleted elsewhere, and never grows past the
- *   cap; removing closes the gap and ignores unknown ids.
+ *   trims and re-appends a draft whose shortcut was deleted elsewhere, including in long lists;
+ *   removing closes the gap and ignores unknown ids.
  * - The suggested title is the first non-empty line, one line, capped; nothing for an empty
  *   composer.
  */
 import { describe, expect, it } from "vitest";
 import {
-  SHORTCUT_MAX_COUNT,
   SHORTCUT_PROMPT_MAX,
   SHORTCUT_TITLE_MAX,
-  canAddShortcut,
   defaultShortcutTitle,
   newShortcutId,
   normalizeShortcuts,
@@ -85,9 +83,9 @@ describe("normalizeShortcuts — reading the list back out of free-form JSON", (
     expect(list[0]!.prompt).toHaveLength(SHORTCUT_PROMPT_MAX);
   });
 
-  it("stops at the count cap", () => {
-    const stored = Array.from({ length: SHORTCUT_MAX_COUNT + 5 }, (_, i) => shortcut(`id-${i}`));
-    expect(normalizeShortcuts(stored)).toHaveLength(SHORTCUT_MAX_COUNT);
+  it("retains every valid entry in a long stored list, in order", () => {
+    const stored = Array.from({ length: 100 }, (_, i) => shortcut(`id-${i}`));
+    expect(normalizeShortcuts(stored)).toEqual(stored);
   });
 });
 
@@ -144,15 +142,13 @@ describe("the list operations — order is insertion order", () => {
     expect(next.map((s) => s.id)).toEqual(["a", "gone"]);
   });
 
-  it("refuses to grow past the cap, but still edits in place at the cap", () => {
-    const full = Array.from({ length: SHORTCUT_MAX_COUNT }, (_, i) => shortcut(`id-${i}`));
-    expect(canAddShortcut(full)).toBe(false);
-    expect(canAddShortcut(full.slice(1))).toBe(true);
-    expect(upsertShortcut(full, { id: null, title: "one more", prompt: "body" })).toHaveLength(
-      SHORTCUT_MAX_COUNT,
-    );
-    const edited = upsertShortcut(full, { id: "id-0", title: "renamed", prompt: "body" });
-    expect(edited).toHaveLength(SHORTCUT_MAX_COUNT);
+  it("appends beyond three shortcuts and edits without losing any other entry", () => {
+    const list = Array.from({ length: 20 }, (_, i) => shortcut(`id-${i}`));
+    const added = upsertShortcut(list, { id: null, title: "one more", prompt: "body" });
+    expect(added.slice(0, list.length)).toEqual(list);
+    expect(added[20]).toMatchObject({ title: "one more", prompt: "body" });
+    const edited = upsertShortcut(added, { id: "id-0", title: "renamed", prompt: "body" });
+    expect(edited.slice(1)).toEqual(added.slice(1));
     expect(edited[0]!.title).toBe("renamed");
   });
 
