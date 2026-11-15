@@ -3674,6 +3674,7 @@ export const zh = {
     /** The examples block's last folder: prompts the user wrote and saved, stored per user on the server. */
     shortcuts: {
       folder: "我的快捷指令",
+      loadFailed: "快捷指令加载失败",
       new: "新建快捷指令",
       /**
        * Tooltip on the new-shortcut row. Unconditional, and worded to hold either way: the

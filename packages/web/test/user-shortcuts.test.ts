@@ -3,28 +3,19 @@
  *
  * - A stored list reads back unchanged; anything else reads as no shortcuts, entries that
  *   cannot be a row are dropped, fields are trimmed and over-long ones truncated, duplicate ids
- *   dropped, and the list stops at the count cap.
+ *   dropped, and every valid entry is retained regardless of list length.
  * - The editor refuses a missing title or prompt (whitespace is not content) and either field
  *   over its cap.
  * - Saving appends a new shortcut with an id of its own (distinct every time), edits in place,
- *   trims, re-appends a draft whose shortcut was deleted elsewhere, and never grows past the
- *   cap; removing closes the gap and ignores unknown ids.
+ *   trims and re-appends a draft whose shortcut was deleted elsewhere, including in long lists;
+ *   removing closes the gap and ignores unknown ids.
  * - The suggested title is the first non-empty line, one line, capped; nothing for an empty
  *   composer.
- * - The user folder's tallest state stays within one row of the tallest built-in folder, so the
- *   examples block does not move as folders are switched.
- * - The caps match the server's copy, which enforces them (read from the server module's
- *   source: the server package is a type-only dependency of the Web App).
  */
 import { describe, expect, it } from "vitest";
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
-import { EXAMPLE_FOLDERS } from "../src/features/chat/example-tasks";
 import {
-  SHORTCUT_MAX_COUNT,
   SHORTCUT_PROMPT_MAX,
   SHORTCUT_TITLE_MAX,
-  canAddShortcut,
   defaultShortcutTitle,
   newShortcutId,
   normalizeShortcuts,
@@ -39,9 +30,6 @@ const shortcut = (id: string, title = `title ${id}`, prompt = `prompt ${id}`): U
   title,
   prompt,
 });
-
-const read = (relative: string): string =>
-  readFileSync(fileURLToPath(new URL(relative, import.meta.url)), "utf8");
 
 describe("normalizeShortcuts — reading the list back out of free-form JSON", () => {
   it("reads a stored list through unchanged", () => {
@@ -95,9 +83,9 @@ describe("normalizeShortcuts — reading the list back out of free-form JSON", (
     expect(list[0]!.prompt).toHaveLength(SHORTCUT_PROMPT_MAX);
   });
 
-  it("stops at the count cap", () => {
-    const stored = Array.from({ length: SHORTCUT_MAX_COUNT + 5 }, (_, i) => shortcut(`id-${i}`));
-    expect(normalizeShortcuts(stored)).toHaveLength(SHORTCUT_MAX_COUNT);
+  it("retains every valid entry in a long stored list, in order", () => {
+    const stored = Array.from({ length: 100 }, (_, i) => shortcut(`id-${i}`));
+    expect(normalizeShortcuts(stored)).toEqual(stored);
   });
 });
 
@@ -154,15 +142,13 @@ describe("the list operations — order is insertion order", () => {
     expect(next.map((s) => s.id)).toEqual(["a", "gone"]);
   });
 
-  it("refuses to grow past the cap, but still edits in place at the cap", () => {
-    const full = Array.from({ length: SHORTCUT_MAX_COUNT }, (_, i) => shortcut(`id-${i}`));
-    expect(canAddShortcut(full)).toBe(false);
-    expect(canAddShortcut(full.slice(1))).toBe(true);
-    expect(upsertShortcut(full, { id: null, title: "one more", prompt: "body" })).toHaveLength(
-      SHORTCUT_MAX_COUNT,
-    );
-    const edited = upsertShortcut(full, { id: "id-0", title: "renamed", prompt: "body" });
-    expect(edited).toHaveLength(SHORTCUT_MAX_COUNT);
+  it("appends beyond three shortcuts and edits without losing any other entry", () => {
+    const list = Array.from({ length: 20 }, (_, i) => shortcut(`id-${i}`));
+    const added = upsertShortcut(list, { id: null, title: "one more", prompt: "body" });
+    expect(added.slice(0, list.length)).toEqual(list);
+    expect(added[20]).toMatchObject({ title: "one more", prompt: "body" });
+    const edited = upsertShortcut(added, { id: "id-0", title: "renamed", prompt: "body" });
+    expect(edited.slice(1)).toEqual(added.slice(1));
     expect(edited[0]!.title).toBe("renamed");
   });
 
@@ -195,32 +181,5 @@ describe("defaultShortcutTitle — the name suggested when saving what was typed
   it("suggests nothing for an empty composer", () => {
     expect(defaultShortcutTitle("")).toBe("");
     expect(defaultShortcutTitle("   \n  ")).toBe("");
-  });
-});
-
-describe("the examples block keeps its height", () => {
-  it("keeps the user folder within one row of the built-in ones", () => {
-    // Its tallest state is either the cap with no add row, or one below the cap plus the add
-    // row — both SHORTCUT_MAX_COUNT rows. The cap is what holds this, not a pinned height with
-    // a scrollbar inside it.
-    const tallestBuiltIn = Math.max(...EXAMPLE_FOLDERS.map((f) => f.tasks.length));
-    const tallestUser = Math.max(SHORTCUT_MAX_COUNT, SHORTCUT_MAX_COUNT - 1 + 1);
-    expect(tallestUser - tallestBuiltIn).toBeLessThanOrEqual(1);
-  });
-});
-
-describe("the caps the server enforces", () => {
-  it("matches the Web App's copy of them", () => {
-    // Two copies on purpose: the server owns enforcement (ui_prefs is a free-form JSON column),
-    // this package owns the counters, and penguin-server is a type-only dependency here.
-    const source = read("../../server/src/services/draft-shortcuts.ts");
-    const capOf = (name: string): number => {
-      const m = new RegExp(`export const ${name} = (\\d+);`).exec(source);
-      expect(m, `${name} in the server module`).not.toBeNull();
-      return Number(m?.[1]);
-    };
-    expect(capOf("DRAFT_SHORTCUT_MAX_COUNT")).toBe(SHORTCUT_MAX_COUNT);
-    expect(capOf("DRAFT_SHORTCUT_TITLE_MAX")).toBe(SHORTCUT_TITLE_MAX);
-    expect(capOf("DRAFT_SHORTCUT_PROMPT_MAX")).toBe(SHORTCUT_PROMPT_MAX);
   });
 });

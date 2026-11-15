@@ -6,16 +6,20 @@
  * go through the real route rather than the validator alone, because the two claims that matter
  * are about the route: a rejected write stores **nothing**, and an accepted one does not disturb
  * the other writers merging into the same object.
+ *
+ * - A long list is stored and read back in order, without changing unrelated preferences.
+ * - Invalid fields or duplicate ids are refused; an invalid entry beyond the third row leaves
+ *   the entire previously saved list unchanged.
+ * - Empty lists delete the last shortcut; different accounts keep their own lists.
  */
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { apiClient, createTestApp, provisionUser } from "./helpers.js";
 import type { TestApp } from "./helpers.js";
 import {
-  DRAFT_SHORTCUT_MAX_COUNT,
   DRAFT_SHORTCUT_PROMPT_MAX,
   DRAFT_SHORTCUT_TITLE_MAX,
 } from "../src/services/draft-shortcuts.js";
-import type { DraftShortcut } from "../src/api/types.js";
+import type { DraftShortcut, PrefsResponse } from "../src/api/types.js";
 
 const shortcut = (id: string): DraftShortcut => ({
   id,
@@ -77,22 +81,22 @@ describe("ui_prefs draftShortcuts", () => {
     expect(await readShortcuts()).toEqual([{ id: "a", title: "name", prompt: "body" }]);
   });
 
-  it("refuses more shortcuts than the cap, and stores nothing when it does", async () => {
-    await api.put("/api/me/prefs", { draftShortcuts: [shortcut("keep")] });
-    const tooMany = Array.from({ length: DRAFT_SHORTCUT_MAX_COUNT + 1 }, (_, i) =>
-      shortcut(`id-${i}`),
-    );
-    const res = await api.put("/api/me/prefs", { draftShortcuts: tooMany });
-    expect(res.status).toBe(400);
-    expect(((await res.json()) as { error: { code: string } }).error.code).toBe(
-      "invalid_draft_shortcuts",
-    );
-    expect(await readShortcuts()).toEqual([shortcut("keep")]);
+  it("stores a long list without limiting its count or changing other preferences", async () => {
+    await api.put("/api/me/prefs", { lastProjectId: "default_project" });
+    const list = Array.from({ length: 128 }, (_, i) => shortcut(`id-${i}`));
+    expect((await api.put("/api/me/prefs", { draftShortcuts: list })).status).toBe(200);
+    const body = (await (await api.get("/api/me/prefs")).json()) as PrefsResponse;
+    expect(body.prefs).toMatchObject({ lastProjectId: "default_project", draftShortcuts: list });
+  });
 
-    // Exactly at the cap is fine.
-    const atCap = tooMany.slice(0, DRAFT_SHORTCUT_MAX_COUNT);
-    expect((await api.put("/api/me/prefs", { draftShortcuts: atCap })).status).toBe(200);
-    expect(await readShortcuts()).toHaveLength(DRAFT_SHORTCUT_MAX_COUNT);
+  it("an invalid entry beyond the third shortcut preserves the entire saved list", async () => {
+    const list = Array.from({ length: 8 }, (_, i) => shortcut(`id-${i}`));
+    expect((await api.put("/api/me/prefs", { draftShortcuts: list })).status).toBe(200);
+    const res = await api.put("/api/me/prefs", {
+      draftShortcuts: [...list, { ...shortcut("invalid"), prompt: " " }],
+    });
+    expect(res.status).toBe(400);
+    expect(await readShortcuts()).toEqual(list);
   });
 
   it("refuses an over-long title or prompt", async () => {
