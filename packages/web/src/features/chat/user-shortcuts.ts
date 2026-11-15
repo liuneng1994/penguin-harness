@@ -1,25 +1,7 @@
 /**
- * The draft screen's user-defined shortcuts: prompts the user wrote and saved, one click away
- * from the composer. Storage, shape and the rules the editor enforces all live here.
- *
- * **Where they are stored, and why it is not the browser.** These are per-user server state
- * (`ui_prefs.draftShortcuts`, PUT /api/me/prefs), not localStorage. Every other draft-screen
- * preference — the cached draft, the collapsed groups, the sidebar width — can be recreated by
- * doing the thing again; a prompt the user typed and named cannot. Losing it by opening the app
- * on another machine, or by clearing site data, would be losing their work.
- *
- * **A shortcut is a title and a prompt, and pins no Skills.** A built-in example is authored
- * against the Skill catalog this product ships, so it can name the Skills its prompt depends on;
- * a prompt the user saved has no such guarantee, and the Agent it will eventually run under is
- * picked *after* the click. Pinning would therefore mean either silently dropping names the
- * selected Agent lacks, or growing the editor a Skill picker whose contents change with a
- * selection made elsewhere on the page. The composer's own Skills dropdown is one click away and
- * keeps working: a shortcut fills the text and leaves the selection exactly as the user set it.
- *
- * **The caps are duplicated on the server on purpose** (`services/draft-shortcuts.ts`), which is
- * where they are enforced — ui_prefs is a free-form JSON column, so a bound that lives only in
- * this editor is not a bound at all. The numbers here drive the counters and the disabled states;
- * The list itself has no item-count limit.
+ * Shortcuts are account data (`ui_prefs.draftShortcuts`), so saved prompts follow the user
+ * across devices. They fill composer text and leave its Skills selection alone.
+ * Field limits match server validation; the list has no item-count limit.
  */
 import type { DraftShortcut } from "@prismshadow/penguin-server/api";
 import { randomHex } from "../../lib/random-id";

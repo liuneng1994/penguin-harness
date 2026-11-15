@@ -3479,6 +3479,7 @@ export const en: Strings = {
     exampleFillHint: "Click to fill the composer — edit it if you like, then send",
     shortcuts: {
       folder: "My shortcuts",
+      loadFailed: "Could not load shortcuts",
       new: "New shortcut",
       newFromComposer: "Starts from whatever is in the composer",
       createTitle: "New shortcut",

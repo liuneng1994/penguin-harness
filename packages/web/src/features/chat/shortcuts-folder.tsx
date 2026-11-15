@@ -1,22 +1,7 @@
 /**
- * The examples block's last folder: the shortcuts the user saved themselves.
- *
- * It behaves like a built-in folder on the way out — a click FILLS the composer and sends
- * nothing — and differs from one in three ways, each of which is why it lives here rather than in
- * the registry:
- *
- * - **Its rows are server state**, per user (`ui_prefs.draftShortcuts`), fetched on mount and
- *   written back on every change. A delete is optimistic: the list updates first and rolls back
- *   with a toast if the write fails, because the value being written is already on screen. The
- *   create / edit dialog waits instead: it closes once its write landed, and a refused one leaves
- *   it open with what was typed. Its Save is live once the shortcut is valid and (when editing)
- *   changed; closing it with typing of the user's own asks first.
- * - **Its length is the user's**, not the registry's. Saved rows scroll inside the panel while
- *   the New-shortcut button stays visible below them.
- * - **Its rows carry their own actions.** Edit and delete are plain icon buttons that are always
- *   visible, deliberately not the sidebar's hover-revealed pair: those rows have a long-press menu
- *   behind them on touch, and these have nothing, so hover-gating would put a user's own prompts
- *   out of reach on a phone.
+ * Account shortcuts fill the composer without sending. Saved rows scroll while New shortcut
+ * stays visible. Row actions remain visible on touch; create/edit wait for the server, and
+ * failed optimistic deletes roll back.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -54,18 +39,9 @@ import {
 import type { ShortcutDraft, UserShortcut } from "./user-shortcuts";
 import { toastApiError } from "../../lib/toast-api-error";
 
-/**
- * Folder id for the user's shortcuts. Not a member of EXAMPLE_FOLDERS: that registry is the
- * catalog this product ships, and everything in it resolves its copy through the locale
- * dictionary — this folder's rows are the user's own text in whatever language they wrote it.
- */
+/** Separate from EXAMPLE_FOLDERS because saved rows contain the user's own text. */
 export const SHORTCUTS_FOLDER_ID = "shortcuts";
 
-/**
- * The lightning bolt: the folder's mark, and each of its rows'. Not the bookmark it might suggest — the folders
- * themselves already behave bookmark-style (exactly one open), so that glyph would name the
- * mechanism every folder shares instead of what this one holds.
- */
 const SHORTCUTS_GLYPH = ICONS.zap;
 
 /** An always-visible row action (edit / delete), sized and coloured to recede until pointed at. */
@@ -109,8 +85,9 @@ export function ShortcutsFolder({
   onFill: (prompt: string) => void;
 }) {
   const [shortcuts, setShortcuts] = useState<UserShortcut[]>([]);
-  /** Until the stored list has arrived the body stays blank: the empty state must not flash first. */
-  const [loaded, setLoaded] = useState(false);
+  // A failed read must never become an empty list that a later save overwrites.
+  const [loadState, setLoadState] = useState<"loading" | "ready" | "failed">("loading");
+  const [loadAttempt, setLoadAttempt] = useState(0);
   const [draft, setDraft] = useState<ShortcutDraft | null>(null);
   const [deleting, setDeleting] = useState<UserShortcut | null>(null);
 
@@ -119,16 +96,17 @@ export function ShortcutsFolder({
     void api
       .getPrefs()
       .then((res) => {
-        if (!cancelled) setShortcuts(normalizeShortcuts(res.prefs.draftShortcuts));
+        if (cancelled) return;
+        setShortcuts(normalizeShortcuts(res.prefs.draftShortcuts));
+        setLoadState("ready");
       })
-      .catch(() => undefined) // Unreachable prefs read as "none saved"; the draft page still works.
-      .finally(() => {
-        if (!cancelled) setLoaded(true);
+      .catch(() => {
+        if (!cancelled) setLoadState("failed");
       });
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [loadAttempt]);
 
   /** Latest list for the rollback value: a stale closure would restore a list two edits old. */
   const shortcutsRef = useRef(shortcuts);
@@ -177,7 +155,23 @@ export function ShortcutsFolder({
 
       {open && (
         <div className={examplePanelClass}>
-          {loaded && (
+          {loadState === "failed" && (
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span role="alert" className="text-xs text-tone-danger-fg">
+                {S.chat.shortcuts.loadFailed}
+              </span>
+              <Button
+                size="sm"
+                onClick={() => {
+                  setLoadState("loading");
+                  setLoadAttempt((attempt) => attempt + 1);
+                }}
+              >
+                {S.common.retry}
+              </Button>
+            </div>
+          )}
+          {loadState === "ready" && (
             <>
               <ul
                 aria-label={S.chat.shortcuts.folder}

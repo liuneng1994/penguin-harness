@@ -13,3 +13,4 @@ Removed the three-shortcut limit. The shortcut editor and account preferences ac
 
 - Long shortcut lists scrolled inside their panel. The New shortcut button stayed visible below the list, and the folder showed the number saved.
 - Existing shortcuts kept their storage format and order. Name and prompt length validation continued to apply.
+- Failed reads offered a retry and kept creation unavailable until the saved list loaded, preventing a new shortcut from overwriting unread entries.

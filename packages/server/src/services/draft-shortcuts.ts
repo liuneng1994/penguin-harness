@@ -1,15 +1,6 @@
 /**
- * Field validation for user-defined shortcuts (`ui_prefs.draftShortcuts`).
- *
- * `ui_prefs` is free-form JSON: `PUT /api/me/prefs` shallow-merges whatever it is handed into a
- * single TEXT column, and every other known key there holds a flag or an id. `draftShortcuts` is
- * the first key whose value is text the user wrote, so it is also the first place a client could
- * store arbitrary fields in a shared table. Field length limits are therefore enforced on the write
- * path, not only in the editor that normally produces the value: the Web App carries its own copy
- * of these numbers for its counters, and a request that never goes through that editor still
- * cannot store more than this.
- *
- * Titles allow 40 characters and prompts 4000. The list has no item-count limit.
+ * Validates account shortcuts before replacing the stored array. Field limits also apply to
+ * direct API writes: titles allow 40 characters and prompts 4000, with no item-count limit.
  */
 import { HttpError } from "../http/errors.js";
 import type { DraftShortcut } from "../api/types.js";
