@@ -3,6 +3,7 @@
 - **Date:** 2026-11-15
 - **Type:** feature
 - **Scope:** `web`, `server`
+- **PR:** [#12](https://github.com/liuneng1994/penguin-harness/pull/12)
 
 [English](2026-11-15-unlimited-shortcuts.md)
 
