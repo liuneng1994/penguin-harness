@@ -41,6 +41,7 @@ import type {
 import type { ToolPermission } from "@prismshadow/penguin-core/interfaces";
 import {
   AgentAvatar,
+  insertTextareaText,
   Button,
   Card,
   ConfirmModal,
@@ -858,31 +859,10 @@ function PromptTab({ data, onSave }: FormTabProps) {
     );
   };
 
-  /**
-   * Quickly insert a placeholder at the system_prompt cursor position (appends to the
-   * end when unfocused). Prefers execCommand insertText — it writes to the browser's
-   * undo stack (undoable with Ctrl/⌘+Z) and fires an input event, which the
-   * controlled onChange syncs into the draft; falls back to directly editing the draft when
-   * unsupported (no undo).
-   */
   const insertPlaceholder = (ph: string) => {
-    const el = promptRef.current;
-    if (el) {
-      el.focus();
-      // execCommand is deprecated but still the only available way to preserve the textarea's native undo stack.
-      const inserted = document.execCommand?.("insertText", false, ph);
-      if (inserted) return; // onChange will update the draft from e.target.value
-    }
-    const value = form.draft.systemPrompt;
-    const start = el ? el.selectionStart : value.length;
-    const end = el ? el.selectionEnd : value.length;
-    form.patch({ systemPrompt: value.slice(0, start) + ph + value.slice(end) });
-    requestAnimationFrame(() => {
-      if (!el) return;
-      el.focus();
-      const caret = start + ph.length;
-      el.setSelectionRange(caret, caret);
-    });
+    insertTextareaText(promptRef.current, form.draft.systemPrompt, ph, (next) =>
+      form.patch({ systemPrompt: next }),
+    );
   };
 
   return (

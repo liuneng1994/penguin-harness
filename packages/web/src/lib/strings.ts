@@ -4075,6 +4075,11 @@ export const zh = {
     /** The examples block's last folder: prompts the user wrote and saved, stored per user on the server. */
     shortcuts: {
       folder: "我的快捷指令",
+      templates: "模板",
+      searchTemplates: "搜索模板名称或内容",
+      manageTemplates: "管理模板",
+      noTemplates: "还没有模板，可以在管理模板中添加。",
+      noMatches: "没有匹配的模板",
       loadFailed: "快捷指令加载失败",
       new: "新建快捷指令",
       /**

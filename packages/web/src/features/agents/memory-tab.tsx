@@ -32,8 +32,8 @@
  * with unsaved edits asks first. A reload of the tab's data moves what they are compared with
  * and keeps what is being typed.
  */
-import { useCallback, useEffect, useRef, useState, type ChangeEvent, type RefObject } from "react";
-
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { ChangeEvent } from "react";
 import type {
   MemoryFileInfo,
   MemoryFolderFile,
@@ -41,6 +41,7 @@ import type {
   MemoryScopeInfo,
 } from "@prismshadow/penguin-server/api";
 import {
+  insertTextareaText,
   Button,
   Card,
   CodeSurface,
@@ -336,30 +337,6 @@ export function MemoryTab({
     } catch (e) {
       toastApiError(e);
     }
-  };
-
-  /** Same contract as the Prompt tab's inserter: execCommand keeps the textarea's native undo stack, with a state-splice fallback. */
-  const insertPromptToken = (
-    ref: RefObject<HTMLTextAreaElement | null>,
-    value: string,
-    setValue: (next: string) => void,
-    token: string,
-  ) => {
-    const el = ref.current;
-    if (el) {
-      el.focus();
-      const inserted = document.execCommand?.("insertText", false, token);
-      if (inserted) return; // onChange updates state from e.target.value
-    }
-    const start = el ? el.selectionStart : value.length;
-    const end = el ? el.selectionEnd : value.length;
-    setValue(value.slice(0, start) + token + value.slice(end));
-    requestAnimationFrame(() => {
-      if (!el) return;
-      el.focus();
-      const caret = start + token.length;
-      el.setSelectionRange(caret, caret);
-    });
   };
 
   /** Saves both memory prompts through the ordinary config write; a refusal keeps them as typed. */
@@ -926,17 +903,17 @@ export function MemoryTab({
                   type="button"
                   onClick={() =>
                     lastPromptField === "main"
-                      ? insertPromptToken(
-                          mainPromptRef,
+                      ? insertTextareaText(
+                          mainPromptRef.current,
                           prompts.draft.prompt,
+                          token!,
                           (prompt) => prompts.patch({ prompt }),
-                          token!,
                         )
-                      : insertPromptToken(
-                          workspacePromptRef,
+                      : insertTextareaText(
+                          workspacePromptRef.current,
                           prompts.draft.workspace,
-                          (workspace) => prompts.patch({ workspace }),
                           token!,
+                          (workspace) => prompts.patch({ workspace }),
                         )
                   }
                   data-tooltip={S.memory.insertToken}

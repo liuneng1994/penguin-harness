@@ -3865,6 +3865,11 @@ export const en: Strings = {
     exampleFillHint: "Click to fill the composer — edit it if you like, then send",
     shortcuts: {
       folder: "My shortcuts",
+      templates: "Templates",
+      searchTemplates: "Search template names or contents",
+      manageTemplates: "Manage templates",
+      noTemplates: "No templates yet. Add one in Manage templates.",
+      noMatches: "No matching templates",
       loadFailed: "Could not load shortcuts",
       new: "New shortcut",
       newFromComposer: "Starts from whatever is in the composer",
