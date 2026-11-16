@@ -100,6 +100,8 @@ it("ignores an IME commit and closes a searched panel on one Escape with focus r
   await mount(picker(picked));
   await click(button(S.chat.shortcuts.templates));
   await type(field(S.chat.shortcuts.searchTemplates), "Review");
+  await key("Tab");
+  expect(picked).not.toHaveBeenCalled();
   await key("Enter", true);
   expect(picked).not.toHaveBeenCalled();
   expect(hasButton(S.chat.shortcuts.manageTemplates)).toBe(true);
@@ -108,6 +110,14 @@ it("ignores an IME commit and closes a searched panel on one Escape with focus r
   await type(field(S.chat.shortcuts.searchTemplates), "Review");
   await key("Escape");
   await run(() => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())));
+  expect(hasButton(S.chat.shortcuts.manageTemplates)).toBe(false);
+  expect(document.activeElement).toBe(focusTarget());
+  // When focus has moved to a row, the Dropdown's normal Escape layer dismisses it.
+  await click(button(S.chat.shortcuts.templates));
+  await run(() => {
+    rows()[0]!.focus();
+    rows()[0]!.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  });
   expect(hasButton(S.chat.shortcuts.manageTemplates)).toBe(false);
   expect(document.activeElement).toBe(focusTarget());
 });
@@ -133,7 +143,7 @@ it("requires a successful retry before creating and appends to the saved list", 
   ]);
 });
 
-it("retains an edited draft and rolls back a refused optimistic delete", async () => {
+it("retains an edited draft and the saved list when a write is refused", async () => {
   const fetch = stubFetch(() => json({ prefs: { draftShortcuts: templates } }));
   await mount(picker());
   await click(button(S.chat.shortcuts.templates));

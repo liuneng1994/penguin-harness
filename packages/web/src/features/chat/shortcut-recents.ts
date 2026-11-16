@@ -18,7 +18,7 @@ export function rememberShortcut(
   userId: string,
   id: string,
   shortcuts: readonly UserShortcut[],
-): string[] {
+): void {
   const valid = new Set(shortcuts.map((s) => s.id));
   const recent = [id, ...readShortcutRecents(userId).filter((old) => old !== id && valid.has(old))];
   try {
@@ -26,7 +26,6 @@ export function rememberShortcut(
   } catch {
     /* Selection still works when storage is unavailable. */
   }
-  return recent;
 }
 
 export function findShortcuts(

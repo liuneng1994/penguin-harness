@@ -26,7 +26,7 @@
  * stays as typed.
  */
 import { useCallback, useRef, useState } from "react";
-import type { ReactNode, RefObject } from "react";
+import type { ReactNode } from "react";
 import type {
   AgentConfigDto,
   AgentHooksConfigDto,
@@ -80,15 +80,6 @@ interface SectionConfigState {
   prompt?: string;
   templateHasPlaceholder?: boolean;
   legacySectionPresent?: boolean;
-}
-
-function insertPromptToken(
-  ref: RefObject<HTMLTextAreaElement | null>,
-  value: string,
-  setValue: (next: string) => void,
-  token: string,
-): void {
-  insertTextareaText(ref.current, value, token, setValue);
 }
 
 export function usePromptInjection({
@@ -281,7 +272,9 @@ export function usePromptInjection({
               <button
                 type="button"
                 disabled={!canEdit}
-                onClick={() => insertPromptToken(promptRef, prompt.draft, prompt.setDraft, token!)}
+                onClick={() =>
+                  insertTextareaText(promptRef.current, prompt.draft, token!, prompt.setDraft)
+                }
                 data-tooltip={S.memory.insertToken}
                 className="shrink-0 rounded border border-gray-200 bg-white px-1.5 py-0.5 font-mono font-semibold text-gray-800 transition-colors duration-150 hover:border-gray-400 hover:bg-gray-100 disabled:pointer-events-none dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 dark:hover:border-gray-500 dark:hover:bg-gray-700"
               >

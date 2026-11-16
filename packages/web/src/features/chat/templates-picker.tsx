@@ -31,22 +31,25 @@ export function TemplatesPicker({
   readComposerText: () => string;
   returnFocus: () => HTMLTextAreaElement | null;
 }) {
-  const [open, setOpen] = useState(false);
-  const [managing, setManaging] = useState(false);
+  const [panel, setPanel] = useState<"picker" | "manager" | null>(null);
+  const open = panel === "picker";
   const [query, setQuery] = useState("");
   const [recent, setRecent] = useState<string[]>([]);
-  const library = useShortcutsLibrary(open || managing);
+  const library = useShortcutsLibrary(panel !== null);
   useEffect(() => {
-    if (disabled) setOpen(false);
-  }, [disabled]);
+    if (disabled && open) setPanel(null);
+  }, [disabled, open]);
   const words = S.chat.shortcuts;
   const items = library.state === "ready" ? findShortcuts(library.shortcuts, query, recent) : [];
-  const restoreFocus = () => requestAnimationFrame(() => returnFocus()?.focus());
+  const dismiss = () => {
+    setPanel(null);
+    requestAnimationFrame(() => returnFocus()?.focus());
+  };
   return (
     <>
       <Dropdown
         open={open}
-        setOpen={setOpen}
+        setOpen={() => setPanel(null)}
         portal={{ direction: "up", align: "left" }}
         allowFlip={false}
         menuClass="w-[22rem] max-w-[calc(100vw-1rem)]"
@@ -66,7 +69,7 @@ export function TemplatesPicker({
                 setQuery("");
                 setRecent(readShortcutRecents(userId));
               }
-              setOpen(!open);
+              setPanel(open ? null : "picker");
             }}
           />
         }
@@ -75,12 +78,10 @@ export function TemplatesPicker({
           <PickerList
             items={items}
             itemKey={(s) => s.id}
+            commitOnTab={false}
             query={query}
             onQueryChange={setQuery}
-            onDismiss={() => {
-              setOpen(false);
-              restoreFocus();
-            }}
+            onDismiss={dismiss}
             searchPlaceholder={words.searchTemplates}
             emptyText={
               library.state === "loading"
@@ -92,8 +93,8 @@ export function TemplatesPicker({
                     : words.noMatches
             }
             onPick={(shortcut) => {
-              setRecent(rememberShortcut(userId, shortcut.id, library.shortcuts));
-              setOpen(false);
+              rememberShortcut(userId, shortcut.id, library.shortcuts);
+              setPanel(null);
               onPick(shortcut.prompt);
             }}
             renderRow={(shortcut) => (
@@ -122,26 +123,15 @@ export function TemplatesPicker({
                   density="sm"
                   glyph={ICONS.sliders}
                   label={words.manageTemplates}
-                  onSelect={() => {
-                    setOpen(false);
-                    setManaging(true);
-                  }}
+                  onSelect={() => setPanel("manager")}
                 />
               </div>
             }
           />
         </div>
       </Dropdown>
-      {managing && (
-        <Modal
-          open
-          title={words.manageTemplates}
-          widthClass="sm:max-w-lg"
-          onClose={() => {
-            setManaging(false);
-            restoreFocus();
-          }}
-        >
+      {panel === "manager" && (
+        <Modal open title={words.manageTemplates} widthClass="sm:max-w-lg" onClose={dismiss}>
           <ShortcutsContent library={library} readComposerText={readComposerText} />
         </Modal>
       )}

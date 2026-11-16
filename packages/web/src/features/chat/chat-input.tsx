@@ -2547,9 +2547,9 @@ export function ChatInput({
                 direction={models && onChangeModel ? "down" : "up"}
               />
             )}
-            {variant === "session" && (
+            {variant === "session" && sessionId !== undefined && (
               <TemplatesPicker
-                key={sessionId ?? "new"}
+                key={sessionId}
                 userId={user?.userId ?? ""}
                 disabled={busy || compacting}
                 returnFocus={() => textareaRef.current}

@@ -12,8 +12,6 @@ export function useShortcutsLibrary(enabled = true) {
   const [saving, setSaving] = useState(false);
   const savingRef = useRef(false);
   const readVersion = useRef(0);
-  const latest = useRef(shortcuts);
-  latest.current = shortcuts;
 
   useEffect(() => {
     if (!enabled) return;
@@ -35,20 +33,17 @@ export function useShortcutsLibrary(enabled = true) {
     };
   }, [enabled, attempt]);
 
-  const save = async (next: UserShortcut[], optimistic = false): Promise<boolean> => {
+  const save = async (next: UserShortcut[]): Promise<boolean> => {
     // A failed read must never become an empty list that a later save overwrites.
     if (state !== "ready" || savingRef.current) return false;
     savingRef.current = true;
     readVersion.current += 1;
     setSaving(true);
-    const rollback = latest.current;
-    if (optimistic) setShortcuts(next);
     try {
       await api.putPrefs({ draftShortcuts: next });
       setShortcuts(next);
       return true;
     } catch (err) {
-      if (optimistic) setShortcuts(rollback);
       toastApiError(err);
       return false;
     } finally {

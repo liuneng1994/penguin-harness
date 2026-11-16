@@ -27,7 +27,7 @@
  * and keeps what is being typed.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { ChangeEvent, RefObject } from "react";
+import type { ChangeEvent } from "react";
 import type {
   MemoryFileInfo,
   MemoryImportMode,
@@ -313,13 +313,6 @@ export function MemoryTab({
       toastApiError(e);
     }
   };
-
-  const insertPromptToken = (
-    ref: RefObject<HTMLTextAreaElement | null>,
-    value: string,
-    setValue: (next: string) => void,
-    token: string,
-  ) => insertTextareaText(ref.current, value, token, setValue);
 
   /** Saves both memory prompts through the ordinary config write; a refusal keeps them as typed. */
   const savePrompts = async () => {
@@ -742,17 +735,17 @@ export function MemoryTab({
                   type="button"
                   onClick={() =>
                     lastPromptField === "main"
-                      ? insertPromptToken(
-                          mainPromptRef,
+                      ? insertTextareaText(
+                          mainPromptRef.current,
                           prompts.draft.prompt,
+                          token!,
                           (prompt) => prompts.patch({ prompt }),
-                          token!,
                         )
-                      : insertPromptToken(
-                          workspacePromptRef,
+                      : insertTextareaText(
+                          workspacePromptRef.current,
                           prompts.draft.workspace,
-                          (workspace) => prompts.patch({ workspace }),
                           token!,
+                          (workspace) => prompts.patch({ workspace }),
                         )
                   }
                   data-tooltip={S.memory.insertToken}

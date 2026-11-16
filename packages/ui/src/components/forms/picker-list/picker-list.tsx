@@ -11,8 +11,9 @@
  * before this control existed. ArrowDown/ArrowUp begin the navigation, and Enter/Tab commits — the
  * highlighted row if there is one, otherwise the top match, which is what makes "type a few
  * letters, press Enter" work. Escape is the host's: the search box empties itself on the first
- * press when it holds text, and the host closes its own panel at the window level (an IME-safe
- * handler for a switch picker, the dropdown's for a dropdown).
+ * press when it holds text unless `onDismiss` closes directly. The host closes its own panel at
+ * the window level (an IME-safe switch picker handler or the dropdown's). Set `commitOnTab` to false to
+ * use Tab for focus navigation instead of selection; Shift+Tab always moves focus.
  *
  * A host whose items fall into runs (the agent picker's company employees, listed last) names
  * a run with `groupLabel`: the name is drawn once above the run's first row, in the menus'
@@ -51,6 +52,8 @@ export interface PickerListProps<T> {
   searchActions?: ReactNode;
   /** Close the picker on Escape, including when its search is non-empty. */
   onDismiss?: () => void;
+  /** Set false to move focus through rows and footer actions on Tab instead of choosing a match. */
+  commitOnTab?: boolean;
 }
 
 /** A compact searchable choice dialog, sharing row and keyboard behavior with menu pickers. */
@@ -86,6 +89,7 @@ export function PickerList<T>({
   layout = "menu",
   searchActions,
   onDismiss,
+  commitOnTab = true,
 }: PickerListProps<T>) {
   // -1 = nothing highlighted yet (see the note above); reset whenever the query changes.
   const [active, setActive] = useState(-1);
@@ -105,26 +109,16 @@ export function PickerList<T>({
       return;
     }
     // An IME commit must not be read as a pick.
-    if (((e.key === "Enter" && !e.shiftKey) || e.key === "Tab") && !e.nativeEvent.isComposing) {
+    if (
+      ((e.key === "Enter" && !e.shiftKey) || (e.key === "Tab" && !e.shiftKey && commitOnTab)) &&
+      !e.nativeEvent.isComposing
+    ) {
       e.preventDefault();
       onPick(items[active >= 0 ? active : 0]!);
     }
   };
   return (
-    <div
-      className="contents"
-      onKeyDown={onKeyDown}
-      onKeyDownCapture={
-        onDismiss
-          ? (e) => {
-              if (e.key !== "Escape") return;
-              e.stopPropagation();
-              if (e.nativeEvent.isComposing) return;
-              onDismiss();
-            }
-          : undefined
-      }
-    >
+    <div className="contents" onKeyDown={onKeyDown}>
       {/* Quick search (autofocused: it also owns the keyboard while the panel is up) */}
       <div
         className={`flex items-center gap-2 border-b border-line-muted ${layout === "dialog" ? "px-3 py-2.5" : "px-2 pb-1.5 pt-0.5"}`}
@@ -133,6 +127,16 @@ export function PickerList<T>({
           className="min-w-0 flex-1"
           variant="menu"
           autoFocus
+          onKeyDown={
+            onDismiss
+              ? (e) => {
+                  if (e.key !== "Escape") return;
+                  e.preventDefault();
+                  e.stopPropagation();
+                  if (!e.nativeEvent.isComposing) onDismiss();
+                }
+              : undefined
+          }
           value={query}
           onChange={(next) => {
             onQueryChange(next);

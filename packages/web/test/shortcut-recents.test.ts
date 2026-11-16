@@ -34,16 +34,17 @@ it("finds templates by name and body while retaining a long list", () => {
 it("prioritizes the last choice, prunes removed templates and isolates accounts", () => {
   stubLocalStorage();
   rememberShortcut("alice", "review", templates);
-  const recent = rememberShortcut("alice", "summary", templates);
+  rememberShortcut("alice", "summary", templates);
+  const recent = readShortcutRecents("alice");
   expect(findShortcuts(templates, "", recent)).toEqual([templates[1], templates[0]]);
   expect(readShortcutRecents("bob")).toEqual([]);
-  expect(rememberShortcut("alice", "summary", [templates[1]!])).toEqual(["summary"]);
+  rememberShortcut("alice", "summary", [templates[1]!]);
   expect(readShortcutRecents("alice")).toEqual(["summary"]);
 });
 
 it("keeps template selection usable when storage is blocked", () => {
   stubLocalStorage(blockedStorage());
-  expect(rememberShortcut("alice", "summary", templates)).toEqual(["summary"]);
+  expect(() => rememberShortcut("alice", "summary", templates)).not.toThrow();
   expect(readShortcutRecents("alice")).toEqual([]);
 });
 

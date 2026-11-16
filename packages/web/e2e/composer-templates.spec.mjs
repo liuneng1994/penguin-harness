@@ -201,3 +201,57 @@ test("the upward picker fits all themes and layouts and closes on a Session swit
   await expect(page).toHaveURL(`${BASE}/chat/${other}`);
   await expect(page.getByRole("dialog", { name: words.zh.open, exact: true })).toHaveCount(0);
 });
+
+test("new conversations use the existing shortcut folder and preserve saved template edits", async ({
+  page,
+}) => {
+  await setup(page, "duplicate");
+  const panel = await openPicker(page);
+  await panel.getByRole("button", { name: words.en.manage, exact: true }).click();
+  const manager = page.getByRole("dialog", { name: words.en.manage, exact: true });
+  await manager.getByRole("button", { name: "Edit", exact: true }).first().click();
+  const editor = page.getByRole("dialog", { name: "Edit shortcut", exact: true });
+  await editor.getByRole("textbox", { name: "Prompt", exact: true }).fill("Changed saved prompt");
+  await editor.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(editor).toHaveCount(0);
+  await manager.press("Escape");
+  await page.goto(`${BASE}/chat/new`);
+  await expect(composer(page)).toBeVisible();
+  await expect(page.getByRole("button", { name: words.en.open, exact: true })).toHaveCount(0);
+  await page.getByRole("button", { name: /^My shortcuts/ }).click();
+  const list = page.getByRole("list", { name: "My shortcuts", exact: true });
+  await list
+    .getByRole("listitem")
+    .filter({ hasText: "Summary" })
+    .getByRole("button", { name: "Delete", exact: true })
+    .click();
+  await page
+    .getByRole("dialog", { name: "Delete shortcut", exact: true })
+    .getByRole("button", { name: "Delete", exact: true })
+    .click();
+  await expect
+    .poll(
+      async () =>
+        (await (await page.request.get(`${BASE}/api/me/prefs`)).json()).prefs.draftShortcuts,
+    )
+    .toEqual([{ ...templates[0], prompt: "Changed saved prompt" }]);
+});
+
+test("keyboard navigation reaches template management without inserting", async ({ page }) => {
+  await setup(page, "keyboard");
+  const input = composer(page);
+  await input.fill("Keep this draft");
+  const panel = await openPicker(page);
+  await panel.getByRole("searchbox").press("Shift+Tab");
+  await expect(input).toHaveValue("Keep this draft");
+  await panel.getByRole("searchbox").focus();
+  await page.keyboard.press("Tab");
+  await expect(panel.getByRole("button", { name: /^Review/ })).toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(panel.getByRole("button", { name: /^Summary/ })).toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(panel.getByRole("button", { name: words.en.manage, exact: true })).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("dialog", { name: words.en.manage, exact: true })).toBeVisible();
+  await expect(input).toHaveValue("Keep this draft");
+});

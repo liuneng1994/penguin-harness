@@ -195,7 +195,7 @@ export function ShortcutsContent({
         cancelLabel={S.common.cancel}
         onClose={() => setDeleting(null)}
         onConfirm={() => {
-          if (deleting !== null) void library.save(removeShortcut(shortcuts, deleting.id), true);
+          if (deleting !== null) void library.save(removeShortcut(shortcuts, deleting.id));
           setDeleting(null);
         }}
       >
