@@ -35,6 +35,7 @@ import type {
   AgentVaultConfigDto,
 } from "@prismshadow/penguin-server/api";
 import {
+  insertTextareaText,
   Button,
   Card,
   InfoPopover,
@@ -81,28 +82,13 @@ interface SectionConfigState {
   legacySectionPresent?: boolean;
 }
 
-/** Same contract as the Prompt tab's inserter: execCommand keeps the textarea's native undo stack, with a state-splice fallback. */
 function insertPromptToken(
   ref: RefObject<HTMLTextAreaElement | null>,
   value: string,
   setValue: (next: string) => void,
   token: string,
 ): void {
-  const el = ref.current;
-  if (el) {
-    el.focus();
-    const inserted = document.execCommand?.("insertText", false, token);
-    if (inserted) return; // onChange updates state from e.target.value
-  }
-  const start = el ? el.selectionStart : value.length;
-  const end = el ? el.selectionEnd : value.length;
-  setValue(value.slice(0, start) + token + value.slice(end));
-  requestAnimationFrame(() => {
-    if (!el) return;
-    el.focus();
-    const caret = start + token.length;
-    el.setSelectionRange(caret, caret);
-  });
+  insertTextareaText(ref.current, value, token, setValue);
 }
 
 export function usePromptInjection({

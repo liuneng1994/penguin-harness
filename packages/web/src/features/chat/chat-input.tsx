@@ -119,6 +119,7 @@ import {
   SlashMenu,
   SlashPicker,
   noAutofill,
+  insertTextareaText,
   toastError,
   toastInfo,
 } from "@prismshadow/penguin-ui";
@@ -130,6 +131,7 @@ import { useLocale } from "../../state/locale";
 import { useAuth } from "../../state/auth";
 import { agentDisplayName } from "../../state/project";
 import { PermissionSelect } from "./permission-select";
+import { TemplatesPicker } from "./templates-picker";
 import type { PermissionPick } from "../../lib/permission-level";
 import { SkillIcon } from "../skills/skill-icon-view";
 import { SkillPickList } from "../skills/skill-pick-list";
@@ -865,7 +867,7 @@ export function ChatInput({
   const { locale } = useLocale();
   // Admin-settable, delivered on /api/me: the pre-flight checks below and the numbers in their
   // messages both come from here, so what the composer refuses is exactly what the server would.
-  const { uploadLimits } = useAuth();
+  const { user, uploadLimits } = useAuth();
   const [text, setText] = useState(initialText ?? "");
   /** Live text mirror for slash-command run() closures (the commands memo deliberately doesn't depend on text). */
   const textRef = useRef(text);
@@ -908,6 +910,7 @@ export function ChatInput({
   // Cursor position (tracked via onChange/onSelect): the slash menu matches the token at the caret.
   const [caret, setCaret] = useState(0);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const templateSelection = useRef({ start: 0, end: 0 });
   // Shell-style ↑/↓ history recall state (null = not navigating); ended by the text-mismatch effect below.
   const historyNavRef = useRef<HistoryStep["nav"]>(null);
   // Short placeholder on narrow screens: a long hint would wrap and get clipped in a single-line textarea.
@@ -2492,8 +2495,7 @@ export function ChatInput({
                     : S.chat.inputPlaceholder,
         }}
         tools={
-          // The three icon buttons — +, permission, skills — sit as one tight cluster: the row's
-          // wider gap would read them as unrelated controls.
+          // Input add-ons and pickers share one compact toolbar group.
           <>
             {/* "+" extension menu, leading the row: input add-ons (image upload, file
                 attachment, goal mode) plus the input settings footer (mid-run send mode —
@@ -2543,6 +2545,38 @@ export function ChatInput({
                 ]}
                 footer={<SteerModeRow steerMode={steerMode} onChangeSteerMode={setSteerMode} />}
                 direction={models && onChangeModel ? "down" : "up"}
+              />
+            )}
+            {variant === "session" && (
+              <TemplatesPicker
+                key={sessionId ?? "new"}
+                userId={user?.userId ?? ""}
+                disabled={busy || compacting}
+                returnFocus={() => textareaRef.current}
+                readComposerText={() => textRef.current}
+                onOpen={() => {
+                  const el = textareaRef.current;
+                  templateSelection.current = {
+                    start: el?.selectionStart ?? textRef.current.length,
+                    end: el?.selectionEnd ?? textRef.current.length,
+                  };
+                }}
+                onPick={(prompt) =>
+                  insertTextareaText(
+                    textareaRef.current,
+                    textRef.current,
+                    prompt,
+                    (next) => {
+                      setText(next);
+                      onTextChange?.(next);
+                      setCaret(
+                        Math.min(templateSelection.current.start, textRef.current.length) +
+                          prompt.length,
+                      );
+                    },
+                    templateSelection.current,
+                  )
+                }
               />
             )}
             <PermissionSelect

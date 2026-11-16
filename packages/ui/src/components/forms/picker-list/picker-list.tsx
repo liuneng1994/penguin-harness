@@ -49,6 +49,8 @@ export interface PickerListProps<T> {
   layout?: "menu" | "dialog";
   /** Optional controls beside the search, such as a dialog close button. */
   searchActions?: ReactNode;
+  /** Close the picker on Escape, including when its search is non-empty. */
+  onDismiss?: () => void;
 }
 
 /** A compact searchable choice dialog, sharing row and keyboard behavior with menu pickers. */
@@ -83,6 +85,7 @@ export function PickerList<T>({
   footer,
   layout = "menu",
   searchActions,
+  onDismiss,
 }: PickerListProps<T>) {
   // -1 = nothing highlighted yet (see the note above); reset whenever the query changes.
   const [active, setActive] = useState(-1);
@@ -108,7 +111,20 @@ export function PickerList<T>({
     }
   };
   return (
-    <div className="contents" onKeyDown={onKeyDown}>
+    <div
+      className="contents"
+      onKeyDown={onKeyDown}
+      onKeyDownCapture={
+        onDismiss
+          ? (e) => {
+              if (e.key !== "Escape") return;
+              e.stopPropagation();
+              if (e.nativeEvent.isComposing) return;
+              onDismiss();
+            }
+          : undefined
+      }
+    >
       {/* Quick search (autofocused: it also owns the keyboard while the panel is up) */}
       <div
         className={`flex items-center gap-2 border-b border-line-muted ${layout === "dialog" ? "px-3 py-2.5" : "px-2 pb-1.5 pt-0.5"}`}

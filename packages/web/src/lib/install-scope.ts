@@ -92,6 +92,12 @@ export interface KeyRule {
 export const KEY_RULES: readonly KeyRule[] = [
   {
     kind: "family",
+    key: "penguin.shortcutRecents.",
+    scope: "install",
+    why: "Recently used template IDs belong to this account on this server's data root.",
+  },
+  {
+    kind: "family",
     key: "penguin.vscodeSsh.",
     scope: "install",
     why: "The reader's editor connection maps a server's user and machine identities to SSH aliases.",

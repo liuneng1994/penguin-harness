@@ -55,6 +55,7 @@ export * from "./components/overlays/menu-panel/menu-panel";
 // radios, the choice group of chips or cards, the number input with its stepper, and the slider.
 export * from "./components/forms/field/field";
 export * from "./components/forms/input/input";
+export * from "./components/forms/input/insert-textarea-text";
 export * from "./components/forms/password-input/password-input";
 export * from "./components/forms/search-input/search-input";
 export * from "./components/forms/checkbox/checkbox";
