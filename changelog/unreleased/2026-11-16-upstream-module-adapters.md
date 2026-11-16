@@ -3,6 +3,7 @@
 - **Date:** 2026-11-16
 - **Type:** refactor
 - **Scope:** `core`, `server`, `web`, `ui`, `tooling`
+- **PR:** [#14](https://github.com/liuneng1994/penguin-harness/pull/14)
 
 [中文版](2026-11-16-upstream-module-adapters.zh.md)
 
