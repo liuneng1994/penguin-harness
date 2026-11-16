@@ -1,9 +1,5 @@
-/**
- * Account shortcuts fill the composer without sending. Saved rows scroll while New shortcut
- * stays visible. Row actions remain visible on touch; create/edit wait for the server, and
- * failed optimistic deletes roll back.
- */
-import { useCallback, useEffect, useRef, useState } from "react";
+/** Account shortcuts share their editor and actions with the composer's template manager. */
+import { useState } from "react";
 import {
   Button,
   ConfirmModal,
@@ -18,7 +14,6 @@ import {
   useFormDraft,
   useGuardedClose,
 } from "@prismshadow/penguin-ui";
-import * as api from "../../api/endpoints";
 import { S } from "../../lib/strings";
 import {
   ExampleFolderRow,
@@ -31,29 +26,28 @@ import {
   SHORTCUT_PROMPT_MAX,
   SHORTCUT_TITLE_MAX,
   defaultShortcutTitle,
-  normalizeShortcuts,
   removeShortcut,
   shortcutDraftError,
   upsertShortcut,
 } from "./user-shortcuts";
 import type { ShortcutDraft, UserShortcut } from "./user-shortcuts";
-import { toastApiError } from "../../lib/toast-api-error";
+import { useShortcutsLibrary } from "./shortcuts-library";
+import type { ShortcutsLibrary } from "./shortcuts-library";
 
-/** Separate from EXAMPLE_FOLDERS because saved rows contain the user's own text. */
 export const SHORTCUTS_FOLDER_ID = "shortcuts";
-
 const SHORTCUTS_GLYPH = ICONS.zap;
 
-/** An always-visible row action (edit / delete), sized and coloured to recede until pointed at. */
 function RowAction({
   label,
   glyph,
   danger = false,
+  disabled,
   onClick,
 }: {
   label: string;
   glyph: string;
   danger?: boolean;
+  disabled: boolean;
   onClick: () => void;
 }) {
   return (
@@ -61,10 +55,9 @@ function RowAction({
       type="button"
       data-tooltip={label}
       aria-label={label}
+      disabled={disabled}
       onClick={onClick}
-      className={`flex h-6 w-6 shrink-0 items-center justify-center rounded text-fg-subtle transition-colors duration-150 ${
-        danger ? "hover:text-tone-danger-fg" : "hover:text-fg"
-      }`}
+      className={`flex h-6 w-6 shrink-0 items-center justify-center rounded text-fg-subtle transition-colors duration-150 disabled:opacity-50 ${danger ? "hover:text-tone-danger-fg" : "hover:text-fg"}`}
     >
       <GlyphIcon d={glyph} size={ICON_SIZE.rowLead} />
     </button>
@@ -79,154 +72,122 @@ export function ShortcutsFolder({
 }: {
   open: boolean;
   onOpen: () => void;
-  /** The composer's current text, read at click time — a new shortcut starts from what was typed. */
   readComposerText: () => string;
-  /** Hand the saved prompt to the composer. Pins no Skills; see user-shortcuts.ts. */
   onFill: (prompt: string) => void;
 }) {
-  const [shortcuts, setShortcuts] = useState<UserShortcut[]>([]);
-  // A failed read must never become an empty list that a later save overwrites.
-  const [loadState, setLoadState] = useState<"loading" | "ready" | "failed">("loading");
-  const [loadAttempt, setLoadAttempt] = useState(0);
-  const [draft, setDraft] = useState<ShortcutDraft | null>(null);
-  const [deleting, setDeleting] = useState<UserShortcut | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    void api
-      .getPrefs()
-      .then((res) => {
-        if (cancelled) return;
-        setShortcuts(normalizeShortcuts(res.prefs.draftShortcuts));
-        setLoadState("ready");
-      })
-      .catch(() => {
-        if (!cancelled) setLoadState("failed");
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [loadAttempt]);
-
-  /** Latest list for the rollback value: a stale closure would restore a list two edits old. */
-  const shortcutsRef = useRef(shortcuts);
-  shortcutsRef.current = shortcuts;
-  const persist = useCallback((next: UserShortcut[]) => {
-    const rollback = shortcutsRef.current;
-    setShortcuts(next);
-    api.putPrefs({ draftShortcuts: next }).catch((e: unknown) => {
-      setShortcuts(rollback);
-      toastApiError(e);
-    });
-  }, []);
-
-  const startCreate = () => {
-    // The high-value path: whatever is already in the composer becomes the body of the new
-    // shortcut, with its first line suggested as the name. Both fields stay editable.
-    const text = readComposerText().trim();
-    setDraft({ id: null, title: defaultShortcutTitle(text), prompt: text });
-  };
-
-  /** The dialog's write: resolves with whether it landed; the list changes only once it has. */
-  const saveDraft = async (next: ShortcutDraft): Promise<boolean> => {
-    const list = upsertShortcut(shortcuts, next);
-    try {
-      await api.putPrefs({ draftShortcuts: list });
-    } catch (e) {
-      toastApiError(e);
-      return false;
-    }
-    setShortcuts(list);
-    setDraft(null);
-    return true;
-  };
-
-  // A fragment, not a wrapper: the row and the panel are cells of the examples grid, placed by
-  // it like a built-in folder's (the dialogs are portals and take no cell).
+  const library = useShortcutsLibrary();
   return (
     <>
       <ExampleFolderRow
         open={open}
         glyph={SHORTCUTS_GLYPH}
         label={S.chat.shortcuts.folder}
-        count={shortcuts.length}
+        count={library.shortcuts.length}
         onOpen={onOpen}
       />
-
       {open && (
         <div className={examplePanelClass}>
-          {loadState === "failed" && (
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <span role="alert" className="text-xs text-tone-danger-fg">
-                {S.chat.shortcuts.loadFailed}
-              </span>
-              <Button
-                size="sm"
-                onClick={() => {
-                  setLoadState("loading");
-                  setLoadAttempt((attempt) => attempt + 1);
-                }}
-              >
-                {S.common.retry}
-              </Button>
-            </div>
-          )}
-          {loadState === "ready" && (
-            <>
-              <ul
-                aria-label={S.chat.shortcuts.folder}
-                className="max-h-48 space-y-1.5 overflow-y-auto overscroll-contain"
-              >
-                {shortcuts.map((shortcut) => (
-                  <li key={shortcut.id} className="flex items-center gap-1">
-                    <button
-                      type="button"
-                      data-tooltip={`${shortcut.title}\n${S.chat.exampleFillHint}`}
-                      onClick={() => onFill(shortcut.prompt)}
-                      className={`flex min-w-0 flex-1 items-center ${ICON_GAP.menu} ${exampleRowClass}`}
-                    >
-                      <ExampleRowGlyph glyph={SHORTCUTS_GLYPH} />
-                      <span className="min-w-0 flex-1 truncate">{shortcut.title}</span>
-                      <ExampleRowGo />
-                    </button>
-                    <RowAction
-                      label={S.common.edit}
-                      glyph={ICONS.pencil}
-                      onClick={() => setDraft({ ...shortcut })}
-                    />
-                    <RowAction
-                      label={S.common.delete}
-                      glyph={ICONS.trash}
-                      danger
-                      onClick={() => setDeleting(shortcut)}
-                    />
-                  </li>
-                ))}
-              </ul>
-              <button
-                type="button"
-                data-tooltip={S.chat.shortcuts.newFromComposer}
-                onClick={startCreate}
-                className={`mt-1.5 flex w-full items-center ${ICON_GAP.menu} ${exampleRowClass}`}
-              >
-                {/* In a row glyph's box, so its title starts where the shortcuts' do. */}
-                <span className="flex h-4 w-4 shrink-0 items-center justify-center text-fg-muted">
-                  <PlusIcon size={ICON_SIZE.inlineGlyph} />
-                </span>
-                <span className="min-w-0 flex-1 truncate">{S.chat.shortcuts.new}</span>
-              </button>
-            </>
-          )}
+          <ShortcutsContent library={library} readComposerText={readComposerText} onFill={onFill} />
         </div>
       )}
+    </>
+  );
+}
 
-      {/* Create and edit share one dialog — the fields and the rules are identical, and only the
-          dialog's name says which one is happening (the same Modal + Input idiom as the sidebar's
-          rename dialogs). Mounted per opening, so it starts from what it was opened with. */}
+/** Saved rows and create/edit/delete dialogs, used in the folder and template manager. */
+export function ShortcutsContent({
+  library,
+  readComposerText,
+  onFill,
+}: {
+  library: ShortcutsLibrary;
+  readComposerText: () => string;
+  onFill?: (prompt: string) => void;
+}) {
+  const { shortcuts, state, saving } = library;
+  const [draft, setDraft] = useState<ShortcutDraft | null>(null);
+  const [deleting, setDeleting] = useState<UserShortcut | null>(null);
+  const startCreate = () => {
+    const text = readComposerText().trim();
+    setDraft({ id: null, title: defaultShortcutTitle(text), prompt: text });
+  };
+  const saveDraft = async (next: ShortcutDraft): Promise<boolean> => {
+    if (!(await library.save(upsertShortcut(shortcuts, next)))) return false;
+    setDraft(null);
+    return true;
+  };
+  return (
+    <>
+      {state === "failed" && (
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <span role="alert" className="text-xs text-tone-danger-fg">
+            {S.chat.shortcuts.loadFailed}
+          </span>
+          <Button size="sm" onClick={library.retry}>
+            {S.common.retry}
+          </Button>
+        </div>
+      )}
+      {state === "ready" && (
+        <>
+          <ul
+            aria-label={S.chat.shortcuts.folder}
+            className="max-h-48 space-y-1.5 overflow-y-auto overscroll-contain"
+          >
+            {shortcuts.map((shortcut) => (
+              <li key={shortcut.id} className="flex items-center gap-1">
+                {onFill ? (
+                  <button
+                    type="button"
+                    data-tooltip={`${shortcut.title}\n${S.chat.exampleFillHint}`}
+                    onClick={() => onFill(shortcut.prompt)}
+                    className={`flex min-w-0 flex-1 items-center ${ICON_GAP.menu} ${exampleRowClass}`}
+                  >
+                    <ExampleRowGlyph glyph={SHORTCUTS_GLYPH} />
+                    <span className="min-w-0 flex-1 truncate">{shortcut.title}</span>
+                    <ExampleRowGo />
+                  </button>
+                ) : (
+                  <span
+                    className={`flex min-w-0 flex-1 items-center ${ICON_GAP.menu} px-2.5 py-2 text-sm`}
+                  >
+                    <ExampleRowGlyph glyph={SHORTCUTS_GLYPH} />
+                    <span className="min-w-0 flex-1 truncate">{shortcut.title}</span>
+                  </span>
+                )}
+                <RowAction
+                  label={S.common.edit}
+                  glyph={ICONS.pencil}
+                  disabled={saving}
+                  onClick={() => setDraft({ ...shortcut })}
+                />
+                <RowAction
+                  label={S.common.delete}
+                  glyph={ICONS.trash}
+                  danger
+                  disabled={saving}
+                  onClick={() => setDeleting(shortcut)}
+                />
+              </li>
+            ))}
+          </ul>
+          <button
+            type="button"
+            data-tooltip={S.chat.shortcuts.newFromComposer}
+            onClick={startCreate}
+            disabled={saving}
+            className={`mt-1.5 flex w-full items-center ${ICON_GAP.menu} ${exampleRowClass} disabled:opacity-50`}
+          >
+            <span className="flex h-4 w-4 shrink-0 items-center justify-center text-fg-muted">
+              <PlusIcon size={ICON_SIZE.inlineGlyph} />
+            </span>
+            <span className="min-w-0 flex-1 truncate">{S.chat.shortcuts.new}</span>
+          </button>
+        </>
+      )}
       {draft !== null && (
         <ShortcutDialog opening={draft} onClose={() => setDraft(null)} onSave={saveDraft} />
       )}
-
       <ConfirmModal
         open={deleting !== null}
         title={S.chat.shortcuts.deleteTitle}
@@ -234,7 +195,7 @@ export function ShortcutsFolder({
         cancelLabel={S.common.cancel}
         onClose={() => setDeleting(null)}
         onConfirm={() => {
-          if (deleting !== null) persist(removeShortcut(shortcuts, deleting.id));
+          if (deleting !== null) void library.save(removeShortcut(shortcuts, deleting.id));
           setDeleting(null);
         }}
       >

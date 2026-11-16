@@ -41,6 +41,7 @@ import type { MemoryStorage } from "./helpers/storage";
 
 /** State that names the data root's Projects, Sessions, Workspaces and terminals. */
 const INSTALL_STATE: Record<string, string> = {
+  "penguin.shortcutRecents.admin": '["review","summary"]',
   "penguin.vscodeSsh.admin.machine_1": "reader-dev",
   "penguin.chatDraft.admin.default_project": '{"workspace":"/srv/app","agentId":"default_agent"}',
   "penguin.chatDraft.session.admin.session-1": '{"text":"half a sentence"}',
