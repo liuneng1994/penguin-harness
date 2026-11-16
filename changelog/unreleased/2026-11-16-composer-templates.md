@@ -3,6 +3,7 @@
 - **Date:** 2026-11-16
 - **Type:** feature
 - **Scope:** `web`, `ui`
+- **PR:** [#13](https://github.com/liuneng1994/penguin-harness/pull/13)
 
 [中文版](2026-11-16-composer-templates.zh.md)
 
