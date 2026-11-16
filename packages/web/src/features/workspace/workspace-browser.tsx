@@ -105,9 +105,9 @@ import { ApiError } from "../../api/client";
 import { filesApi, filesScopeKey, type FilesScope } from "../../api/workspace-files";
 
 import { useAuth } from "../../state/auth";
-import { openFileInVSCode } from "./open-in-editor";
+import { openFileInVSCode } from "../../lib/open-in-editor";
 import { useMachines } from "../../state/machines";
-import { VSCodeSettings } from "./vscode-settings";
+import { VSCodeSettings } from "../../lib/vscode-settings";
 import { S } from "../../lib/strings";
 import { apiErrorText } from "../../lib/api-error";
 import { isDesktopShellWindow } from "../../lib/account-menu";

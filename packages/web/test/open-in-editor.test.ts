@@ -14,7 +14,7 @@ import {
   saveEditorSshAlias,
   editorConnection,
   editorMachine,
-} from "../src/features/chat/open-in-editor";
+} from "../src/lib/open-in-editor";
 import { rememberSessionMachine, forgetSessionMachines } from "../src/lib/session-machines";
 import type { FilesScope } from "../src/api/workspace-files";
 import { apiError, json, stubFetch } from "./helpers/fetch";

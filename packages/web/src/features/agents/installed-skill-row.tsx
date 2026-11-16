@@ -15,8 +15,8 @@ import { useInstantSetting } from "../../lib/instant-setting";
 import { formatDateTime } from "../../lib/format";
 import { S } from "../../lib/strings";
 import { useLocale } from "../../state/locale";
-import { localizedShortText } from "../chat/skill-use";
-import { SkillTile } from "../skills/skill-icon-view";
+import { localizedShortText } from "../../lib/skill-use";
+import { SkillTile } from "../skills";
 
 export function InstalledSkillRow({
   skill,

@@ -2,7 +2,7 @@
 import { randomUUID } from "node:crypto";
 import { isSessionMeta, withOrigin } from "@prismshadow/amsp/records";
 import type { AmspRecord, ApprovalDecision, ToolCallPayload } from "@prismshadow/amsp/records";
-import type { Session } from "@prismshadow/penguin-core";
+import type { ApprovalContext, Session } from "@prismshadow/penguin-core";
 import type {
   DelegationRequest,
   DelegationBatch,
@@ -21,7 +21,11 @@ interface Child {
   bytes: number;
   approvals: Map<
     string,
-    { toolCall: AmspRecord<ToolCallPayload>; resolve(decision: ApprovalDecision): void }
+    {
+      toolCall: AmspRecord<ToolCallPayload>;
+      context?: ApprovalContext;
+      resolve(decision: ApprovalDecision): void;
+    }
   >;
   wake: Set<() => void>;
   cutoff: DelegationBatch["cutoff"];
@@ -239,11 +243,12 @@ export class AgentDelegationHost {
   }
   private async drive(child: Child, messages: AmspRecord[]): Promise<void> {
     this.touch(child);
-    const approve = (toolCall: AmspRecord<ToolCallPayload>) =>
+    const approve = (toolCall: AmspRecord<ToolCallPayload>, context?: ApprovalContext) =>
       new Promise<ApprovalDecision>((resolve) => {
         const id = randomUUID();
         child.approvals.set(id, {
           toolCall: withOrigin(toolCall, child.session.sessionId),
+          context,
           resolve,
         });
         this.notify(child);
@@ -301,7 +306,11 @@ export class AgentDelegationHost {
     });
     return {
       records,
-      approvals: [...child.approvals].map(([id, { toolCall }]) => ({ id, toolCall })),
+      approvals: [...child.approvals].map(([id, { toolCall, context }]) => ({
+        id,
+        toolCall,
+        context,
+      })),
       done: child.abort === null && records.length === child.records.length,
       cutoff: child.cutoff,
       ...(child.error ? { error: child.error } : {}),

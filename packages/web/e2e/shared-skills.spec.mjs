@@ -41,6 +41,12 @@ test("General skills are shared by default with independent switches and private
       .getByRole("listitem")
       .filter({ has: page.getByText("humanizer", { exact: true }) });
     await expect(row).toContainText("Shared from General");
+    await expect(
+      page.getByRole("list", { name: "Shared from General", exact: true }),
+    ).toContainText("humanizer");
+    await expect(
+      page.getByRole("button", { name: "Uninstall Humanizer", exact: true }),
+    ).toHaveCount(0);
     await expect(row.getByRole("button", { name: "Uninstall humanizer", exact: true })).toHaveCount(
       0,
     );
@@ -60,6 +66,7 @@ test("General skills are shared by default with independent switches and private
       row.getByRole("switch", { name: "Enable humanizer", exact: true }),
     ).toHaveAttribute("aria-checked", "false");
     await row.getByRole("button", { name: "Create private copy", exact: true }).click();
+    await page.getByText("Humanizer", { exact: true }).click();
     await expect(row).toContainText("Private version");
     await expect(row).not.toContainText("Shared from General");
     expect((await find(writer)).sourceAgentId).toBeUndefined();

@@ -1,7 +1,12 @@
 /** Private node RPC; Project and admin access are checked at its HTTP entry. */
 import type { AmspRecord, ApprovalDecision, ToolCallPayload } from "@prismshadow/amsp/records";
 import { THINKING_LEVEL_NAMES } from "@prismshadow/penguin-core";
-import type { ControlEnvContext, RunCutoff, ThinkingLevelName } from "@prismshadow/penguin-core";
+import type {
+  ApprovalContext,
+  ControlEnvContext,
+  RunCutoff,
+  ThinkingLevelName,
+} from "@prismshadow/penguin-core";
 
 export interface DelegationOwner extends ControlEnvContext {
   nodeId: string;
@@ -25,7 +30,11 @@ export interface DelegationRequest {
 }
 export interface DelegationBatch {
   records: Array<{ cursor: number; record: AmspRecord }>;
-  approvals: Array<{ id: string; toolCall: AmspRecord<ToolCallPayload> }>;
+  approvals: Array<{
+    id: string;
+    toolCall: AmspRecord<ToolCallPayload>;
+    context?: ApprovalContext;
+  }>;
   done: boolean;
   cutoff: RunCutoff | null;
   error?: string;

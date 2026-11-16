@@ -22,7 +22,7 @@ import { createHash } from "node:crypto";
  * change without it moving. (The reverse — moving it with no default change — is inert rather
  * than an error: nothing is keyed by version, so there is no table to fall out of sync with.)
  */
-export const KERNEL_VERSION = "2026-11-10";
+export const KERNEL_VERSION = "2026-11-16";
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
@@ -238,11 +238,13 @@ export function isKernelOutdated(kernelVersion: string | null | undefined): bool
  * - `2026-11-09` — `# Tool use` gains the go-ahead rule: hard-to-undo and
  *   outward-facing actions need the user's go-ahead in this conversation unless authorized
  *   durably; a yes covers only its own step; look before destroying. The prompt tab moved.
- * - `2026-11-10` (current) — the memory prompt names the scripts a fact keeps and gained its
+ * - `2026-11-10` — the memory prompt names the scripts a fact keeps and gained its
  *   **Scripts:** paragraph: a program the model would otherwise rewrite sits in a folder named
  *   after the fact it serves, any number of files, listed with relative links in that fact's own
  *   body and never in `MEMORY.md`, run through its interpreter by absolute path, and read before
  *   running one this Session did not write. The memory tab moved.
+ * - `2026-11-16` (current) — Project Agent discovery is available alongside the upstream
+ *   authorization and memory-script defaults. The tools tab retains the discovery schema.
  */
 export const KERNEL_DEFAULT_TAB_HASHES: Readonly<Record<KernelTab, string>> = {
   prompt: "3ab519fe2fb0394ffe061eb239d70dfbd21fa27e413f25cebaf73e9b307d0077",

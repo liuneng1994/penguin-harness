@@ -20,10 +20,7 @@
 import { useState } from "react";
 import type { ReactNode } from "react";
 import type { SkillMetadataItem } from "@prismshadow/penguin-server/api";
-import {
-  ConfirmModal,
-  toastSuccess,
-} from "@prismshadow/penguin-ui";
+import { ConfirmModal, toastSuccess } from "@prismshadow/penguin-ui";
 import * as api from "../../api/endpoints";
 import { S } from "../../lib/strings";
 import { useProject } from "../../state/project";
@@ -72,7 +69,9 @@ export function useSkillRows({
     setBusy(true);
     try {
       await api.removeAgentSkill(projectId, agentId, removing.name, machineId);
-      toastSuccess(`${S.skills.uninstalledToast(removing.name, agentName)}${S.agent.takesEffectSuffix}`);
+      toastSuccess(
+        `${S.skills.uninstalledToast(removing.name, agentName)}${S.agent.takesEffectSuffix}`,
+      );
       await onChanged();
     } catch (e) {
       toastApiError(e);
@@ -103,7 +102,13 @@ export function useSkillRows({
       busy={busy}
       onEnabledChange={async (enabled) => {
         if (!projectId) return;
-        const result = await api.setAgentSkillEnabled(projectId, agentId, skill.name, enabled, machineId);
+        const result = await api.setAgentSkillEnabled(
+          projectId,
+          agentId,
+          skill.name,
+          enabled,
+          machineId,
+        );
         toastSuccess(S.skills.switchSaved(skill.name, result.enabled));
         await onChanged();
       }}
@@ -125,7 +130,13 @@ export function useSkillRows({
       cancelLabel={S.common.cancel}
     >
       <p className="text-sm text-gray-600 dark:text-gray-300">
-        {removing === null ? "" : agentId === "default_agent" ? S.skills.uninstallSharedConfirmBody(removing.name) : removing.overridesShared ? S.skills.uninstallPrivateConfirmBody(removing.name, agentName) : S.skills.uninstallConfirmBody(removing.name, agentName)}
+        {removing === null
+          ? ""
+          : agentId === "default_agent"
+            ? S.skills.uninstallSharedConfirmBody(removing.name)
+            : removing.overridesShared
+              ? S.skills.uninstallPrivateConfirmBody(removing.name, agentName)
+              : S.skills.uninstallConfirmBody(removing.name, agentName)}
       </p>
     </ConfirmModal>
   );

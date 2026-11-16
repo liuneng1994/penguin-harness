@@ -28,6 +28,7 @@ import type {
   AgentSchedulesConfigDto,
   AgentSkillsConfigDto,
   AgentSkillsResponse,
+  SkillSyncResponse,
   AgentsResponse,
   AgentVaultConfigDto,
   AppCenterLayout,
@@ -2936,3 +2937,47 @@ router
 // ---------------------------------------------------------------------------------------------
 
 router.get("/api/terminals", () => ({ terminals: [] }));
+
+// Native login and external-editor operations need a host beyond the gallery's demo store.
+router
+  .post("/api/projects/:projectId/models/trae/sync", () => readOnly("use a TRAE CLI login"))
+  .get("/api/sessions/:sessionId/files/editor-target", () =>
+    readOnly("resolve an external editor target"),
+  )
+  .get("/api/projects/:projectId/workspace-files/editor-target", () =>
+    readOnly("resolve an external editor target"),
+  )
+  .post("/api/desktop/editor/open", () => readOnly("open a desktop editor"))
+  .patch("/api/projects/:projectId/agents/:agentId/skills/:name", (ctx): { enabled: boolean } => {
+    const skill = installedOf(ctx).skills.find((item) => item.name === ctx.params.name);
+    if (!skill) notFound("Skill");
+    const enabled = record(ctx.body).enabled;
+    if (typeof enabled !== "boolean") fail(400, "bad_request", "enabled must be a boolean.");
+    skill.enabled = enabled;
+    return { enabled };
+  })
+  .post("/api/projects/:projectId/agents/:agentId/skills/:name/local-copy", () =>
+    readOnly("copy a shared skill's files"),
+  )
+  .get("/api/projects/:projectId/skill-sync", ({ store }): SkillSyncResponse => {
+    const source = store.f.installed[IDS.agents.general]?.skills ?? [];
+    const targets = store.f.agents.filter((agent) => agent.agentId !== IDS.agents.general);
+    return {
+      sourceAgentId: IDS.agents.general,
+      targets: targets.length,
+      entries: targets.flatMap((agent) =>
+        source.map((skill) => {
+          const local = store.f.installed[agent.agentId]?.skills.some(
+            (item) => item.name === skill.name,
+          );
+          return {
+            agentId: agent.agentId,
+            name: skill.name,
+            status: local ? "conflict" : "pending",
+            ...(local ? { reason: "local_skill" as const } : {}),
+          };
+        }),
+      ),
+    };
+  })
+  .post("/api/projects/:projectId/skill-sync", () => readOnly("sync General's skill files"));

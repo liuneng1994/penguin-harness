@@ -398,36 +398,36 @@ export function MessageItem({
       // ReplyTrailer: a linked Workspace file's renderer below its paragraph (reply-files-provider.tsx).
       return (
         <ReplyTrailer>
-        <div
-          tabIndex={-1}
-          data-btw-reply={btw && ctx.origin.length === 0 && !item.streaming ? item.id : undefined}
-        >
-          {btw && ctx.origin.length === 0 && !item.streaming && item.text.trim() && (
-            <div className="btw-reply-actions">
-              <TextAction
-                onMouseDown={(event) => event.preventDefault()}
-                onClick={(event) =>
-                  btw.whole(item, event.currentTarget.closest<HTMLElement>("[data-btw-reply]")!)
-                }
-              >
-                {S.chat.btw.ask}
-              </TextAction>
+          <div
+            tabIndex={-1}
+            data-btw-reply={btw && ctx.origin.length === 0 && !item.streaming ? item.id : undefined}
+          >
+            {btw && ctx.origin.length === 0 && !item.streaming && item.text.trim() && (
+              <div className="btw-reply-actions">
+                <TextAction
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={(event) =>
+                    btw.whole(item, event.currentTarget.closest<HTMLElement>("[data-btw-reply]")!)
+                  }
+                >
+                  {S.chat.btw.ask}
+                </TextAction>
+              </div>
+            )}
+            <div data-btw-body>
+              <AssistantText text={item.text} streaming={item.streaming}>
+                {/* Nested models don't produce task_stats, so preserve their existing message-level file summaries. The root conversation renders one aggregated card from task_stats instead. */}
+                {ctx.origin.length > 0 && !item.streaming && ctx.onOpenFile && ctx.statFiles && (
+                  <MessageFilesCard
+                    text={item.text}
+                    workspace={ctx.workspace ?? null}
+                    statFiles={ctx.statFiles}
+                    onOpenFile={ctx.onOpenFile}
+                  />
+                )}
+              </AssistantText>
             </div>
-          )}
-          <div data-btw-body>
-            <AssistantText text={item.text} streaming={item.streaming}>
-              {/* Nested models don't produce task_stats, so preserve their existing message-level file summaries. The root conversation renders one aggregated card from task_stats instead. */}
-              {ctx.origin.length > 0 && !item.streaming && ctx.onOpenFile && ctx.statFiles && (
-                <MessageFilesCard
-                  text={item.text}
-                  workspace={ctx.workspace ?? null}
-                  statFiles={ctx.statFiles}
-                  onOpenFile={ctx.onOpenFile}
-                />
-              )}
-            </AssistantText>
           </div>
-        </div>
         </ReplyTrailer>
       );
     case "thinking":

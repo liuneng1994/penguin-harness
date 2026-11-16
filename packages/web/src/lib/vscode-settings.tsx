@@ -2,11 +2,11 @@
 import { useState } from "react";
 import { Modal, Input, Button, useFormDraft, useGuardedClose } from "@prismshadow/penguin-ui";
 import { isEditorSshAlias } from "@prismshadow/penguin-server/editor";
-import type { FilesScope } from "../../api/workspace-files";
+import type { FilesScope } from "../api/workspace-files";
 import { editorConnection, editorMachine, saveEditorSshAlias } from "./open-in-editor";
-import { apiErrorText } from "../../lib/api-error";
-import { S } from "../../lib/strings";
-import { useMachines } from "../../state/machines";
+import { apiErrorText } from "./api-error";
+import { S } from "./strings";
+import { useMachines } from "../state/machines";
 
 export function VSCodeSettings({
   scope,

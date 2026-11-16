@@ -127,7 +127,10 @@ awk '
   in_run && /^      - name:/ { exit }
   in_run { sub(/^          /, ""); print }
 ' "$ROOT_DIR/.github/workflows/release.yml" > "$STAMP_SCRIPT"
-sed -i 's/^TAG=.*/TAG="${TEST_RELEASE_TAG:?}"/' "$STAMP_SCRIPT"
+# Keep the release stamping expressions, with the backup flag accepted by GNU and BSD sed.
+sed -i.bak -e 's/^TAG=.*/TAG="${TEST_RELEASE_TAG:?}"/' \
+  -e 's/sed -i /sed -i.bak /g' "$STAMP_SCRIPT"
+rm "$STAMP_SCRIPT.bak"
 grep -q 'SH_HAS_MARKER' "$STAMP_SCRIPT" \
   || fail_test "release workflow stamping block could not be extracted"
 

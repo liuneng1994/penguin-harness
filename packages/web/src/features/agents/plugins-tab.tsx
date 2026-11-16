@@ -32,6 +32,7 @@ import type {
   AgentPluginsInstallResponse,
   IconRef,
   PluginItem,
+  SkillMetadataItem,
   WorkbenchInfo,
   WorkbenchesResponse,
 } from "@prismshadow/penguin-server/api";
@@ -97,6 +98,7 @@ interface Lists {
   installed: AgentPluginsInstallResponse;
   workbenches: WorkbenchesResponse;
   library: PluginItem[];
+  sharedSkills: SkillMetadataItem[];
 }
 
 /** What a plugin's status means, as a tone: settled well, unfinished, or receding. */
@@ -177,8 +179,16 @@ export function PluginsTab({
       applySkills(config.config);
       applyHooks(config.config);
       agentInstalls.accept(installsKey(projectId, machineId, agentId), installed);
+      const available = new Map(skills.skills.map((skill) => [skill.name, skill]));
       setLists({
-        installed: { ...installed, skills: skills.skills },
+        installed: {
+          ...installed,
+          skills: installed.skills.map((skill) => {
+            const current = available.get(skill.name);
+            return current?.sourceAgentId === undefined ? { ...skill, ...current } : skill;
+          }),
+        },
+        sharedSkills: skills.skills.filter((skill) => skill.sourceAgentId !== undefined),
         workbenches,
         library: library.groups.flatMap((group) => group.plugins),
       });
@@ -449,7 +459,9 @@ export function PluginsTab({
       <HelpFold label={S.agent.tabPlugins}>
         <p>{S.agentPlugins.tabDesc}</p>
         <p>{S.skills.agentTabDesc}</p>
-        <p>{agentId === "default_agent" ? S.skills.generalSharingInfo : S.skills.sharedSkillInfo}</p>
+        <p>
+          {agentId === "default_agent" ? S.skills.generalSharingInfo : S.skills.sharedSkillInfo}
+        </p>
         {!isOwner && <span className="mt-1.5 block">{S.agentPlugins.readOnlyHint}</span>}
       </HelpFold>
 
@@ -554,6 +566,15 @@ export function PluginsTab({
           <div className="space-y-2">{groups.map(groupSection)}</div>
         )}
       </section>
+
+      {lists !== null && lists.sharedSkills.length > 0 && (
+        <section className="space-y-2">
+          <h3 className="text-sm font-medium">{S.skills.sharedFromGeneral}</h3>
+          <SettingsList label={S.skills.sharedFromGeneral}>
+            {lists.sharedSkills.map(skillRows.row)}
+          </SettingsList>
+        </section>
+      )}
 
       {own !== null && hasParts(own) && (
         <section className="space-y-2">

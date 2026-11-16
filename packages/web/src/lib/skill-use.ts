@@ -83,9 +83,11 @@ export function skillSlashItems(
   skills: SkillMetadataItem[],
   locale: "zh" | "en",
 ): SkillSlashItem[] {
-  return skills.filter((s) => s.enabled !== false).map((s) => ({
-    name: s.name,
-    cmd: `/${s.name}`,
-    desc: localizedShortText(locale, s),
-  }));
+  return skills
+    .filter((s) => s.enabled !== false)
+    .map((s) => ({
+      name: s.name,
+      cmd: `/${s.name}`,
+      desc: localizedShortText(locale, s),
+    }));
 }

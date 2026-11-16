@@ -29,8 +29,6 @@ import {
   removeShortcut,
   shortcutDraftError,
   upsertShortcut,
-  type ShortcutDraft,
-  type UserShortcut,
 } from "./user-shortcuts";
 import type { ShortcutDraft, UserShortcut } from "./user-shortcuts";
 import { useShortcutsLibrary } from "./shortcuts-library";

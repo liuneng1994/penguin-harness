@@ -67,7 +67,12 @@ export const agentHookIconRoute = (projectId: string, agentId: string, name: str
  * installed and directory lists do, the library listing does not (see toPluginItem).
  */
 export function toSkillItem(
-  skill: SkillMetadata & { icon?: IconImage; enabled?: boolean; sourceAgentId?: string; overridesShared?: boolean },
+  skill: SkillMetadata & {
+    icon?: IconImage;
+    enabled?: boolean;
+    sourceAgentId?: string;
+    overridesShared?: boolean;
+  },
   iconRoute?: string,
 ): SkillMetadataItem {
   return {

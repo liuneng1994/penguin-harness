@@ -82,6 +82,7 @@ test("skill statistics and individual switches across themes", async ({ page }, 
   for (const themeId of ["github", "modern", "geek"]) {
     await setAccountPrefs(page.request, { lang: "en", themeId });
     await page.goto(`${BASE}/agents/skill_controls?tab=skills`);
+    await page.getByText("Humanizer", { exact: true }).click();
     const row = page
       .getByRole("listitem")
       .filter({ has: page.getByText("humanizer", { exact: true }) });
@@ -109,6 +110,7 @@ test("skill statistics and individual switches across themes", async ({ page }, 
     await page.getByRole("button", { name: "Skills", exact: true }).click();
     await expect(page.getByRole("button", { name: /^humanizer\b/ })).toHaveCount(0);
     await page.goto(`${BASE}/agents/skill_controls?tab=skills`);
+    await page.getByText("Humanizer", { exact: true }).click();
     await toggle.click();
     await expect(toggle).toHaveAttribute("aria-checked", "true");
   }

@@ -1,11 +1,11 @@
 /** Resolve files on their owning node, then launch VS Code on the reader's computer. */
 import { isEditorSshAlias, vscodeUri } from "@prismshadow/penguin-server/editor";
-import type { FileLocation } from "../../lib/file-location";
-import { filesApi } from "../../api/workspace-files";
-import type { FilesScope } from "../../api/workspace-files";
-import { machineForSession } from "../../lib/session-machines";
-import { openDesktopEditor } from "../../api/endpoints";
-import { ApiError } from "../../api/client";
+import type { FileLocation } from "./file-location";
+import { filesApi } from "../api/workspace-files";
+import type { FilesScope } from "../api/workspace-files";
+import { machineForSession } from "./session-machines";
+import { openDesktopEditor } from "../api/endpoints";
+import { ApiError } from "../api/client";
 import type { MachineInfo } from "@prismshadow/penguin-server/api";
 
 type EditorHost = Pick<MachineInfo, "id" | "machineId" | "alias" | "local">;

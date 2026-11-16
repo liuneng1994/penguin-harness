@@ -256,7 +256,9 @@ describe("skills api", () => {
     expect((await member.delete(`${url}/web-design`)).status).toBe(204);
     await expect(fs.access(path.dirname(skillFile("web-design")))).rejects.toThrow();
     const after = (await (await member.get(url)).json()) as AgentSkillsResponse;
-    expect(after.skills.map((s) => s.name)).toEqual(both.filter((name) => name !== "web-design"));
+    expect(
+      after.skills.filter((skill) => skill.sourceAgentId === undefined).map((s) => s.name),
+    ).toEqual(both.filter((name) => name !== "web-design"));
 
     // Deleting a Skill that isn't installed (or was already uninstalled) → 404.
     expect((await member.delete(`${url}/no-such-skill`)).status).toBe(404);
@@ -382,7 +384,9 @@ describe("skills api", () => {
     // The installed list is the same shape a library install produces (name-sorted):
     // every skill of both merged plugins.
     const listed = (await (await member.get(base("seeded_agent"))).json()) as AgentSkillsResponse;
-    expect(listed.skills.map((s) => s.name)).toEqual(seeded);
+    expect(
+      listed.skills.filter((skill) => skill.sourceAgentId === undefined).map((s) => s.name),
+    ).toEqual(seeded);
     // Installed through the same writer as the Skills tab: SKILL.md is the library file verbatim.
     const onDisk = await fs.readFile(
       path.join(skillsDir(t.root, projectId, "seeded_agent"), "penguin-sdk", "SKILL.md"),

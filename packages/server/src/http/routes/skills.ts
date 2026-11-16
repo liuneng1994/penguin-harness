@@ -324,7 +324,10 @@ export function agentSkillsRoutes(deps: SkillsRouteDeps): Hono<AppEnv> {
     const agentId = requireValidId(c, "agentId");
     deps.access.requireProjectAccess(c.var.user.userId, projectId);
     const name = requireValidId(c, "name");
-    const dir = await resolveSkillDirectory(agentStateDir(deps.config.root, projectId, agentId), name);
+    const dir = await resolveSkillDirectory(
+      agentStateDir(deps.config.root, projectId, agentId),
+      name,
+    );
     return iconResponse(await readInstalledIcon(dir));
   });
 

@@ -162,7 +162,9 @@ export class AgentDelegationClient {
                   throw new Error("Invalid remote approval request.");
                 const pending = Promise.resolve()
                   .then(() =>
-                    approve && !signal?.aborted ? approve(approval.toolCall) : ("deny" as const),
+                    approve && !signal?.aborted
+                      ? approve(approval.toolCall, approval.context)
+                      : ("deny" as const),
                   )
                   .catch(() => "deny" as const)
                   .then((decision) => call("approve", { approvalId: approval.id, decision }));

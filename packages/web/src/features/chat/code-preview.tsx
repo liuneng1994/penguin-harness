@@ -4,7 +4,7 @@ import type { FileLocation } from "../../lib/file-location";
 import type { WorkbenchTab } from "../../lib/workbench-tabs";
 import { S } from "../../lib/strings";
 import { useLocale } from "../../state/locale";
-import { WorkbenchFrame } from "../workbenches";
+import { WorkbenchFrame } from "../../lib/workbench-frame";
 
 export function CodePreview({
   projectId,

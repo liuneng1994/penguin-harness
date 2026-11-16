@@ -298,8 +298,6 @@ export function Dropdown({
   // phase — scroll events don't bubble.
   useEffect(() => {
     if (!open || !portal) return;
-    const owner = anchorOwnerRef.current?.() ?? null;
-    const ownerRect = owner?.getBoundingClientRect();
     const onScroll = (e: Event) => {
       if (panelRef.current?.contains(e.target as Node)) return;
       // A pointer-anchored panel has nothing left to follow once the content under the
@@ -308,17 +306,6 @@ export function Dropdown({
       if (anchorRect && !followAnchor) {
         const currentOwner = anchorOwnerRef.current?.() ?? null;
         if (scrollMovesAnchor(e.target as Node | null, currentOwner)) {
-          // Hidden overflow can emit a scroll while focus normalizes a border pixel. The
-          // anchored content has not meaningfully moved; keep that menu usable.
-          const currentRect = currentOwner?.getBoundingClientRect();
-          if (
-            currentOwner === owner &&
-            ownerRect &&
-            currentRect &&
-            Math.abs(currentRect.left - ownerRect.left) <= 1 &&
-            Math.abs(currentRect.top - ownerRect.top) <= 1
-          )
-            return;
           setOpenRef.current(false);
         }
         return;

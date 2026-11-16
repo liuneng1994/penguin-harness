@@ -3,10 +3,10 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router";
 import type { SkillSyncResponse } from "@prismshadow/penguin-server/api";
 import { Button, FieldError, PrefRow } from "@prismshadow/penguin-ui";
-import * as api from "../../api/endpoints";
-import { S } from "../../lib/strings";
-import { apiErrorText } from "../../lib/api-error";
-import { toastApiError } from "../../lib/toast-api-error";
+import * as api from "../../../api/endpoints";
+import { S } from "../../../lib/strings";
+import { apiErrorText } from "../../../lib/api-error";
+import { toastApiError } from "../../../lib/toast-api-error";
 
 export function ProjectSkillSync({
   projectId,

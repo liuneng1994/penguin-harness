@@ -136,7 +136,9 @@ export function renderMainChatBody(scope: MainChatView) {
                         <HistoryLoading
                           projectId={projectId}
                           sessionId={selected.sessionId}
-                          progress={stream.sessionId === selected.sessionId ? stream.transfer.window : null}
+                          progress={
+                            stream.sessionId === selected.sessionId ? stream.transfer.window : null
+                          }
                           onRetryNow={stream.retryNow}
                         />
                       ) : (
@@ -157,7 +159,7 @@ export function renderMainChatBody(scope: MainChatView) {
                               </div>
                             ) : (
                               <MessageStream
-                      sessionId={selected?.sessionId}
+                                sessionId={selected?.sessionId}
                                 items={allItems}
                                 version={stream.version}
                                 ctx={ctx}

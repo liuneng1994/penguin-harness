@@ -1,6 +1,7 @@
 /**
  * - An opted-in parent delegates data research through the target API into an empty temporary
  *   workspace; output and approvals reach the parent, and the target has no delegation tools.
+ * - A remote command-policy ask reason reaches the parent and prevents approval by mode alone.
  * - Denied tool calls do not write research files. Follow-ups and idle revival keep the same
  *   workspace and history without replaying output or restoring a second delegation level.
  * - A remote qualifier cannot hit the same-named local Agent. Default/off discovery sends no
@@ -176,14 +177,10 @@ it("runs remote data research in an empty temporary workspace with parent approv
   expect(await fs.readdir(workspace)).toEqual([]);
   expect(workspace.startsWith(app.root)).toBe(true);
   const approvals: AmspRecord[] = [];
-  const result = await drain(
-    handle,
-    "Collect a temporary data sample",
-    async (...args: AmspRecord[]) => {
-      approvals.push(args[0]!);
-      return "allow" as const;
-    },
-  );
+  const result = await drain(handle, "Collect a temporary data sample", async (record) => {
+    approvals.push(record);
+    return "allow" as const;
+  });
   expect(result.cutoff).toBeNull();
   expect(approvals).toHaveLength(1);
   expect(approvals[0]!.origin).toEqual([handle.sessionId]);
@@ -615,5 +612,33 @@ it("does not resurrect a remote child released while resume is pending", async (
     ).rejects.toThrow("released");
   } finally {
     host.close();
+  }
+});
+
+it("preserves a remote policy ask reason so the parent can refuse an otherwise allowed command", async () => {
+  await saveProjectConfig(app.root, P, {
+    ...config,
+    command_policy: {
+      rules: [{ name: "research-write", pattern: "writeFileSync", action: "ask" }],
+    },
+  });
+  let handle: SubagentHandle | undefined;
+  try {
+    script(true);
+    handle = await spawn();
+    const meta = handle.takeMeta!()!;
+    const workspace = (meta.payload as { workspace: string }).workspace;
+    const contexts: Array<Parameters<ApproveFn>[1]> = [];
+    await drain(handle, "Collect a temporary data sample", async (_record, context) => {
+      contexts.push(context);
+      return context?.reason ? "deny" : "allow";
+    });
+    expect(contexts).toEqual([{ reason: { kind: "policy", rule: "research-write" } }]);
+    await expect(fs.access(path.join(workspace, "research.txt"))).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+  } finally {
+    handle?.dispose();
+    await saveProjectConfig(app.root, P, config);
   }
 });

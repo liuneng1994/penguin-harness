@@ -9,7 +9,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { Md } from "@prismshadow/penguin-ui";
-import { WorkspaceLinksProvider } from "../src/features/chat/workspace-links";
+import { WorkspaceLinksProvider } from "../src/features/workspace/workspace-links";
 
 const render = (text: string, streaming = false) =>
   renderToStaticMarkup(

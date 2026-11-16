@@ -138,9 +138,9 @@ describe("uninstalling a plugin from an Agent", { timeout: 30_000 }, () => {
     return { base, agentId };
   };
   const skillNames = async (base: string) =>
-    ((await (await owner.get(`${base}/skills`)).json()) as AgentSkillsResponse).skills.map(
-      (s) => s.name,
-    );
+    ((await (await owner.get(`${base}/skills`)).json()) as AgentSkillsResponse).skills
+      .filter((skill) => skill.sourceAgentId === undefined)
+      .map((s) => s.name);
   const hookNames = async (base: string) =>
     ((await (await owner.get(`${base}/hooks`)).json()) as AgentHooksResponse).hooks.map(
       (h) => h.name,

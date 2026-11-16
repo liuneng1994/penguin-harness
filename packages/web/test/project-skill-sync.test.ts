@@ -9,7 +9,7 @@ import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it } from "vitest";
 import { Toaster } from "@prismshadow/penguin-ui";
 import type { SkillSyncResponse } from "@prismshadow/penguin-server/api";
-import { ProjectSkillSync } from "../src/features/skills/project-skill-sync";
+import { ProjectSkillSync } from "../src/features/projects/project-dialogs/project-skill-sync";
 import { setActiveStrings, zh } from "../src/lib/strings";
 import { en } from "../src/lib/strings-en";
 import { apiError, json, stubFetch } from "./helpers/fetch";

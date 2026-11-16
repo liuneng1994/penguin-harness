@@ -100,7 +100,11 @@ export function useMainChatActions(scope: ReturnType<typeof useMainChatControls>
   // (a Session can switch models between Tasks), else on the Session's own.
   const pricingOf = (ref: ModelRefDto | null) => turnPricing(models?.models, ref);
   const modelPricing = pricingOf(activeModelRef);
-  const { openEditorFile, codePreviewDialog } = useCodePreview(projectId, scope.pageAgentId, selected?.sessionId ?? null);
+  const { openEditorFile, codePreviewDialog } = useCodePreview(
+    projectId,
+    scope.pageAgentId,
+    selected?.sessionId ?? null,
+  );
   const ctx: StreamRenderContext = {
     pendingApprovals: stream.pendingApprovals,
     bodies: stream.bodies,

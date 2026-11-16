@@ -9,7 +9,7 @@ import { ProseLinksProvider, type ProseLinkResolver } from "@prismshadow/penguin
 import { replyLinkBehavior } from "../../lib/reply-link";
 import { fileLocation, fileLocationHref } from "../../lib/file-location";
 import type { FileLocation } from "../../lib/file-location";
-import { remarkFileLocations } from "./remark-file-locations";
+import { remarkFileLocations } from "../../lib/remark-file-locations";
 import { S } from "../../lib/strings";
 import type { ProseCodeResolver } from "@prismshadow/penguin-ui";
 import type { Options } from "react-markdown";

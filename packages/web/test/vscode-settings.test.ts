@@ -5,7 +5,7 @@
  */
 import { createElement } from "react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { VSCodeSettings } from "../src/features/chat/vscode-settings";
+import { VSCodeSettings } from "../src/lib/vscode-settings";
 import { S } from "../src/lib/strings";
 import { rememberSessionMachine, forgetSessionMachines } from "../src/lib/session-machines";
 import { button, click, field, mount, type, unmountAll } from "./helpers/dom";

@@ -5,19 +5,22 @@ import { useMachines } from "../../state/machines";
 import { isDesktopShellWindow } from "../../lib/account-menu";
 import type { FileLocation } from "../../lib/file-location";
 import { toastApiError } from "../../lib/toast-api-error";
-import { openFileInVSCode } from "./open-in-editor";
+import { openFileInVSCode } from "../../lib/open-in-editor";
 
 export function useFileEditor(sessionId: string | null) {
   const { user, desktopMode, sessionVia } = useAuth();
   const machines = useMachines().state?.machines;
   const machinesRef = useRef(machines);
   machinesRef.current = machines;
-  return useCallback((location: FileLocation) => {
-    if (!sessionId || !user) return;
-    void openFileInVSCode({ kind: "session", sessionId }, location, {
-      userId: user.userId,
-      desktop: isDesktopShellWindow({ desktopMode, sessionVia }),
-      machines: machinesRef.current,
-    }).catch(toastApiError);
-  }, [sessionId, user?.userId, desktopMode, sessionVia]);
+  return useCallback(
+    (location: FileLocation) => {
+      if (!sessionId || !user) return;
+      void openFileInVSCode({ kind: "session", sessionId }, location, {
+        userId: user.userId,
+        desktop: isDesktopShellWindow({ desktopMode, sessionVia }),
+        machines: machinesRef.current,
+      }).catch(toastApiError);
+    },
+    [sessionId, user?.userId, desktopMode, sessionVia],
+  );
 }
