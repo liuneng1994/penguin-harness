@@ -1,9 +1,8 @@
 /**
- * What the open conversation reads off its Agent: the installed Skills (the composer's skill
- * dropdown), and the configured thinking level and compaction threshold, re-read on focus.
+ * The open conversation's Agent thinking default and compaction threshold, read and
+ * written on the Session's machine and re-read on focus.
  */
 import { useCallback, useEffect, useState } from "react";
-import type { SkillMetadataItem } from "@prismshadow/penguin-server/api";
 import { toastError, toastSuccess } from "@prismshadow/penguin-ui";
 import * as api from "../../../api/endpoints";
 import { S } from "../../../lib/strings";
@@ -22,27 +21,6 @@ export function useAgentConfig(
   selectedAgentId: string | null,
   selectedAgentMachine: string | null,
 ) {
-  // Skills installed on the session's Agent (candidates for the input area's skill dropdown):
-  // fetched keyed on the session's Agent; on switch, cleared first (which also clears the input
-  // area's selection) before refetching; a failed fetch is silently treated as no skills.
-  // Clearing preserves reference identity (an already-empty array isn't replaced), matching
-  // draft-view's convention.
-  const [agentSkills, setAgentSkills] = useState<SkillMetadataItem[]>([]);
-  useEffect(() => {
-    setAgentSkills((prev) => (prev.length > 0 ? [] : prev));
-    if (!projectId || !selectedAgentId) return;
-    let cancelled = false;
-    api
-      .getAgentSkills(projectId, selectedAgentId, selectedAgentMachine)
-      .then((res) => {
-        if (!cancelled) setAgentSkills(res.skills);
-      })
-      .catch(() => undefined);
-    return () => {
-      cancelled = true;
-    };
-  }, [projectId, selectedAgentId]);
-
   // Two readouts come off the session Agent's config, via the same agent-config endpoint the
   // draft picker uses. The configured thinking level ("" = unset/loading) is what the in-session
   // picker DISPLAYS while the user hasn't picked a level (auto-follow — sending still omits the
@@ -114,5 +92,5 @@ export function useAgentConfig(
     },
     [projectId, selectedAgentId, selectedAgentMachine],
   );
-  return { agentSkills, agentThinkingLevel, compactionLimit, onChangeCompactionLimit };
+  return { agentThinkingLevel, compactionLimit, onChangeCompactionLimit };
 }
