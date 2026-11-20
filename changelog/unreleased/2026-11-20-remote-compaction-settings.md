@@ -3,6 +3,7 @@
 - **Date:** 2026-11-20
 - **Type:** fix
 - **Scope:** `web`
+- **PR:** [#15](https://github.com/liuneng1994/penguin-harness/pull/15)
 
 [中文版](2026-11-20-remote-compaction-settings.zh.md)
 
