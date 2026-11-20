@@ -4,14 +4,16 @@
  */
 import { useMemo, type ReactNode } from "react";
 
-import { ProseLinksProvider, type ProseLinkResolver } from "@prismshadow/penguin-ui";
+import {
+  ProseLinksProvider,
+  type ProseLinkResolver,
+  type ProseCodeResolver,
+} from "@prismshadow/penguin-ui";
 
 import { replyLinkBehavior } from "../../lib/reply-link";
-import { fileLocation, fileLocationHref } from "../../lib/file-location";
-import type { FileLocation } from "../../lib/file-location";
+import { fileLocation, fileLocationHref, type FileLocation } from "../../lib/file-location";
 import { remarkFileLocations } from "../../lib/remark-file-locations";
 import { S } from "../../lib/strings";
-import type { ProseCodeResolver } from "@prismshadow/penguin-ui";
 import type { Options } from "react-markdown";
 
 export function WorkspaceLinksProvider({

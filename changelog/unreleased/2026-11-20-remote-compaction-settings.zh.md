@@ -2,7 +2,7 @@
 
 - **Date:** 2026-11-20
 - **Type:** fix
-- **Scope:** `web`
+- **Scope:** `web`, `server`
 - **PR:** [#15](https://github.com/liuneng1994/penguin-harness/pull/15)
 
 [English](2026-11-20-remote-compaction-settings.md)
@@ -14,3 +14,5 @@
 - 移除了主聊天页中重复且固定指向本机的配置处理。
 - 保留了原有确认弹窗和保存被拒绝时的错误处理。
 - 移除了未使用的 setter 和配置 hook 中重复的 Skill 读取。
+- 使用 PUT 返回的已保存配置，并按当前 Agent 保存页面状态。较早的读取响应和已离开会话的保存响应不再覆盖当前设置。
+- 合并了阻塞 CI lint 的重复导入。
