@@ -4,6 +4,7 @@
  * - Given the desktop window, open only a structured VS Code target; browser sessions and malformed input never launch anything.
  * - Given platform paths and SSH aliases, encode filenames and preserve the requested line and column.
  * - Given abbreviated filenames, locate a unique source file and refuse ambiguous references.
+ * - Given literal glob punctuation in source filenames, Git lookup finds only the requested file.
  */
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -64,26 +65,33 @@ describe("Workspace editor targets", () => {
       column: 7,
     });
   });
-  it("resolves exact source filenames through Git despite ignored build copies", async () => {
-    const repo = path.join(workspace, "git-editor");
-    await fs.mkdir(path.join(repo, "src"), { recursive: true });
-    await fs.mkdir(path.join(repo, "build"), { recursive: true });
-    await fs.writeFile(path.join(repo, ".gitignore"), "build/\n");
-    const name = "Expr[1] #%.cpp";
-    await fs.writeFile(path.join(repo, "src", name), "Source");
-    await fs.writeFile(path.join(repo, "build", name), "Generated copy");
-    execFileSync("git", ["init", "--quiet", repo]);
-    execFileSync("git", ["-C", repo, "add", "src", ".gitignore"]);
-    const params = new URLSearchParams({ workspace: repo, path: name, line: "1047" });
-    const response = await owner.get(
-      `/api/projects/editor_owner-p/workspace-files/editor-target?${params}`,
-    );
-    expect(response.status).toBe(200);
-    expect(await response.json()).toMatchObject({
-      path: await fs.realpath(path.join(repo, "src", name)),
-      line: 1047,
-    });
-  });
+  it.each(
+    process.platform === "win32"
+      ? ["Expr[1] #%.cpp", "Expr].cpp"]
+      : ["Expr[1] #%.cpp", "Expr].cpp", "Expr?.cpp", "Expr*.cpp"],
+  )(
+    "resolves literal source filename %s through Git despite ignored build copies",
+    async (name) => {
+      const repo = path.join(workspace, "git-editor");
+      await fs.mkdir(path.join(repo, "src"), { recursive: true });
+      await fs.mkdir(path.join(repo, "build"), { recursive: true });
+      await fs.writeFile(path.join(repo, ".gitignore"), "build/\n");
+      await fs.writeFile(path.join(repo, "src", name), "Source");
+      await fs.writeFile(path.join(repo, "src", "Expr1 #%.cpp"), "Neighbor");
+      await fs.writeFile(path.join(repo, "build", name), "Generated copy");
+      execFileSync("git", ["init", "--quiet", repo]);
+      execFileSync("git", ["-C", repo, "add", "src", ".gitignore"]);
+      const params = new URLSearchParams({ workspace: repo, path: name, line: "1047" });
+      const response = await owner.get(
+        `/api/projects/editor_owner-p/workspace-files/editor-target?${params}`,
+      );
+      expect(response.status).toBe(200);
+      expect(await response.json()).toMatchObject({
+        path: await fs.realpath(path.join(repo, "src", name)),
+        line: 1047,
+      });
+    },
+  );
   it("refuses ambiguous filenames instead of choosing a different source file", async () => {
     const repo = path.join(workspace, "ambiguous-editor");
     await fs.mkdir(path.join(repo, "src"), { recursive: true });

@@ -108,17 +108,21 @@ describe("current-file Git previews", () => {
       "+initial source",
     );
   });
-  it("uses literal pathspecs inside nested workspaces without matching neighboring files", async () => {
-    await fs.mkdir(path.join(root, "sub "));
-    await fs.writeFile(path.join(root, "sub ", "[x].cpp"), "old\n");
-    await fs.writeFile(path.join(root, "sub ", "x.cpp"), "other\n");
-    await commit();
-    await fs.writeFile(path.join(root, "sub ", "[x].cpp"), "new\n");
-    await fs.writeFile(path.join(root, "sub ", "x.cpp"), "neighbor-secret\n");
-    const result = await readWorkspaceGit(files, path.join(root, "sub "), "[x].cpp", "working");
-    expect(result.patch).toContain("+new");
-    expect(result.patch).not.toContain("neighbor-secret");
-  });
+  // A trailing-space directory is a POSIX case; Windows Git cannot index it.
+  it.each(process.platform === "win32" ? ["sub dir"] : ["sub dir", "sub "])(
+    "uses literal pathspecs inside nested workspace %j without matching neighboring files",
+    async (folder) => {
+      await fs.mkdir(path.join(root, folder));
+      await fs.writeFile(path.join(root, folder, "[x].cpp"), "old\n");
+      await fs.writeFile(path.join(root, folder, "x.cpp"), "other\n");
+      await commit();
+      await fs.writeFile(path.join(root, folder, "[x].cpp"), "new\n");
+      await fs.writeFile(path.join(root, folder, "x.cpp"), "neighbor-secret\n");
+      const result = await readWorkspaceGit(files, path.join(root, folder), "[x].cpp", "working");
+      expect(result.patch).toContain("+new");
+      expect(result.patch).not.toContain("neighbor-secret");
+    },
+  );
   it("reports non-Git directories and binary files instead of drawing text hunks", async () => {
     const other = await makeTempRoot();
     try {

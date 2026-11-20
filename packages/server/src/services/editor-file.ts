@@ -25,9 +25,9 @@ export async function resolveEditorFile(
 
   const base = await files.resolvePath(workspace, "");
   let candidates: string[];
-  const literal = Array.from(rel, (char) => ("*?[]\\".includes(char) ? `\\${char}` : char)).join(
-    "",
-  );
+  // Git for Windows treats backslashes as separators. Character classes escape glob
+  // punctuation without introducing a separator into the filename pathspec.
+  const literal = rel.replace(/[*?\[\]]/g, (char) => `[${char}]`);
   try {
     // Git's index omits ignored build trees without walking their generated files.
     const { stdout } = await run(
