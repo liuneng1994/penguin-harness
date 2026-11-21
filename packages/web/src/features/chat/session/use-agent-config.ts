@@ -1,6 +1,10 @@
 /** The conversation's Agent defaults, read and saved on the machine that holds it. */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { AgentConfigDto, AgentModelConfigDto } from "@prismshadow/penguin-server/api";
+import type {
+  AgentConfigDto,
+  AgentConfigUpdateRequest,
+  AgentModelConfigDto,
+} from "@prismshadow/penguin-server/api";
 import { toastError, toastSuccess } from "@prismshadow/penguin-ui";
 import * as api from "../../../api/endpoints";
 import { S } from "../../../lib/strings";
@@ -21,8 +25,8 @@ export function useAgentConfig(
   const owner = useMemo(() => ({ scope }), [scope]);
   const activeOwner = useRef<typeof owner | null>(owner);
   const readVersion = useRef(0);
-  const thinkingWrites = useRef(new Set<typeof owner>());
-  const [thinkingPending, setThinkingPending] = useState(new Set<typeof owner>());
+  const thinkingWrites = useRef(new Set<string>());
+  const [thinkingPending, setThinkingPending] = useState(new Set<string>());
   useEffect(() => {
     activeOwner.current = owner;
     return () => {
@@ -52,62 +56,60 @@ export function useAgentConfig(
     };
   }, [projectId, agentId, machineId, scope, refresh]);
 
-  const onChangeCompactionLimit = useCallback(
-    async (maxContextLength: number): Promise<void> => {
-      if (!projectId || !agentId || scope === null) return;
+  const saveConfig = useCallback(
+    async (patch: AgentConfigUpdateRequest["config"]): Promise<boolean> => {
+      if (!projectId || !agentId || scope === null) return false;
       const res = await api
-        .putAgentConfig(
-          projectId,
-          agentId,
-          { config: { compaction: { maxContextLength } } },
-          machineId,
-        )
+        .putAgentConfig(projectId, agentId, { config: patch }, machineId)
         .catch((e) => {
           toastError(apiErrorText(e));
           throw e;
         });
-      if (activeOwner.current !== owner) return;
+      if (activeOwner.current !== owner) {
+        // A reopened view reads the final config; the old response may precede newer edits.
+        if (activeOwner.current?.scope === scope) setRefresh((n) => n + 1);
+        return false;
+      }
       // PUT returns the stored config. Retire reads that started before this save completed.
       readVersion.current += 1;
       setStored(scoped(scope, res.config));
-      toastSuccess(S.chat.contextThresholdSaved(humanizeTokens(maxContextLength)));
+      return true;
     },
     [projectId, agentId, machineId, scope, owner],
   );
 
+  const onChangeCompactionLimit = useCallback(
+    async (maxContextLength: number): Promise<void> => {
+      if (await saveConfig({ compaction: { maxContextLength } })) {
+        toastSuccess(S.chat.contextThresholdSaved(humanizeTokens(maxContextLength)));
+      }
+    },
+    [saveConfig],
+  );
+
   const onChangeThinkingLevel = useCallback(
     async (level: string): Promise<boolean> => {
-      if (!projectId || !agentId || scope === null || !level || thinkingWrites.current.has(owner))
-        return false;
-      thinkingWrites.current.add(owner);
+      if (scope === null || !level || thinkingWrites.current.has(scope)) return false;
+      thinkingWrites.current.add(scope);
       setThinkingPending(new Set(thinkingWrites.current));
       try {
-        const res = await api.putAgentConfig(
-          projectId,
-          agentId,
-          { config: { model: { thinkingLevel: level as AgentModelConfigDto["thinkingLevel"] } } },
-          machineId,
-        );
-        if (activeOwner.current === owner) {
-          readVersion.current += 1;
-          setStored(scoped(scope, res.config));
-        }
-        return true;
-      } catch (e) {
-        toastError(apiErrorText(e));
+        return await saveConfig({
+          model: { thinkingLevel: level as AgentModelConfigDto["thinkingLevel"] },
+        });
+      } catch {
         return false;
       } finally {
-        thinkingWrites.current.delete(owner);
+        thinkingWrites.current.delete(scope);
         setThinkingPending(new Set(thinkingWrites.current));
       }
     },
-    [projectId, agentId, machineId, scope, owner],
+    [scope, saveConfig],
   );
 
   return {
     agentConfigLoaded: config !== null,
     agentThinkingLevel: config?.model?.thinkingLevel ?? "",
-    thinkingSaving: thinkingPending.has(owner),
+    thinkingSaving: scope !== null && thinkingPending.has(scope),
     onChangeThinkingLevel,
     compactionLimit:
       config === null ? undefined : configuredCompactionLimit(config.compaction?.maxContextLength),

@@ -7,6 +7,10 @@
  * - Given a completed compaction, success is reported only after the thinking save succeeds.
  * - Given a refused save after compaction, no switch success is reported.
  * - Given a save finishing after navigation, the new conversation keeps its own level.
+ * - Given a settled compaction from the previous conversation during navigation, its
+ *   pending thinking switch never writes to the new conversation.
+ * - Given a compacted switch saving during navigation, its delayed success does not
+ *   appear in the next conversation.
  */
 import { createElement as h, useCallback, useState } from "react";
 import { afterEach, expect, it } from "vitest";
@@ -61,7 +65,19 @@ function server() {
   };
 }
 
-function Probe({ id, history, compacted }: { id: string; history: boolean; compacted: boolean }) {
+function Probe({
+  id,
+  history,
+  compacted,
+  waiting = false,
+  streamId = id,
+}: {
+  id: string;
+  history: boolean;
+  compacted: boolean;
+  waiting?: boolean;
+  streamId?: string;
+}) {
   const [sessions, setSessions] = useState<SessionInfo[]>([]);
   const [fetched, setFetchedSession] = useState<SessionInfo | null>(row(id));
   const [thinkingSwitch, setThinkingSwitch] = useState<StagedThinkingSwitch | null>(
@@ -88,6 +104,8 @@ function Probe({ id, history, compacted }: { id: string; history: boolean; compa
       });
     return model;
   });
+  const compaction = model.items.find((item) => item.kind === "compaction");
+  if (compaction?.kind === "compaction") compaction.running = waiting;
   const scope = useMainChatControls(
     useMainChatComposer({
       selected,
@@ -96,7 +114,13 @@ function Probe({ id, history, compacted }: { id: string; history: boolean; compa
       setFetchedSession,
       thinkingSwitch,
       setThinkingSwitch,
-      stream: { model, taskState: "idle", version: 1, loading: false },
+      stream: {
+        sessionId: streamId,
+        model,
+        taskState: "idle",
+        version: waiting ? 1 : 2,
+        loading: false,
+      },
       turnThinkingLevel: selected.thinkingLevel,
       agentThinkingLevel: "medium",
       models: null,
@@ -129,13 +153,14 @@ function Probe({ id, history, compacted }: { id: string; history: boolean; compa
   );
 }
 
-async function visit(id = "s", history = false, compacted = false) {
-  const element = (next: string) =>
-    h(LocaleProvider, null, h(Probe, { id: next, history, compacted }));
+async function visit(id = "s", history = false, compacted = false, waiting = false) {
+  const element = (next: string, pending = waiting, streamId = next) =>
+    h(LocaleProvider, null, h(Probe, { id: next, history, compacted, waiting: pending, streamId }));
   const page = await mount(element(id));
   return {
     text: () => page.container.querySelector("output")?.textContent,
     move: (next: string) => page.rerender(element(next)),
+    settlePrevious: (next: string) => page.rerender(element(next, false, id)),
     pick: async () => {
       await click(button(S.chat.thinkingLevel));
       await click(button(S.chat.thinkingLevelMenuName(S.chat.thinkingLevelNames.max!, "max")));
@@ -212,4 +237,22 @@ it("does not move another conversation's level when a late save answers", async 
   await run(() => toastStore.setState({ items: [] }));
   await backend.answer();
   expect(page.text()).toBe("medium");
+});
+
+it("never applies the previous conversation's compacted thinking switch to a new conversation", async () => {
+  const backend = server();
+  const page = await visit("s", true, true, true);
+  expect(backend.requests).toHaveLength(0);
+  await page.settlePrevious("other");
+  expect(backend.requests).toHaveLength(0);
+  expect(page.text()).toBe("medium");
+});
+
+it("does not report a previous conversation's delayed switch success in the next conversation", async () => {
+  const backend = server();
+  backend.delay();
+  const page = await visit("s", true, true);
+  await page.move("other");
+  await backend.answer();
+  expect(toastStore.getState().items.filter((t) => t.kind === "success")).toHaveLength(0);
 });

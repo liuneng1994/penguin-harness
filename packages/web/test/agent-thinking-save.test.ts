@@ -3,6 +3,8 @@
  * - Given a save in flight, a repeated pick cannot write twice.
  * - Given an older config read, its late response cannot replace a saved thinking level.
  * - Given a pending save on another machine, its success or failure cannot alter the current Agent.
+ * - Given a pending save after leaving and reopening the same Agent, the save stays locked
+ *   through completion and its final configuration is reread.
  * - Given an unresolved Agent, a pick writes nothing.
  */
 import { createElement as h } from "react";
@@ -111,4 +113,18 @@ it("does not write a thinking default before an Agent is resolved", async () => 
   await click(button("Pick max"));
   expect(backend.requests).toHaveLength(0);
   expect(page.text()).toBe("|false");
+});
+
+it("keeps a reopened Agent locked until its pending save finishes and rereads the final level", async () => {
+  const backend = world();
+  const page = await visit();
+  backend.delay("PUT");
+  await click(button("Pick max"));
+  await page.move(MACHINE);
+  await page.move(null);
+  expect(page.text()).toBe("medium|true");
+  await click(button("Pick max"));
+  expect(backend.requests.filter((r) => r.method === "PUT")).toHaveLength(1);
+  await backend.answer();
+  expect(page.text()).toBe("max|false");
 });

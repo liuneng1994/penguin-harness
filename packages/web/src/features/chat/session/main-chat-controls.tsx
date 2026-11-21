@@ -1,4 +1,4 @@
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import type { ModelRefDto } from "@prismshadow/penguin-server/api";
 import { toastError, toastInfo, toastSuccess } from "@prismshadow/penguin-ui";
 import * as api from "../../../api/endpoints";
@@ -43,6 +43,13 @@ export function useMainChatControls(scope: ReturnType<typeof useMainChatComposer
   // The Sandbox card was saved: the open Session's view (switch, presets) is read again, so the
   // permission menu shows what the card now says.
   const selectedId = selected?.sessionId;
+  const noticeSession = useRef(selectedId);
+  useEffect(() => {
+    noticeSession.current = selectedId;
+    return () => {
+      noticeSession.current = undefined;
+    };
+  }, [selectedId]);
   useEffect(() => {
     if (selectedId === undefined) return;
     return onPluginConfigSaved("sandbox", () => {
@@ -151,7 +158,8 @@ export function useMainChatControls(scope: ReturnType<typeof useMainChatComposer
   // user asked for. Runs on every stream version bump because the model's items are mutated
   // in place.
   useEffect(() => {
-    if (thinkingSwitch === null) return;
+    // Route changes precede the stream's reset and the staged pick's effect-driven reset.
+    if (thinkingSwitch === null || stream.sessionId !== selectedId || stream.loading) return;
     const next = heldThinkingSwitch(thinkingSwitch, stream.model.items);
     if (next.act === "wait") return;
     setThinkingSwitch(null);
@@ -159,7 +167,7 @@ export function useMainChatControls(scope: ReturnType<typeof useMainChatComposer
       toastError(S.chat.thinkingSwitchCompactFailed);
     }
     void applyTurnThinkingLevel(next.level).then((saved) => {
-      if (saved && next.notice === "compacted") {
+      if (saved && next.notice === "compacted" && noticeSession.current === selectedId) {
         toastSuccess(
           S.chat.thinkingSwitchApplied(
             thinkingLevelLabel(S.chat.thinkingLevelNames, next.level) ?? next.level,
@@ -170,7 +178,15 @@ export function useMainChatControls(scope: ReturnType<typeof useMainChatComposer
     // notice "none": the compaction never started and runCompaction already said why.
     // The items are read from the model per run; `version` is the change signal.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stream.version, stream.model, thinkingSwitch, applyTurnThinkingLevel]);
+  }, [
+    stream.version,
+    stream.model,
+    stream.sessionId,
+    stream.loading,
+    selectedId,
+    thinkingSwitch,
+    applyTurnThinkingLevel,
+  ]);
 
   /** A model's display label for the switch dialog and its toasts: the configured name, else the id. */
   const modelDisplay = useCallback(
