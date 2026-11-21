@@ -29,7 +29,7 @@ export interface StreamContextDeps {
   deletedMemoryKeys: ReadonlySet<string> | undefined;
   statFiles: NonNullable<StreamRenderContext["statFiles"]>;
   onFork: NonNullable<StreamRenderContext["onFork"]>;
-  /** What a reply's interactive blocks do (see useSessionControls). */
+  /** What a reply's interactive blocks do (see useMainChatComposer). */
   a2uiActions: NonNullable<StreamRenderContext["a2uiActions"]>;
 }
 

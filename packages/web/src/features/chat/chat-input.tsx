@@ -597,6 +597,7 @@ export function ChatInput({
   onChangeThinkingLevel,
   turnThinkingLevel,
   onChangeTurnThinkingLevel,
+  thinkingSaving = false,
   contextWindow,
   compactionLimit,
   onChangeCompactionLimit,
@@ -766,6 +767,8 @@ export function ChatInput({
   turnThinkingLevel?: string;
   /** Session state: pins the thinking level on this session (effective from its next LLM request); also enables the editable picker. */
   onChangeTurnThinkingLevel?: (level: string) => void;
+  /** Waits for a thinking-level write before another pick or message can start. */
+  thinkingSaving?: boolean;
   /** Model's context window (from models config; when not configured, the ring's cap falls back to 128000 via resolveContextWindow). */
   contextWindow?: number;
   /**
@@ -997,6 +1000,7 @@ export function ChatInput({
     !running &&
     !compacting &&
     !busy &&
+    !thinkingSaving &&
     (goalOn
       ? text.trim().length > 0 &&
         attachments.length === 0 &&
@@ -1100,7 +1104,7 @@ export function ChatInput({
   // meaningful while running: an idle Session is always Send (gated by canSend above) and a
   // compacting one is always Stop (see isStopAction).
   const midRun = midRunAction({
-    sending: busy,
+    sending: busy || thinkingSaving,
     goalOn,
     canSteerChannel: onSteer !== undefined,
     canQueueChannel: onQueueFollowUp !== undefined,
@@ -2645,7 +2649,7 @@ export function ChatInput({
               <ThinkingLevelSelect
                 value={thinkingLevel ?? null}
                 onChange={onChangeThinkingLevel}
-                disabled={busy}
+                disabled={busy || thinkingSaving}
               />
             )}
             {/* Session state: the Session's pinned thinking level (editable) — displays the
@@ -2658,7 +2662,7 @@ export function ChatInput({
               <ThinkingLevelSelect
                 value={turnThinkingLevel ?? ""}
                 onChange={onChangeTurnThinkingLevel}
-                disabled={busy}
+                disabled={busy || thinkingSaving}
                 direction="up"
               />
             )}

@@ -18,7 +18,8 @@ export function renderMainChatDialogs(scope: MainChatView) {
     selected,
     stream,
     onKillProcess,
-    applyTurnThinkingLevel,
+    thinkingSaving,
+    confirmThinkingSwitch,
     compactThenThinkingSwitch,
     modelDisplay,
     confirmModelSwitch,
@@ -73,13 +74,13 @@ export function renderMainChatDialogs(scope: MainChatView) {
         confirmLabel={S.chat.thinkingSwitchCompactFirst}
         cancelLabel={S.common.cancel}
         confirmDisabled={stream.taskState !== "idle"}
+        busy={thinkingSaving}
         onConfirm={compactThenThinkingSwitch}
         secondaryLabel={S.chat.thinkingSwitchConfirm}
-        onSecondary={() => {
-          if (thinkingSwitch !== null) applyTurnThinkingLevel(thinkingSwitch.level);
-          setThinkingSwitch(null);
+        onSecondary={() => void confirmThinkingSwitch()}
+        onClose={() => {
+          if (!thinkingSaving) setThinkingSwitch(null);
         }}
-        onClose={() => setThinkingSwitch(null)}
       >
         <p className="text-sm text-gray-600 dark:text-gray-300">
           {S.chat.thinkingSwitchBody(

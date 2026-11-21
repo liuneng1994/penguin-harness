@@ -17,6 +17,9 @@
  * - Given a second click while the first send is still in flight, one Session is created.
  * - Given the task answering with a self-healed id, the row and the route carry the new id, and
  *   the new id is still addressed to the machine the Session is on.
+ * - Given a thinking-level save still pending on either server, Send and the picker wait;
+ *   the server's stored level is displayed when the write answers.
+ * - Given a refused thinking-level save, the old level and typed prompt remain available.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act } from "react";
@@ -26,6 +29,7 @@ import { LISTING_CHANGE_DELAY_MS } from "../src/state/sessions";
 import { S } from "../src/lib/strings";
 import { draftKey, loadDraft, saveDraft } from "../src/features/chat/draft-cache";
 import { ADMIN_ME } from "./helpers/admin-settings";
+import { apiError, json } from "./helpers/fetch";
 import { whereIs } from "./helpers/agent-app";
 import { button, click, hasButton, settle, type, unmountAll, waitFor } from "./helpers/dom";
 import {
@@ -75,6 +79,53 @@ async function draftReady(text: string, onMachine = false) {
 }
 
 describe("a new conversation's first send", () => {
+  it.each([false, true])(
+    "waits for the thinking default to save before sending (remote %s)",
+    async (remote) => {
+      const world = draftWorld();
+      await draftReady("Read this code", remote);
+      await waitFor(() => !button(S.chat.thinkingLevel).disabled);
+      const original = button(S.chat.thinkingLevel).textContent;
+      let answer: (() => void) | undefined;
+      world.fetch.answer(async (request) => {
+        if (request.method === "PUT") {
+          await new Promise<void>((resolve) => (answer = resolve));
+        }
+        return json({ config: { model: { thinkingLevel: "high" } } });
+      });
+      await click(button(S.chat.thinkingLevel));
+      await click(button(S.chat.thinkingLevelMenuName(S.chat.thinkingLevelNames.max!, "max")));
+      expect(button(S.chat.thinkingLevel).disabled).toBe(true);
+      expect(button(S.chat.thinkingLevel).textContent).toBe(original);
+      expect(send().disabled).toBe(true);
+      await click(send());
+      expect(world.creates()).toHaveLength(0);
+      expect(
+        world.fetch.requests.filter((r) => r.method === "PUT").map((r) => [r.machine, r.body]),
+      ).toEqual([[remote ? MACHINE : null, { config: { model: { thinkingLevel: "max" } } }]]);
+      await act(async () => answer?.());
+      await settle();
+      expect(button(S.chat.thinkingLevel).disabled).toBe(false);
+      expect(button(S.chat.thinkingLevel).textContent).toContain(S.chat.thinkingLevelNames.high);
+      expect(send().disabled).toBe(false);
+    },
+  );
+
+  it("keeps the prior thinking default and prompt when a save is refused", async () => {
+    const world = draftWorld();
+    await draftReady("Read this code");
+    await waitFor(() => !button(S.chat.thinkingLevel).disabled);
+    const original = button(S.chat.thinkingLevel).textContent;
+    world.fetch.answer(() => apiError(403, "forbidden"));
+    await click(button(S.chat.thinkingLevel));
+    await click(button(S.chat.thinkingLevelMenuName(S.chat.thinkingLevelNames.max!, "max")));
+    expect(button(S.chat.thinkingLevel).textContent).toBe(original);
+    expect(composer().value).toBe("Read this code");
+    expect(send().disabled).toBe(false);
+    expect(errorToasts()).toHaveLength(1);
+    expect(world.creates()).toHaveLength(0);
+  });
+
   it("creates the Session on the Workspace's machine, starts it there, lists it and opens it", async () => {
     const world = draftWorld();
     const router = await draftReady("Look at the build", true);

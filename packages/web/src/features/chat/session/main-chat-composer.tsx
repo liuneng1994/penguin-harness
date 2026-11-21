@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import type { SessionInfo, SessionPatchRequest } from "@prismshadow/penguin-server/api";
 import { toastError } from "@prismshadow/penguin-ui";
 import * as api from "../../../api/endpoints";
@@ -77,7 +77,7 @@ export function useMainChatComposer(scope: ReturnType<typeof useMainChatSends>) 
         cur !== null && cur.sessionId === session.sessionId ? session : cur,
       );
     },
-    [replace],
+    [replace, setFetchedSession],
   );
 
   // Pins a picked level on the Session so it outlives this tab: PATCH, then swap the
@@ -85,19 +85,30 @@ export function useMainChatComposer(scope: ReturnType<typeof useMainChatSends>) 
   // from the next LLM request (a pick mid-chat reaches here through the confirm dialog, which
   // offers to compact first). Modeled on onChangePermission — a failed write surfaces as a
   // toast and leaves the level as it was, rather than showing a level the server does not have.
+  const thinkingWrites = useRef(new Set<string>());
+  const [thinkingPending, setThinkingPending] = useState(new Set<string>());
+  const thinkingSaving = selected !== null && thinkingPending.has(selected.sessionId);
   const applyTurnThinkingLevel = useCallback(
-    (level: string) => {
-      if (!selected) return;
-      void api
-        .patchSession(selected.sessionId, {
+    async (level: string): Promise<boolean> => {
+      if (!selected || thinkingWrites.current.has(selected.sessionId)) return false;
+      const id = selected.sessionId;
+      thinkingWrites.current.add(id);
+      setThinkingPending(new Set(thinkingWrites.current));
+      try {
+        const res = await api.patchSession(id, {
           thinkingLevel: level as SessionPatchRequest["thinkingLevel"],
-        })
-        .then((res) => replace(res.session))
-        .catch((e: unknown) => {
-          toastError(apiErrorText(e));
         });
+        applySessionRow(res.session);
+        return true;
+      } catch (e) {
+        toastError(apiErrorText(e));
+        return false;
+      } finally {
+        thinkingWrites.current.delete(id);
+        setThinkingPending(new Set(thinkingWrites.current));
+      }
     },
-    [selected, replace],
+    [selected, applySessionRow],
   );
 
   // Recall a queued message back into the composer (#287): the DELETE returns the original
@@ -197,6 +208,7 @@ export function useMainChatComposer(scope: ReturnType<typeof useMainChatSends>) 
     addComposerReference,
     applySessionRow,
     applyTurnThinkingLevel,
+    thinkingSaving,
     onRecallSteering,
     onRecallFollowUp,
     onApprove,

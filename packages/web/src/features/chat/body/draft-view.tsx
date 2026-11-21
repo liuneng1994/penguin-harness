@@ -42,7 +42,6 @@ import { browserState, adoptBrowserSession } from "../../builtin-browser";
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { useLocation, useNavigate } from "react-router";
 import type {
-  AgentModelConfigDto,
   AgentSummary,
   ApprovalMode,
   ChatDefaultsDto,
@@ -91,6 +90,7 @@ import { newChatAgentId } from "../new-chat";
 import { onPluginConfigSaved } from "../../../lib/plugin-config-event";
 import { effectiveThinkingLevel } from "../../model-picker";
 import { useAgentSkills } from "../use-agent-skills";
+import { useAgentConfig } from "../session/use-agent-config";
 import { WorkspaceSelect } from "../../workspace";
 import { FilesPanelToggle } from "../dock-toggles";
 import { sameModelRef } from "../../models";
@@ -490,7 +490,6 @@ export function DraftView({
   // never written from here. Refetched whenever the draft's Agent changes; while loading
   // (or after a failed fetch) the picker stays disabled (null). The Agent is the one on the
   // workspace's machine, so its settings are read and written over there.
-  const [agentThinkingLevel, setAgentThinkingLevel] = useState<string | null>(null);
   /**
    * The draft's Agent once the list on offer carries it. Nothing is asked about an id the cache
    * or the route named until then: a cached id may be one this Project does not have (deleted
@@ -499,49 +498,12 @@ export function DraftView({
    */
   const selectedAgent = agents.find((a) => a.agentId === agentId) ?? null;
   const resolvedAgentId = selectedAgent?.agentId ?? null;
-  useEffect(() => {
-    setAgentThinkingLevel(null);
-    if (!resolvedAgentId) return;
-    let cancelled = false;
-    api
-      .getAgentConfig(projectId, resolvedAgentId, workspaceMachine)
-      .then((res) => {
-        if (!cancelled) setAgentThinkingLevel(res.config.model?.thinkingLevel ?? "");
-      })
-      .catch(() => undefined);
-    return () => {
-      cancelled = true;
-    };
-  }, [projectId, resolvedAgentId, workspaceMachine]);
+  const { agentConfigLoaded, agentThinkingLevel, thinkingSaving, onChangeThinkingLevel } =
+    useAgentConfig(projectId, resolvedAgentId, workspaceMachine);
   const thinkingLevel =
-    agentThinkingLevel === null || chatDefaults === null
+    !agentConfigLoaded || chatDefaults === null
       ? null
       : effectiveThinkingLevel(agentThinkingLevel, chatDefaults.thinkingLevel);
-  /** Live mirror for the rollback value (a stale closure would roll back to an outdated level). */
-  const thinkingRef = useRef<string | null>(null);
-  thinkingRef.current = agentThinkingLevel;
-  const onChangeThinkingLevel = useCallback(
-    (level: string) => {
-      // "" (no override) is not persistable through the config API — the picker disables that row.
-      if (!agentId || !level) return;
-      const rollback = thinkingRef.current;
-      setAgentThinkingLevel(level); // Optimistic: the derived display follows immediately.
-      api
-        .putAgentConfig(
-          projectId,
-          agentId,
-          {
-            config: { model: { thinkingLevel: level as AgentModelConfigDto["thinkingLevel"] } },
-          },
-          workspaceMachine,
-        )
-        .catch((e: unknown) => {
-          setAgentThinkingLevel(rollback);
-          toastApiError(e);
-        });
-    },
-    [projectId, agentId, workspaceMachine],
-  );
 
   // Skills installed on the selected Agent, on the picked folder's machine (candidates for the
   // input area's skills dropdown). `skillsLoaded` gates the example task, so its `[use_skills]`
@@ -771,7 +733,7 @@ export function DraftView({
   // failure, so the input area keeps the draft and can resend.
   const onSend = useCallback(
     async (input: TaskInputPart[], goal: { budget: number } | null = null): Promise<boolean> => {
-      if (!agentId || sendingRef.current) return false;
+      if (!agentId || sendingRef.current || thinkingSaving) return false;
       sendingRef.current = true;
       const browserScope = browserState().scope;
       // The draft's own docks, named now: the send takes round trips, and the user may be on
@@ -844,6 +806,7 @@ export function DraftView({
       // temporary one here is "" both times, and a send that kept the old machine would create
       // the Session on this server.
       workspaceMachine,
+      thinkingSaving,
       add,
       remove,
       discardDraft,
@@ -900,6 +863,7 @@ export function DraftView({
         onChangeModel={setModelRef}
         thinkingLevel={thinkingLevel}
         onChangeThinkingLevel={onChangeThinkingLevel}
+        thinkingSaving={thinkingSaving}
         {...(models?.defaultModel !== undefined ? { defaultModel: models.defaultModel } : {})}
         {...(contextWindow !== undefined ? { contextWindow } : {})}
         contextNow={0}
