@@ -37,6 +37,7 @@ export function useMainChatControls(scope: ReturnType<typeof useMainChatComposer
     syncHealedSessionId,
     applySessionRow,
     applyTurnThinkingLevel,
+    thinkingSaving,
   } = scope;
 
   // The Sandbox card was saved: the open Session's view (switch, presets) is read again, so the
@@ -86,6 +87,7 @@ export function useMainChatControls(scope: ReturnType<typeof useMainChatComposer
   // authoritative here.
   const onPickTurnThinkingLevel = useCallback(
     (level: string) => {
+      if (thinkingSaving || thinkingSwitch !== null) return;
       if (
         needsThinkingSwitchConfirm(
           stream.model.items,
@@ -95,11 +97,26 @@ export function useMainChatControls(scope: ReturnType<typeof useMainChatComposer
       ) {
         setThinkingSwitch({ phase: "ask", level });
       } else {
-        applyTurnThinkingLevel(level);
+        void applyTurnThinkingLevel(level);
       }
     },
-    [stream.model, turnThinkingLevel, agentThinkingLevel, applyTurnThinkingLevel],
+    [
+      stream.model,
+      turnThinkingLevel,
+      agentThinkingLevel,
+      applyTurnThinkingLevel,
+      thinkingSaving,
+      thinkingSwitch,
+    ],
   );
+
+  const confirmThinkingSwitch = useCallback(async () => {
+    const ask = thinkingSwitch;
+    if (ask?.phase !== "ask" || thinkingSaving) return;
+    if (await applyTurnThinkingLevel(ask.level)) {
+      setThinkingSwitch((cur) => (cur === ask ? null : cur));
+    }
+  }, [thinkingSwitch, thinkingSaving, applyTurnThinkingLevel, setThinkingSwitch]);
 
   // Dialog choice 1 (recommended): compact first, then switch. The compaction is only
   // STARTED here — POST /compact answers 202 — so the pick is held with a tally of the
@@ -138,16 +155,18 @@ export function useMainChatControls(scope: ReturnType<typeof useMainChatComposer
     const next = heldThinkingSwitch(thinkingSwitch, stream.model.items);
     if (next.act === "wait") return;
     setThinkingSwitch(null);
-    applyTurnThinkingLevel(next.level);
-    if (next.notice === "compacted") {
-      toastSuccess(
-        S.chat.thinkingSwitchApplied(
-          thinkingLevelLabel(S.chat.thinkingLevelNames, next.level) ?? next.level,
-        ),
-      );
-    } else if (next.notice === "compaction-failed") {
+    if (next.notice === "compaction-failed") {
       toastError(S.chat.thinkingSwitchCompactFailed);
     }
+    void applyTurnThinkingLevel(next.level).then((saved) => {
+      if (saved && next.notice === "compacted") {
+        toastSuccess(
+          S.chat.thinkingSwitchApplied(
+            thinkingLevelLabel(S.chat.thinkingLevelNames, next.level) ?? next.level,
+          ),
+        );
+      }
+    });
     // notice "none": the compaction never started and runCompaction already said why.
     // The items are read from the model per run; `version` is the change signal.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -252,6 +271,7 @@ export function useMainChatControls(scope: ReturnType<typeof useMainChatComposer
     runCompaction,
     onCompact,
     onPickTurnThinkingLevel,
+    confirmThinkingSwitch,
     compactThenThinkingSwitch,
     modelDisplay,
     onPickSessionModel,

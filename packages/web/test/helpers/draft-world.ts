@@ -188,6 +188,8 @@ export function draftWorld(): DraftWorld {
       });
     }
     if (path === `${project}/agents/${AGENT_ID}/skills`) return json({ skills: [] });
+    if (path === `${project}/agents/${AGENT_ID}/config`)
+      return json({ config: { model: { thinkingLevel: "medium" } } });
     if (path === `${project}/sessions/batch` && method === "POST") {
       const { requests } = request.body as SessionsBatchRequest;
       const here = [...sessions.values()].filter((s) => s.machine === machine);
