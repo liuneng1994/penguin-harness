@@ -3,6 +3,7 @@
 - **Date:** 2026-11-21
 - **Type:** fix
 - **Scope:** `web`
+- **PR:** [#16](https://github.com/liuneng1994/penguin-harness/pull/16)
 
 [中文版](2026-11-21-thinking-level-save.zh.md)
 
