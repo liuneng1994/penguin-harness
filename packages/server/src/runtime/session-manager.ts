@@ -34,7 +34,6 @@
  * `SessionLoader`: production uses the core SDK (createCoreSessionLoader), tests inject
  * a fake Session (issuing no real LLM requests).
  */
-import type { LLMOutcome } from "@prismshadow/penguin-core";
 import { randomUUID } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -53,6 +52,7 @@ import {
   userText,
 } from "@prismshadow/penguin-core";
 import type {
+  LLMOutcome,
   ApproveFn,
   BackgroundCommandInfo,
   BackgroundSubagentInfo,

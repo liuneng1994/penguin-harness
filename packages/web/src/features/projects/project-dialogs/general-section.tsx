@@ -12,9 +12,8 @@ import * as api from "../../../api/endpoints";
 import { S } from "../../../lib/strings";
 import { apiErrorText } from "../../../lib/api-error";
 import { toastApiError } from "../../../lib/toast-api-error";
-import { projectDisplayName, useProject } from "../../../state/project";
+import { projectDisplayName, useProject, agentDisplayName } from "../../../state/project";
 import { ProjectSkillSync } from "./project-skill-sync";
-import { agentDisplayName } from "../../../state/project";
 import { PROJECT_SETTINGS_SCOPE } from "./shared";
 
 export function GeneralSection({
